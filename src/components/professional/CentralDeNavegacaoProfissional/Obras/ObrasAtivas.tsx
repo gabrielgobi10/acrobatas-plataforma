@@ -1,3 +1,4 @@
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -59,28 +60,43 @@ export default function ObrasAtivasProfissional() {
         if (!user?.id) return;
         setLoading(true);
 
-        const { data: vinculos } = await supabase
-          .from("profissionais_obras")
-          .select("id, obra_id, funcao, status, criado_em")
-          .eq("profissional_id", user.id);
+        // 1️⃣ Buscar profissional correspondente ao Auth user
+        const { data: profissional, error: profErr } = await supabase
+          .from("profissionais")
+          .select("id")
+          .eq("auth_id", user.id)
+          .single();
 
-        if (!vinculos?.length) {
+        if (profErr || !profissional) {
+          console.warn("Profissional não encontrado para este usuário.");
           setMinhasObras([]);
           setLoading(false);
           return;
         }
 
+        // 2️⃣ Buscar vínculos do profissional
+        const { data: vinculos, error: vincErr } = await supabase
+          .from("profissionais_obras")
+          .select("id, obra_id, funcao, status, criado_em, empresa_id, progresso")
+          .eq("profissional_id", profissional.id);
+
+        if (vincErr || !vinculos?.length) {
+          setMinhasObras([]);
+          setLoading(false);
+          return;
+        }
+
+        // 3️⃣ Buscar obras relacionadas
         const obraIds = vinculos.map((v) => v.obra_id);
         const { data: obras } = await supabase
           .from("obras")
           .select(
-            "id, nome, endereco, cidade, empresa_id, data_inicio, data_fim, descricao"
+            "id, nome, endereco, cidade, empresa_id, data_inicio, data_fim, descricao, status, progresso_total"
           )
           .in("id", obraIds);
 
-        const empresaIds = Array.from(
-          new Set(obras?.map((o) => o.empresa_id) || [])
-        );
+        // 4️⃣ Buscar empresas
+        const empresaIds = Array.from(new Set(obras?.map((o) => o.empresa_id) || []));
         const { data: empresas } = await supabase
           .from("empresas")
           .select("id, nome")
@@ -88,20 +104,22 @@ export default function ObrasAtivasProfissional() {
 
         const empresasMap = new Map(empresas?.map((e: any) => [e.id, e]) || []);
 
+        // 5️⃣ Montar dados finais
         const obrasComDados = obras.map((obra: any) => {
           const vinc = vinculos.find((v) => v.obra_id === obra.id);
           return {
             ...obra,
             empresa: empresasMap.get(obra.empresa_id) || null,
             funcao: vinc?.funcao || "Profissional",
-            status: "Em andamento",
-            progresso: 42,
+            status: obra.status || vinc?.status || "Em andamento",
+            progresso: vinc?.progresso || obra.progresso_total || 0,
           };
         });
 
         setMinhasObras(obrasComDados);
       } catch (e) {
-        console.error(e);
+        console.error("Erro ao carregar obras:", e);
+        setMinhasObras([]);
       } finally {
         setLoading(false);
       }
