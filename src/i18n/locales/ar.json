@@ -1,0 +1,357 @@
+{
+  "login": {
+    "entrar": "تسجيل الدخول",
+    "cadastrar": "إنشاء حساب",
+    "email": "البريد الإلكتروني",
+    "senha": "كلمة المرور",
+    "nomeCompleto": "الاسم الكامل",
+    "profissional": "محترف",
+    "empresa": "شركة",
+    "tipoUsuario": "نوع المستخدم",
+    "esqueceuSenha": "هل نسيت كلمة المرور؟",
+    "aguarde": "يرجى الانتظار...",
+    "acessoAdmin": "وصول المشرف",
+    "voltarLogin": "العودة إلى تسجيل الدخول العادي",
+    "painelAdmin": "لوحة الإدارة",
+    "sistema": "نظام أكروباتاس",
+    "cadastroGratuito": "تسجيل مجاني",
+    "descricaoProfissionais": "ابحث عن وظائف وتواصل مع شركات البناء.",
+    "descricaoEmpresas": "قم بتوظيف محترفين مؤهلين لمشاريعك.",
+    "descricaoCadastro": "أنشئ حسابك الآن واحصل على جميع ميزات النظام.",
+    "cancelar": "إلغاء",
+    "confirmar": "تأكيد",
+    "erroCampos": "يرجى ملء جميع الحقول المطلوبة.",
+    "erroNome": "أدخل اسمك الكامل.",
+    "erroEmail": "البريد الإلكتروني غير صالح.",
+    "erroSenha": "يجب أن تحتوي كلمة المرور على 6 أحرف على الأقل.",
+    "sucessoLogin": "تم تسجيل الدخول بنجاح!",
+    "sucessoCadastro": "تم التسجيل بنجاح! يرجى تسجيل الدخول للمتابعة.",
+    "erroGenerico": "خطأ غير متوقع. تحقق من بيانات الاعتماد الخاصة بك.",
+    "chaveIncorreta": "❌ مفتاح غير صحيح. تم رفض الوصول.",
+    "digiteChave": "أدخل مفتاح الأمان للوصول إلى لوحة الإدارة.",
+    "placeholderChave": "أدخل المفتاح..."
+  },
+
+  "empresa": {
+    "painelTitulo": "لوحة تحكم الشركة",
+    "navPainel": "الصفحة الرئيسية",
+    "navPedidos": "الطلبات",
+    "navObras": "المشاريع",
+    "navProfissionais": "المهنيون",
+    "navRelatorios": "التقارير",
+    "navDocumentos": "الوثائق",
+    "navOutros": "أخرى",
+    "navChat": "الدردشة",
+    "notificacoes": {
+      "titulo": "الإشعارات",
+      "novaObra": "تم بدء مشروع جديد",
+      "mensagens": "رسالتان جديدتان من المشرفين",
+      "atraso": "تنبيه تأخير في المشروع"
+    },
+    "utilizador": "المستخدم",
+    "statusAtivo": "نشط",
+    "botaoSair": "تسجيل الخروج",
+    "pedidos": {
+      "titulo": "الطلبات",
+      "novos": "طلبات جديدة",
+      "avaliacao": "قيد التقييم",
+      "aprovados": "تمت الموافقة"
+    },
+    "obras": {
+      "titulo": "المشاريع",
+      "ativas": "المشاريع النشطة",
+      "historico": "السجل",
+      "adicionar": "إضافة مشروع"
+    },
+    "profissionais": {
+      "titulo": "المهنيون",
+      "campo": "الفرق في الميدان",
+      "adicionar": "إضافة محترف",
+      "presencas": "الغياب / الحضور"
+    },
+    "relatorios": {
+      "titulo": "التقارير والأداء العام",
+      "custos": "التكاليف الشهرية",
+      "desempenho": "الأداء",
+      "financeiro": "المالية"
+    },
+    "documentos": {
+      "titulo": "الوثائق",
+      "acrobatas": "أكروباتاس",
+      "profissionais": "المهنيون",
+      "meus": "وثائقي"
+    },
+    "outros": {
+      "titulo": "أخرى",
+      "config": "الإعدادات",
+      "notificacoes": "الإشعارات",
+      "perfil": "ملف الشركة"
+    }
+  },
+
+  "obra": {
+    "carregando": "جارٍ تحميل معلومات المشروع...",
+    "naoEncontrada": "لم يتم العثور على أي مشروع.",
+    "voltar": "عودة",
+    "profissionais": "العمال",
+    "status": "الحالة",
+    "prazo": "الموعد النهائي",
+    "progresso": "التقدم",
+    "progressoTitulo": "تقدم المشروع",
+    "concluido": "مكتمل",
+    "tabs": {
+      "visaoGeral": "نظرة عامة",
+      "relatorios": "تقارير اليوم",
+      "equipas": "الفرق",
+      "custos": "التكاليف",
+      "documentos": "الوثائق",
+      "ocorrencias": "الحوادث"
+    },
+    "resumoTitulo": "الملخص التنفيذي",
+    "resumo": {
+      "andamento": "التنفيذ يسير وفق الجدول الزمني.",
+      "semOcorrencias": "لا توجد حوادث نشطة.",
+      "equipeCompleta": "الفريق مكتمل في الموقع.",
+      "ultimoRelatorio": "تم إرسال التقرير اليومي الأخير أمس."
+    },
+    "clima": {
+      "temperatura": "درجة الحرارة",
+      "condicao": "الطقس"
+    }
+  },
+
+  "empresaPainel": {
+    "nomePadrao": "شركة",
+    "bemVindo": "مرحبًا",
+    "mensagemIntro": "قراراتك تبني النتائج. استخدم لوحة التحكم لإدارة المشاريع والفرق بدقة.",
+    "avisoInicial": "لا توجد بيانات بعد — كل شيء جاهز للبدء! بمجرد إنشاء مشاريعك، ستظهر النتائج هنا تلقائيًا.",
+    "kpi": {
+      "obrasAtivas": "المشاريع النشطة",
+      "obrasAtivasSub": "إجمالي المشاريع قيد التنفيذ",
+      "equipaCampo": "الفريق في الميدان",
+      "equipaCampoSub": "المهنيون النشطون حاليًا",
+      "custosMes": "تكاليف الشهر (€)",
+      "custosMesSub": "النفقات المتراكمة هذا الشهر",
+      "eficiencia": "كفاءة المشاريع (%)",
+      "eficienciaSub": "المشاريع المنجزة في الوقت المحدد",
+      "obrasAtrasadas": "المشاريع المتأخرة",
+      "semAtrasos": "🎯 لا توجد مشاريع متأخرة",
+      "comAtraso": "توجد مشاريع بها تأخير"
+    },
+    "obrasAtivasTitulo": "المشاريع النشطة",
+    "tabela": {
+      "empresa": "الشركة",
+      "local": "الموقع",
+      "profissionais": "المهنيون",
+      "custo": "التكلفة",
+      "progresso": "التقدم",
+      "status": "الحالة",
+      "acoes": "الإجراءات",
+      "emAndamento": "قيد التنفيذ",
+      "verDetalhes": "عرض التفاصيل"
+    },
+    "semObras": "بمجرد إنشاء أول مشروع لك، ستظهر البيانات الحقيقية هنا تلقائيًا."
+  },
+
+  "graficosPainel": {
+    "obrasPorMes": "المشاريع حسب الشهر",
+    "custosMensais": "التكاليف الشهرية (€)",
+    "semObras": "لم يتم تسجيل أي مشروع بعد 🚀",
+    "semCustos": "لم يتم تسجيل أي تكلفة بعد 💸",
+    "acoesRapidas": "الإجراءات السريعة",
+    "pedido": "طلب",
+    "obra": "مشروع",
+    "documento": "وثيقة",
+    "equipa": "فريق",
+    "atividadesRecentes": "الأنشطة الأخيرة",
+    "atividades": {
+      "novaObra": "تم إنشاء مشروع جديد: السكني أورورا",
+      "novosProfissionais": "تم تعيين مهنيين جديدين",
+      "documentoValidado": "تمت مراجعة الوثيقة من قبل الفريق"
+    }
+  },
+
+  "empresaObras": {
+    "titulo": "إدارة المشاريع",
+    "subtitulo": "تابع التقدم والتكاليف والفرق في الوقت الفعلي.",
+    "mapa": "خريطة المشاريع",
+    "listaTitulo": "المشاريع المسجلة",
+    "filtros": {
+      "todas": "الكل"
+    },
+    "status": {
+      "andamento": "قيد التنفيذ",
+      "atrasada": "متأخرة",
+      "concluida": "مكتملة"
+    },
+    "profissionais": "المهنيين",
+    "custo": "التكلفة",
+    "prazo": "الموعد النهائي",
+    "progresso": "التقدم",
+    "verDetalhes": "عرض التفاصيل",
+    "editar": "تعديل"
+  },
+
+  "empresaProfissionais": {
+    "titulo": "إدارة المهنيين",
+    "subtitulo": "راقب الفرق وقم بالتصفية حسب التخصص أو المدينة أو التوفر.",
+    "novo": "إضافة محترف جديد",
+    "sincronizar": "مزامنة",
+    "indicadores": {
+      "ativos": "نشطون في المشاريع",
+      "disponiveis": "متاحون",
+      "contratados": "تم التوظيف هذا الأسبوع",
+      "avaliacaoMedia": "متوسط ​​التقييم"
+    },
+    "abas": {
+      "equipa": "👷 الفريق",
+      "base": "🌐 قاعدة أكروباتاس"
+    },
+    "equipaTitulo": "الفريق الحالي",
+    "baseTitulo": "قاعدة بيانات أكروباتاس ووركفورس",
+    "descricaoBase": "استكشف قاعدة بيانات كاملة للمهنيين المسجلين في أكروباتاس وأضفهم إلى مشاريعك.",
+    "botoes": {
+      "verDetalhes": "عرض التفاصيل",
+      "verPerfil": "عرض الملف الشخصي",
+      "adicionarObra": "إضافة إلى المشروع"
+    },
+    "filtros": {
+      "todas": "الكل",
+      "todos": "الكل",
+      "pesquisar": "ابحث بالاسم أو الوظيفة..."
+    }
+  },
+
+    "empresaRelatorios": {
+    "titulo": "التقارير والأداء العام",
+    "descricao": "تابع المؤشرات المالية والإنتاجية والأداء العام للشركة.",
+    "atualizar": "تحديث",
+    "exportar": "تصدير PDF",
+    "gerar": "إنشاء تقرير كامل",
+    "indicadores": {
+      "faturamento": "إجمالي الإيرادات",
+      "custos": "التكاليف التشغيلية",
+      "lucro": "صافي الربح",
+      "produtividade": "متوسط الإنتاجية",
+      "pontualidade": "الالتزام بالمواعيد"
+    },
+    "graficos": {
+      "financeiro": "التطور المالي (€)",
+      "custos": "التكاليف حسب الفئة",
+      "produtividade": "الإنتاجية حسب الفريق"
+    },
+    "ranking": {
+      "obras": "🏗 المشاريع الأكثر ربحية",
+      "profissionais": "👷 المحترفون المتميزون",
+      "avaliacao": "⭐ التقييم"
+    },
+    "mensagens": {
+      "carregando": "جارٍ تحميل البيانات...",
+      "semDados": "لا توجد بيانات متاحة حاليًا."
+    }
+  },
+
+  "chat": {
+    "titulo": "محادثاتك",
+    "novo": "جديد",
+    "buscar": "ابحث عن محادثة...",
+    "semChats": "لا توجد محادثات بعد.",
+    "semMensagens": "لا توجد رسائل بعد.",
+    "novaConversa": "محادثة جديدة",
+    "placeholder": "اكتب رسالة...",
+    "enviar": "إرسال",
+    "encerrar": "إنهاء",
+    "selecione": "حدد محادثة على اليسار أو أنشئ محادثة جديدة.",
+    "equipeTitulo": "فريق أكروباتاس",
+    "equipeSub": "اطرح الأسئلة على الدعم أو الإدارة.",
+    "online": "الوكلاء المتصلون",
+    "perguntas": "الأسئلة السريعة",
+    "rodape": "الدعم الداخلي",
+    "apagarTitulo": "هل تريد حذف المحادثة؟",
+    "apagarTexto": "هذا الإجراء لا يمكن التراجع عنه.",
+    "cancelar": "إلغاء",
+    "apagar": "حذف",
+
+    "rapidas": {
+      "documentacao": "الوثائق المطلوبة",
+      "respostaDocumentacao": "لبدء العمل، يجب إرسال: الفحص الطبي، بطاقة الهوية وإثبات العنوان.",
+      "pagamentos": "المدفوعات",
+      "respostaPagamentos": "تتم المدفوعات أسبوعياً بعد تأكيد الحضور مع فريق الموارد البشرية.",
+      "certidao": "شهادة الضمان الاجتماعي",
+      "respostaCertidaو": "يمكن طلب الشهادة من بوابة الضمان الاجتماعي باستخدام رقم NISS وكلمة المرور.",
+      "equipa": "الفريق والمشاريع",
+      "respostaEquipa": "حالياً لدينا فرق نشطة في لشبونة وبورتو وبراغا. تواصل مع الفريق لمعرفة التفاصيل."
+    },
+
+    "equipe": {
+      "rh": "الموارد البشرية",
+      "obras": "المشاريع",
+      "financeiro": "المالية"
+    }
+  },
+  "empresaPedidos": {
+    "novoPedido": {
+      "titulo": "طلب جديد",
+      "descricao": "املأ المعلومات أدناه لإنشاء طلب جديد للمهنيين.",
+      "obraLocal": "🏗️ المشروع والموقع",
+      "placeholderLocal": "اكتب أو حدد موقع المشروع",
+      "detalhes": "تفاصيل إضافية",
+      "tipoObra": "نوع المشروع",
+      "turno": "فترة العمل",
+      "alojamento": "الإقامة والنقل",
+      "alojamentoFornecido": "الإقامة متوفرة",
+      "transporteIncluido": "يشمل النقل",
+      "datas": "التواريخ",
+      "dataInicio": "تاريخ البدء",
+      "dataFim": "تاريخ الانتهاء",
+      "dias": "أيام من المدة",
+      "observacoes": "ملاحظات",
+      "placeholderObs": "معلومات إضافية (اختياري)",
+      "criarPedido": "إنشاء الطلب",
+      "enviando": "جارٍ الإرسال...",
+      "erroSalvar": "❌ حدث خطأ أثناء إنشاء الطلب. حاول مرة أخرى.",
+      "sucessoSalvar": "✅ تم إنشاء الطلب بنجاح!"
+    },
+    "toast": {
+      "operacaoConcluida": "تمت العملية بنجاح!",
+      "criarNovoPedido": "إنشاء طلب جديد",
+      "verPedidos": "عرض طلباتي"
+        },
+  "estimativa": {
+    "valorEstimado": "القيمة التقديرية",
+    "dia": "يوم",
+    "baseAutomatica": "تم الحساب تلقائيًا",
+    "comoFunciona": "كيف تعمل طريقة الحساب:",
+    "item1": "يتم تحديد القيمة بناءً على نوع المهني ومستوى الخبرة.",
+    "item2": "يستخدم النظام متوسط ​​السعر في الساعة واليوم المعدل تلقائيًا وفقًا للسوق.",
+    "item3": "يتم حساب التكلفة الإجمالية التقديرية عن طريق ضرب السعر اليومي في مدة المشروع وعدد المهنيين.",
+    "ultimaAtualizacao": "آخر تحديث: سبتمبر 2025",
+    "fechar": "إغلاق",
+    "custoTotal": "إجمالي التكلفة التقديرية"
+      },
+  "empresaPedidos": {
+    "titulo": "الطلبات",
+    "descricao": "تابع جميع الطلبات التي تم إنشاؤها وحالتها الحالية.",
+    "mostrarTodos": "عرض الكل",
+    "buscarPlaceholder": "ابحث حسب الموقع أو النوع أو المعرف...",
+    "profissional": "مهني",
+    "profissionais": "مهنيين",
+    "verDetalhes": "عرض التفاصيل",
+    "criarObra": "إنشاء مشروع",
+    "cancelar": "إلغاء",
+    "nenhumPedido": "لم يتم العثور على أي طلب.",
+    "status": {
+      "emAvaliacao": "قيد التقييم",
+      "pendente": "قيد الانتظار",
+      "aprovado": "تمت الموافقة",
+      "cancelado": "تم الإلغاء"
+    },
+    "local": "الموقع",
+    "experiencia": "الخبرة",
+    "quantidade": "الكمية",
+    "periodo": "الفترة",
+    "custoTotal": "التكلفة الإجمالية",
+    "fechar": "إغلاق"
+    }
+  }
+}

@@ -1,0 +1,354 @@
+{
+  "login": {
+    "entrar": "लॉगिन करें",
+    "cadastrar": "पंजीकरण करें",
+    "email": "ईमेल",
+    "senha": "पासवर्ड",
+    "nomeCompleto": "पूरा नाम",
+    "profissional": "पेशेवर",
+    "empresa": "कंपनी",
+    "tipoUsuario": "उपयोगकर्ता प्रकार",
+    "esqueceuSenha": "पासवर्ड भूल गए?",
+    "aguarde": "कृपया प्रतीक्षा करें...",
+    "acessoAdmin": "व्यवस्थापक पहुँच",
+    "voltarLogin": "सामान्य लॉगिन पर वापस जाएँ",
+    "painelAdmin": "प्रशासनिक पैनल",
+    "sistema": "Acrobatas सिस्टम",
+    "cadastroGratuito": "नि:शुल्क पंजीकरण",
+    "descricaoProfissionais": "निर्माण कंपनियों के साथ नौकरियाँ खोजें और जुड़ें।",
+    "descricaoEmpresas": "अपने प्रोजेक्ट्स के लिए योग्य पेशेवरों को नियुक्त करें।",
+    "descricaoCadastro": "अपना खाता बनाएँ और सभी सुविधाओं तक पहुँच प्राप्त करें।",
+    "cancelar": "रद्द करें",
+    "confirmar": "पुष्टि करें",
+    "erroCampos": "कृपया सभी आवश्यक फ़ील्ड भरें।",
+    "erroNome": "कृपया अपना पूरा नाम दर्ज करें।",
+    "erroEmail": "अमान्य ईमेल पता।",
+    "erroSenha": "पासवर्ड कम से कम 6 अक्षरों का होना चाहिए।",
+    "sucessoLogin": "लॉगिन सफल!",
+    "sucessoCadastro": "पंजीकरण सफल! जारी रखने के लिए लॉगिन करें।",
+    "erroGenerico": "अनपेक्षित त्रुटि। कृपया अपनी साख जाँचें।",
+    "chaveIncorreta": "❌ गलत कुंजी। प्रवेश अस्वीकृत।",
+    "digiteChave": "प्रशासनिक पैनल तक पहुँचने के लिए सुरक्षा कुंजी दर्ज करें।",
+    "placeholderChave": "कुंजी दर्ज करें..."
+  },
+
+  "empresa": {
+    "painelTitulo": "कंपनी डैशबोर्ड",
+    "navPainel": "डैशबोर्ड",
+    "navPedidos": "अनुरोध",
+    "navObras": "परियोजनाएँ",
+    "navProfissionais": "पेशेवर",
+    "navRelatorios": "रिपोर्ट",
+    "navDocumentos": "दस्तावेज़",
+    "navOutros": "अन्य",
+    "navChat": "चैट",
+    "notificacoes": {
+      "titulo": "सूचनाएँ",
+      "novaObra": "नई परियोजना शुरू हुई",
+      "mensagens": "पर्यवेक्षकों से 2 नए संदेश",
+      "atraso": "परियोजना में देरी की चेतावनी"
+    },
+    "utilizador": "उपयोगकर्ता",
+    "statusAtivo": "सक्रिय",
+    "botaoSair": "लॉग आउट",
+    "pedidos": {
+      "titulo": "अनुरोध",
+      "novos": "नए अनुरोध",
+      "avaliacao": "समीक्षा में",
+      "aprovados": "स्वीकृत"
+    },
+    "obras": {
+      "titulo": "परियोजनाएँ",
+      "ativas": "सक्रिय परियोजनाएँ",
+      "historico": "इतिहास",
+      "adicionar": "परियोजना जोड़ें"
+    },
+    "profissionais": {
+      "titulo": "पेशेवर",
+      "campo": "मैदान में टीमें",
+      "adicionar": "पेशेवर जोड़ें",
+      "presencas": "अनुपस्थिति / उपस्थिति"
+    },
+    "relatorios": {
+      "titulo": "रिपोर्ट और प्रदर्शन",
+      "custos": "मासिक लागत",
+      "desempenho": "प्रदर्शन",
+      "financeiro": "वित्तीय"
+    },
+    "documentos": {
+      "titulo": "दस्तावेज़",
+      "acrobatas": "Acrobatas",
+      "profissionais": "पेशेवर",
+      "meus": "मेरे दस्तावेज़"
+    },
+    "outros": {
+      "titulo": "अन्य",
+      "config": "सेटिंग्स",
+      "notificacoes": "सूचनाएँ",
+      "perfil": "कंपनी प्रोफ़ाइल"
+    }
+  },
+
+  "obra": {
+    "carregando": "परियोजना की जानकारी लोड हो रही है...",
+    "naoEncontrada": "कोई परियोजना नहीं मिली।",
+    "voltar": "वापस जाएँ",
+    "profissionais": "कामगार",
+    "status": "स्थिति",
+    "prazo": "समय सीमा",
+    "progresso": "प्रगति",
+    "progressoTitulo": "परियोजना की प्रगति",
+    "concluido": "पूर्ण",
+    "tabs": {
+      "visaoGeral": "सारांश",
+      "relatorios": "दैनिक रिपोर्ट",
+      "equipas": "टीमें",
+      "custos": "लागत",
+      "documentos": "दस्तावेज़",
+      "ocorrencias": "घटनाएँ"
+    },
+    "resumoTitulo": "कार्यकारी सारांश",
+    "resumo": {
+      "andamento": "समय पर और सामान्य रूप से प्रगति कर रहा है।",
+      "semOcorrencias": "कोई सक्रिय घटना नहीं।",
+      "equipeCompleta": "पूरी टीम साइट पर है।",
+      "ultimoRelatorio": "अंतिम दैनिक रिपोर्ट कल भेजी गई थी।"
+    },
+    "clima": {
+      "temperatura": "तापमान",
+      "condicao": "मौसम"
+    }
+  },
+
+  "empresaPainel": {
+    "nomePadrao": "कंपनी",
+    "bemVindo": "स्वागत है",
+    "mensagemIntro": "आपके निर्णय परिणाम बनाते हैं। डैशबोर्ड का उपयोग करके परियोजनाओं और टीमों को सटीक रूप से प्रबंधित करें।",
+    "avisoInicial": "अभी तक कोई डेटा नहीं — सब कुछ शुरू करने के लिए तैयार है! एक बार जब आप अपनी परियोजनाएँ बनाएँगे, तो परिणाम स्वचालित रूप से यहाँ दिखाई देंगे।",
+    "kpi": {
+      "obrasAtivas": "सक्रिय परियोजनाएँ",
+      "obrasAtivasSub": "कुल चल रही परियोजनाएँ",
+      "equipaCampo": "मैदान में टीम",
+      "equipaCampoSub": "वर्तमान में सक्रिय पेशेवर",
+      "custosMes": "मासिक लागत (€)",
+      "custosMesSub": "इस महीने के संचित खर्च",
+      "eficiencia": "परियोजना दक्षता (%)",
+      "eficienciaSub": "समय पर वितरित परियोजनाएँ",
+      "obrasAtrasadas": "विलंबित परियोजनाएँ",
+      "semAtrasos": "🎯 कोई विलंबित परियोजना नहीं",
+      "comAtraso": "विलंब दर्ज किया गया"
+    },
+    "obrasAtivasTitulo": "सक्रिय परियोजनाएँ",
+    "tabela": {
+      "empresa": "कंपनी",
+      "local": "स्थान",
+      "profissionais": "पेशेवर",
+      "custo": "लागत",
+      "progresso": "प्रगति",
+      "status": "स्थिति",
+      "acoes": "कार्रवाइयाँ",
+      "emAndamento": "प्रगति पर",
+      "verDetalhes": "विवरण देखें"
+    },
+    "semObras": "जैसे ही आपकी पहली परियोजना बनाई जाएगी, वास्तविक डेटा स्वचालित रूप से यहाँ दिखाई देगा।"
+  },
+
+  "graficosPainel": {
+    "obrasPorMes": "प्रति माह परियोजनाएँ",
+    "custosMensais": "मासिक लागत (€)",
+    "semObras": "अभी तक कोई परियोजना पंजीकृत नहीं 🚀",
+    "semCustos": "अभी तक कोई लागत दर्ज नहीं 💸",
+    "acoesRapidas": "त्वरित क्रियाएँ",
+    "pedido": "अनुरोध",
+    "obra": "परियोजना",
+    "documento": "दस्तावेज़",
+    "equipa": "टीम",
+    "atividadesRecentes": "हाल की गतिविधियाँ",
+    "atividades": {
+      "novaObra": "नई परियोजना बनाई गई: Residential Aurora",
+      "novosProfissionais": "2 नए पेशेवर जोड़े गए",
+      "documentoValidado": "दस्तावेज़ टीम द्वारा मान्य किया गया"
+    }
+  },
+
+  "empresaObras": {
+    "titulo": "परियोजना प्रबंधन",
+    "subtitulo": "वास्तविक समय में प्रगति, लागत और टीमों को ट्रैक करें।",
+    "mapa": "परियोजना मानचित्र",
+    "listaTitulo": "पंजीकृत परियोजनाएँ",
+    "filtros": {
+      "todas": "सभी"
+    },
+    "status": {
+      "andamento": "प्रगति पर",
+      "atrasada": "विलंबित",
+      "concluida": "पूर्ण"
+    },
+    "profissionais": "पेशेवर",
+    "custo": "लागत",
+    "prazo": "समय सीमा",
+    "progresso": "प्रगति",
+    "verDetalhes": "विवरण देखें",
+    "editar": "संपादित करें"
+  },
+
+  "empresaProfissionais": {
+    "titulo": "पेशेवर प्रबंधन",
+    "subtitulo": "टीमों की निगरानी करें और विशेषज्ञता, शहर या उपलब्धता के आधार पर फ़िल्टर करें।",
+    "novo": "नया पेशेवर",
+    "sincronizar": "सिंक करें",
+    "indicadores": {
+      "ativos": "परियोजनाओं में सक्रिय",
+      "disponiveis": "उपलब्ध",
+      "contratados": "इस सप्ताह नियुक्त",
+      "avaliacaoMedia": "औसत रेटिंग"
+    },
+    "abas": {
+      "equipa": "👷 टीम",
+      "base": "🌐 Acrobatas डेटाबेस"
+    },
+    "equipaTitulo": "वर्तमान टीम",
+    "baseTitulo": "Acrobatas कार्यबल डेटाबेस",
+    "descricaoBase": "Acrobatas में पंजीकृत पेशेवरों के पूरे डेटाबेस का पता लगाएँ और उन्हें अपनी परियोजनाओं में जोड़ें।",
+    "botoes": {
+      "verDetalhes": "विवरण देखें",
+      "verPerfil": "प्रोफ़ाइल देखें",
+      "adicionarObra": "परियोजना में जोड़ें"
+    },
+    "filtros": {
+      "todas": "सभी",
+      "todos": "सभी",
+      "pesquisar": "नाम या नौकरी से खोजें..."
+    }
+  },
+
+  "empresaRelatorios": {
+    "titulo": "रिपोर्ट और समग्र प्रदर्शन",
+    "descricao": "वित्तीय मीट्रिक्स, उत्पादकता और समग्र कंपनी प्रदर्शन की निगरानी करें।",
+    "atualizar": "रिफ्रेश करें",
+    "exportar": "PDF निर्यात करें",
+    "gerar": "पूर्ण रिपोर्ट उत्पन्न करें",
+    "indicadores": {
+      "faturamento": "कुल राजस्व",
+      "custos": "संचालन लागत",
+      "lucro": "शुद्ध लाभ",
+      "produtividade": "औसत उत्पादकता",
+      "pontualidade": "समयपालन"
+    },
+    "graficos": {
+      "financeiro": "वित्तीय विकास (€)",
+      "custos": "श्रेणी द्वारा लागत",
+      "produtividade": "टीम द्वारा उत्पादकता"
+    },
+    "ranking": {
+      "obras": "🏗 शीर्ष लाभदायक परियोजनाएँ",
+      "profissionais": "👷 शीर्ष पेशेवर",
+      "avaliacao": "⭐ रेटिंग"
+    },
+    "mensagens": {
+      "carregando": "डेटा लोड हो रहा है...",
+      "semDados": "इस समय कोई डेटा उपलब्ध नहीं।"
+    }
+  },
+
+  "chat": {
+    "titulo": "आपकी चैट",
+    "novo": "नई",
+    "buscar": "चैट खोजें...",
+    "semChats": "अभी तक कोई चैट नहीं।",
+    "semMensagens": "अभी तक कोई संदेश नहीं।",
+    "novaConversa": "नई बातचीत",
+    "placeholder": "संदेश टाइप करें...",
+    "enviar": "भेजें",
+    "encerrar": "बंद करें",
+    "selecione": "बाईं ओर चैट चुनें या नई बनाएं।",
+    "equipeTitulo": "Acrobatas टीम",
+    "equipeSub": "सहायता या प्रबंधन से प्रश्न पूछें।",
+    "online": "ऑनलाइन एजेंट्स",
+    "perguntas": "त्वरित प्रश्न",
+    "rodape": "आंतरिक सहायता",
+    "apagarTitulo": "वार्तालाप हटाएँ?",
+    "apagarTexto": "यह क्रिया पूर्ववत नहीं की जा सकती।",
+    "cancelar": "रद्द करें",
+    "apagar": "हटाएँ",
+    "rapidas": {
+      "documentacao": "आवश्यक दस्तावेज़ीकरण",
+      "respostaDocumentacao": "काम शुरू करने के लिए, आपको भेजना होगा: चिकित्सा जाँच, पहचान पत्र और पते का प्रमाण।",
+      "pagamentos": "भुगतान",
+      "respostaPagamentos": "भुगतान एचआर टीम के साथ उपस्थिति पुष्टि के बाद साप्ताहिक रूप से किए जाते हैं।",
+      "certidao": "सामाजिक सुरक्षा प्रमाणपत्र",
+      "respostaCertidao": "प्रमाणपत्र को NISS और पासवर्ड का उपयोग करके सामाजिक सुरक्षा पोर्टल के माध्यम से अनुरोध किया जा सकता है।",
+      "equipa": "टीम और परियोजनाएँ",
+      "respostaEquipa": "वर्तमान में हमारे पास लिस्बन, पोर्टो और ब्रागा में सक्रिय टीमें हैं। अधिक विवरण के लिए टीम से संपर्क करें।"
+    },
+    "equipe": {
+      "rh": "मानव संसाधन",
+      "obras": "परियोजनाएँ",
+      "financeiro": "वित्त"
+    }
+  },
+
+  "empresaPedidos": {
+    "novoPedido": {
+      "titulo": "नया अनुरोध",
+      "descricao": "नीचे दी गई जानकारी भरें ताकि आप पेशेवरों के लिए एक नया अनुरोध बना सकें।",
+      "obraLocal": "🏗️ परियोजना और स्थान",
+      "placeholderLocal": "परियोजना का स्थान टाइप करें या चुनें",
+      "detalhes": "अतिरिक्त विवरण",
+      "tipoObra": "परियोजना का प्रकार",
+      "turno": "कार्य शिफ्ट",
+      "alojamento": "आवास और परिवहन",
+      "alojamentoFornecido": "आवास प्रदान किया गया",
+      "transporteIncluido": "परिवहन शामिल है",
+      "datas": "तिथियाँ",
+      "dataInicio": "प्रारंभ तिथि",
+      "dataFim": "समाप्ति तिथि",
+      "dias": "दिनों की अवधि",
+      "observacoes": "टिप्पणियाँ",
+      "placeholderObs": "अतिरिक्त जानकारी (वैकल्पिक)",
+      "criarPedido": "अनुरोध बनाएँ",
+      "enviando": "भेजा जा रहा है...",
+      "erroSalvar": "❌ अनुरोध बनाते समय त्रुटि हुई। कृपया पुनः प्रयास करें।",
+      "sucessoSalvar": "✅ अनुरोध सफलतापूर्वक बनाया गया!"
+    },
+    "toast": {
+      "operacaoConcluida": "संचालन सफलतापूर्वक पूरा हुआ!",
+      "criarNovoPedido": "नया अनुरोध बनाएँ",
+      "verPedidos": "मेरे अनुरोध देखें"
+    },
+    "estimativa": {
+      "valorEstimado": "अनुमानित मूल्य",
+      "dia": "दिन",
+      "baseAutomatica": "स्वचालित रूप से गणना किया गया आधार",
+      "comoFunciona": "गणना कैसे काम करती है:",
+      "item1": "मूल्य पेशेवर के प्रकार और अनुभव स्तर पर आधारित होता है।",
+      "item2": "सिस्टम बाजार के अनुसार स्वचालित रूप से समायोजित प्रति घंटा और दैनिक दर का औसत उपयोग करता है।",
+      "item3": "कुल अनुमानित लागत परियोजना की अवधि और पेशेवरों की संख्या के आधार पर दैनिक दर को गुणा करती है।",
+      "ultimaAtualizacao": "अंतिम अद्यतन: सितंबर/2025",
+      "fechar": "बंद करें",
+      "custoTotal": "कुल अनुमानित लागत"
+    },
+    "titulo": "अनुरोध",
+    "descricao": "सभी अनुरोधों और उनकी स्थिति को ट्रैक करें।",
+    "mostrarTodos": "सभी दिखाएँ",
+    "buscarPlaceholder": "स्थान, प्रकार या ID द्वारा खोजें...",
+    "profissional": "पेशेवर",
+    "profissionais": "पेशेवरों",
+    "verDetalhes": "विवरण देखें",
+    "criarObra": "परियोजना बनाएँ",
+    "cancelar": "रद्द करें",
+    "nenhumPedido": "कोई अनुरोध नहीं मिला।",
+    "status": {
+      "emAvaliacao": "समीक्षा में",
+      "pendente": "लंबित",
+      "aprovado": "स्वीकृत",
+      "cancelado": "रद्द किया गया"
+    },
+    "local": "स्थान",
+    "experiencia": "अनुभव",
+    "quantidade": "मात्रा",
+    "periodo": "अवधि",
+    "custoTotal": "कुल लागत",
+    "fechar": "बंद करें"
+  }
+}

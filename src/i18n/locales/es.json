@@ -1,0 +1,358 @@
+{
+  "login": {
+    "entrar": "Iniciar sesión",
+    "cadastrar": "Registrarse",
+    "email": "Correo electrónico",
+    "senha": "Contraseña",
+    "nomeCompleto": "Nombre completo",
+    "profissional": "Profesional",
+    "empresa": "Empresa",
+    "tipoUsuario": "Tipo de usuario",
+    "esqueceuSenha": "¿Olvidaste tu contraseña?",
+    "aguarde": "Por favor espera...",
+    "acessoAdmin": "Acceso administrativo",
+    "voltarLogin": "Volver al inicio de sesión",
+    "painelAdmin": "Panel administrativo",
+    "sistema": "Sistema Acrobatas",
+    "cadastroGratuito": "Registro gratuito",
+    "descricaoProfissionais": "Encuentra trabajos y conéctate con empresas de construcción.",
+    "descricaoEmpresas": "Contrata profesionales calificados para tus proyectos.",
+    "descricaoCadastro": "Crea tu cuenta ahora y accede a todas las funciones del sistema.",
+    "cancelar": "Cancelar",
+    "confirmar": "Confirmar",
+    "erroCampos": "Completa todos los campos obligatorios.",
+    "erroNome": "Introduce tu nombre completo.",
+    "erroEmail": "Correo electrónico no válido.",
+    "erroSenha": "La contraseña debe tener al menos 6 caracteres.",
+    "sucessoLogin": "¡Inicio de sesión exitoso!",
+    "sucessoCadastro": "¡Registro exitoso! Inicia sesión para continuar.",
+    "erroGenerico": "Error inesperado. Verifica tus credenciales.",
+    "chaveIncorreta": "❌ Clave incorrecta. Acceso denegado.",
+    "digiteChave": "Introduce la clave de seguridad para acceder al panel de administración.",
+    "placeholderChave": "Introduce la clave..."
+  },
+
+  "empresa": {
+    "painelTitulo": "Panel de la Empresa",
+    "navPainel": "Panel",
+    "navPedidos": "Solicitudes",
+    "navObras": "Proyectos",
+    "navProfissionais": "Profesionales",
+    "navRelatorios": "Informes",
+    "navDocumentos": "Documentos",
+    "navOutros": "Otros",
+    "navChat": "Chat",
+    "notificacoes": {
+      "titulo": "Notificaciones",
+      "novaObra": "Nuevo proyecto iniciado",
+      "mensagens": "2 nuevos mensajes de supervisores",
+      "atraso": "Alerta de retraso en un proyecto"
+    },
+    "utilizador": "Usuario",
+    "statusAtivo": "Activo",
+    "botaoSair": "Cerrar sesión",
+    "pedidos": {
+      "titulo": "Solicitudes",
+      "novos": "Nuevas solicitudes",
+      "avaliacao": "En evaluación",
+      "aprovados": "Aprobadas"
+    },
+    "obras": {
+      "titulo": "Proyectos",
+      "ativas": "Proyectos activos",
+      "historico": "Historial",
+      "adicionar": "Agregar proyecto"
+    },
+    "profissionais": {
+      "titulo": "Profesionales",
+      "campo": "Equipos en campo",
+      "adicionar": "Agregar profesional",
+      "presencas": "Ausencias / Asistencia"
+    },
+    "relatorios": {
+      "titulo": "Informes y rendimiento",
+      "custos": "Costos mensuales",
+      "desempenho": "Desempeño",
+      "financeiro": "Finanzas"
+    },
+    "documentos": {
+      "titulo": "Documentos",
+      "acrobatas": "Acrobatas",
+      "profissionais": "Profesionales",
+      "meus": "Mis documentos"
+    },
+    "outros": {
+      "titulo": "Otros",
+      "config": "Configuraciones",
+      "notificacoes": "Notificaciones",
+      "perfil": "Perfil de la empresa"
+    }
+  },
+
+  "obra": {
+    "carregando": "Cargando información del proyecto...",
+    "naoEncontrada": "No se encontró ningún proyecto.",
+    "voltar": "Volver",
+    "profissionais": "Trabajadores",
+    "status": "Estado",
+    "prazo": "Plazo",
+    "progresso": "Progreso",
+    "progressoTitulo": "Progreso del proyecto",
+    "concluido": "Completado",
+    "tabs": {
+      "visaoGeral": "Resumen",
+      "relatorios": "Informes diarios",
+      "equipas": "Equipos",
+      "custos": "Costos",
+      "documentos": "Documentación",
+      "ocorrencias": "Incidentes"
+    },
+    "resumoTitulo": "Resumen ejecutivo",
+    "resumo": {
+      "andamento": "En curso y avanzando normalmente.",
+      "semOcorrencias": "Sin incidentes activos.",
+      "equipeCompleta": "Equipo completo en el sitio.",
+      "ultimoRelatorio": "El último informe diario se envió ayer."
+    },
+    "clima": {
+      "temperatura": "Temperatura",
+      "condicao": "Clima"
+    }
+  },
+
+  "empresaPainel": {
+    "nomePadrao": "Empresa",
+    "bemVindo": "Bienvenido",
+    "mensagemIntro": "Tus decisiones construyen resultados. Usa el panel para gestionar proyectos y equipos con precisión.",
+    "avisoInicial": "Aún no hay datos — ¡todo listo para comenzar! En cuanto crees tus proyectos, los resultados aparecerán aquí automáticamente.",
+    "kpi": {
+      "obrasAtivas": "Proyectos activos",
+      "obrasAtivasSub": "Total de proyectos en ejecución",
+      "equipaCampo": "Equipo en campo",
+      "equipaCampoSub": "Profesionales actualmente activos",
+      "custosMes": "Costos del mes (€)",
+      "custosMesSub": "Gasto acumulado este mes",
+      "eficiencia": "Eficiencia de los proyectos (%)",
+      "eficienciaSub": "Proyectos entregados dentro del plazo",
+      "obrasAtrasadas": "Proyectos atrasados",
+      "semAtrasos": "🎯 Ningún proyecto atrasado",
+      "comAtraso": "Con retraso registrado"
+    },
+    "obrasAtivasTitulo": "Proyectos activos",
+    "tabela": {
+      "empresa": "Empresa",
+      "local": "Ubicación",
+      "profissionais": "Profesionales",
+      "custo": "Costo",
+      "progresso": "Progreso",
+      "status": "Estado",
+      "acoes": "Acciones",
+      "emAndamento": "En curso",
+      "verDetalhes": "Ver detalles"
+    },
+    "semObras": "Una vez que se cree tu primer proyecto, los datos reales aparecerán aquí automáticamente."
+  },
+
+  "graficosPainel": {
+    "obrasPorMes": "Proyectos por mes",
+    "custosMensais": "Costos mensuales (€)",
+    "semObras": "Aún no se ha registrado ningún proyecto 🚀",
+    "semCustos": "Aún no se han registrado costos 💸",
+    "acoesRapidas": "Acciones rápidas",
+    "pedido": "Solicitud",
+    "obra": "Proyecto",
+    "documento": "Documento",
+    "equipa": "Equipo",
+    "atividadesRecentes": "Actividades recientes",
+    "atividades": {
+      "novaObra": "Nuevo proyecto creado: Residencial Aurora",
+      "novosProfissionais": "2 nuevos profesionales asignados",
+      "documentoValidado": "Documento validado por el equipo"
+    }
+  },
+
+  "empresaObras": {
+    "titulo": "Gestión de proyectos",
+    "subtitulo": "Supervisa el progreso, los costos y los equipos en tiempo real.",
+    "mapa": "Mapa de proyectos",
+    "listaTitulo": "Proyectos registrados",
+    "filtros": {
+      "todas": "Todas"
+    },
+    "status": {
+      "andamento": "En curso",
+      "atrasada": "Atrasada",
+      "concluida": "Completada"
+    },
+    "profissionais": "Profesionales",
+    "custo": "Costo",
+    "prazo": "Plazo",
+    "progresso": "Progreso",
+    "verDetalhes": "Ver detalles",
+    "editar": "Editar"
+  },
+
+  "empresaProfissionais": {
+    "titulo": "Gestión de profesionales",
+    "subtitulo": "Supervisa los equipos y filtra por especialidad, ciudad o disponibilidad.",
+    "novo": "Nuevo profesional",
+    "sincronizar": "Sincronizar",
+    "indicadores": {
+      "ativos": "Activos en proyectos",
+      "disponiveis": "Disponibles",
+      "contratados": "Contratados esta semana",
+      "avaliacaoMedia": "Evaluación promedio"
+    },
+    "abas": {
+      "equipa": "👷 Equipo",
+      "base": "🌐 Base Acrobatas"
+    },
+    "equipaTitulo": "Equipo actual",
+    "baseTitulo": "Base de datos de Acrobatas Workforce",
+    "descricaoBase": "Explora la base completa de profesionales registrados en Acrobatas y agrégalos a tus proyectos.",
+    "botoes": {
+      "verDetalhes": "Ver detalles",
+      "verPerfil": "Ver perfil",
+      "adicionarObra": "Agregar al proyecto"
+    },
+    "filtros": {
+      "todas": "Todas",
+      "todos": "Todos",
+      "pesquisar": "Buscar por nombre o función..."
+    }
+  },
+
+  "empresaRelatorios": {
+    "titulo": "Informes y rendimiento general",
+    "descricao": "Supervisa métricas financieras, productividad y rendimiento general de la empresa.",
+    "atualizar": "Actualizar",
+    "exportar": "Exportar PDF",
+    "gerar": "Generar informe completo",
+    "indicadores": {
+      "faturamento": "Ingresos totales",
+      "custos": "Costos operativos",
+      "lucro": "Beneficio neto",
+      "produtividade": "Productividad promedio",
+      "pontualidade": "Puntualidad"
+    },
+    "graficos": {
+      "financeiro": "Evolución financiera (€)",
+      "custos": "Costos por categoría",
+      "produtividade": "Productividad por equipo"
+    },
+    "ranking": {
+      "obras": "🏗 Proyectos más rentables",
+      "profissionais": "👷 Profesionales destacados",
+      "avaliacao": "⭐ Evaluación"
+    },
+    "mensagens": {
+      "carregando": "Cargando datos...",
+      "semDados": "No hay datos disponibles por el momento."
+    }
+  },
+
+  "chat": {
+    "titulo": "Tus chats",
+    "novo": "Nuevo",
+    "buscar": "Buscar una conversación...",
+    "semChats": "Aún no tienes chats.",
+    "semMensagens": "No hay mensajes todavía.",
+    "novaConversa": "Nueva conversación",
+    "placeholder": "Escribe un mensaje...",
+    "enviar": "Enviar",
+    "encerrar": "Cerrar",
+    "selecione": "Selecciona un chat a la izquierda o crea uno nuevo.",
+    "equipeTitulo": "Equipo Acrobatas",
+    "equipeSub": "Consulta con el soporte o la gestión.",
+    "online": "Agentes en línea",
+    "perguntas": "Preguntas rápidas",
+    "rodape": "Soporte interno",
+    "apagarTitulo": "¿Eliminar conversación?",
+    "apagarTexto": "Esta acción no se puede deshacer.",
+    "cancelar": "Cancelar",
+    "apagar": "Eliminar",
+
+    "rapidas": {
+      "documentacao": "Documentación requerida",
+      "respostaDocumentacao": "Para comenzar a trabajar, debes enviar: examen médico, documento de identidad y comprobante de domicilio.",
+      "pagamentos": "Pagos",
+      "respostaPagamentos": "Los pagos se realizan semanalmente después de la confirmación de asistencia con el equipo de RRHH.",
+      "certidao": "Certificado de Seguridad Social",
+      "respostaCertidao": "El certificado puede solicitarse a través del portal de la Seguridad Social ingresando con NISS y contraseña.",
+      "equipa": "Equipo y proyectos",
+      "respostaEquipa": "Actualmente tenemos equipos activos en Lisboa, Oporto y Braga. Contacta al equipo para más detalles."
+    },
+
+    "equipe": {
+      "rh": "Recursos Humanos",
+      "obras": "Proyectos",
+      "financeiro": "Finanzas"
+    }
+  },
+"empresaPedidos": {
+  "novoPedido": {
+    "titulo": "Nueva Solicitud",
+    "descricao": "Completa la información a continuación para crear una nueva solicitud de profesionales.",
+    "obraLocal": "🏗️ Proyecto y Ubicación",
+    "placeholderLocal": "Escribe o selecciona la ubicación del proyecto",
+    "detalhes": "Detalles adicionales",
+    "tipoObra": "Tipo de proyecto",
+    "turno": "Turno de trabajo",
+    "alojamento": "Alojamiento y Transporte",
+    "alojamentoFornecido": "Alojamiento proporcionado",
+    "transporteIncluido": "Transporte incluido",
+    "datas": "Fechas",
+    "dataInicio": "Fecha de inicio",
+    "dataFim": "Fecha de finalización",
+    "dias": "días de duración",
+    "observacoes": "Observaciones",
+    "placeholderObs": "Información adicional (opcional)",
+    "criarPedido": "Crear solicitud",
+    "enviando": "Enviando...",
+    "erroSalvar": "❌ Error al crear la solicitud. Inténtalo de nuevo.",
+    "sucessoSalvar": "✅ ¡Solicitud creada con éxito!"
+  },
+  "toast": {
+    "operacaoConcluida": "¡Operación completada con éxito!",
+    "criarNovoPedido": "Crear nueva solicitud",
+    "verPedidos": "Ver mis solicitudes"
+      },
+  "estimativa": {
+    "valorEstimado": "Valor estimado",
+    "dia": "día",
+    "baseAutomatica": "Base calculada automáticamente",
+    "comoFunciona": "Cómo funciona el cálculo:",
+    "item1": "El valor se define según el tipo de profesional y nivel de experiencia.",
+    "item2": "El sistema utiliza un promedio de precio por hora y por día ajustado automáticamente según el mercado.",
+    "item3": "El costo total estimado multiplica el valor diario por la duración del proyecto y la cantidad de profesionales.",
+    "ultimaAtualizacao": "Última actualización: Septiembre/2025",
+    "fechar": "Cerrar",
+    "custoTotal": "Costo total estimado"
+      },
+  "empresaPedidos": {
+    "titulo": "Solicitudes",
+    "descricao": "Sigue todas las solicitudes realizadas y sus respectivos estados.",
+    "mostrarTodos": "Mostrar todo",
+    "buscarPlaceholder": "Buscar por ubicación, tipo o ID...",
+    "profissional": "profesional",
+    "profissionais": "profesionales",
+    "verDetalhes": "Ver detalles",
+    "criarObra": "Crear Obra",
+    "cancelar": "Cancelar",
+    "nenhumPedido": "No se encontraron solicitudes.",
+    "status": {
+      "emAvaliacao": "En evaluación",
+      "pendente": "Pendiente",
+      "aprovado": "Aprobado",
+      "cancelado": "Cancelado"
+    },
+    "local": "Ubicación",
+    "experiencia": "Experiencia",
+    "quantidade": "Cantidad",
+    "periodo": "Período",
+    "custoTotal": "Costo total",
+    "fechar": "Cerrar"
+
+  }
+  }
+}

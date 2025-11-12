@@ -1,0 +1,357 @@
+{
+  "login": {
+    "entrar": "Se connecter",
+    "cadastrar": "S'inscrire",
+    "email": "E-mail",
+    "senha": "Mot de passe",
+    "nomeCompleto": "Nom complet",
+    "profissional": "Professionnel",
+    "empresa": "Entreprise",
+    "tipoUsuario": "Type d'utilisateur",
+    "esqueceuSenha": "Mot de passe oublié ?",
+    "aguarde": "Veuillez patienter...",
+    "acessoAdmin": "Accès administrateur",
+    "voltarLogin": "Retour à la connexion normale",
+    "painelAdmin": "Panneau d'administration",
+    "sistema": "Système Acrobatas",
+    "cadastroGratuito": "Inscription gratuite",
+    "descricaoProfissionais": "Trouvez des emplois et connectez-vous avec des entreprises de construction.",
+    "descricaoEmpresas": "Engagez des professionnels qualifiés pour vos projets.",
+    "descricaoCadastro": "Créez votre compte maintenant et accédez à toutes les fonctionnalités du système.",
+    "cancelar": "Annuler",
+    "confirmar": "Confirmer",
+    "erroCampos": "Remplissez tous les champs obligatoires.",
+    "erroNome": "Veuillez indiquer votre nom complet.",
+    "erroEmail": "Adresse e-mail invalide.",
+    "erroSenha": "Le mot de passe doit contenir au moins 6 caractères.",
+    "sucessoLogin": "Connexion réussie !",
+    "sucessoCadastro": "Inscription réussie ! Connectez-vous pour continuer.",
+    "erroGenerico": "Erreur inattendue. Vérifiez vos identifiants.",
+    "chaveIncorreta": "❌ Clé incorrecte. Accès refusé.",
+    "digiteChave": "Saisissez la clé de sécurité pour accéder au panneau d'administration.",
+    "placeholderChave": "Saisissez la clé..."
+  },
+
+  "empresa": {
+    "painelTitulo": "Tableau de bord de l'entreprise",
+    "navPainel": "Tableau",
+    "navPedidos": "Demandes",
+    "navObras": "Projets",
+    "navProfissionais": "Professionnels",
+    "navRelatorios": "Rapports",
+    "navDocumentos": "Documents",
+    "navOutros": "Autres",
+    "navChat": "Chat",
+    "notificacoes": {
+      "titulo": "Notifications",
+      "novaObra": "Nouveau projet lancé",
+      "mensagens": "2 nouveaux messages des superviseurs",
+      "atraso": "Alerte de retard sur un projet"
+    },
+    "utilizador": "Utilisateur",
+    "statusAtivo": "Actif",
+    "botaoSair": "Déconnexion",
+    "pedidos": {
+      "titulo": "Demandes",
+      "novos": "Nouvelles demandes",
+      "avaliacao": "En évaluation",
+      "aprovados": "Approuvées"
+    },
+    "obras": {
+      "titulo": "Projets",
+      "ativas": "Projets actifs",
+      "historico": "Historique",
+      "adicionar": "Ajouter un projet"
+    },
+    "profissionais": {
+      "titulo": "Professionnels",
+      "campo": "Équipes sur le terrain",
+      "adicionar": "Ajouter un professionnel",
+      "presencas": "Absences / Présences"
+    },
+    "relatorios": {
+      "titulo": "Rapports et performance",
+      "custos": "Coûts mensuels",
+      "desempenho": "Performance",
+      "financeiro": "Financier"
+    },
+    "documentos": {
+      "titulo": "Documents",
+      "acrobatas": "Acrobatas",
+      "profissionais": "Professionnels",
+      "meus": "Mes documents"
+    },
+    "outros": {
+      "titulo": "Autres",
+      "config": "Paramètres",
+      "notificacoes": "Notifications",
+      "perfil": "Profil de l'entreprise"
+    }
+  },
+
+  "obra": {
+    "carregando": "Chargement des informations du projet...",
+    "naoEncontrada": "Aucun projet trouvé.",
+    "voltar": "Retour",
+    "profissionais": "Travailleurs",
+    "status": "Statut",
+    "prazo": "Délai",
+    "progresso": "Progression",
+    "progressoTitulo": "Progression du projet",
+    "concluido": "Terminé",
+    "tabs": {
+      "visaoGeral": "Vue d'ensemble",
+      "relatorios": "Rapports quotidiens",
+      "equipas": "Équipes",
+      "custos": "Coûts",
+      "documentos": "Documents",
+      "ocorrencias": "Incidents"
+    },
+    "resumoTitulo": "Résumé exécutif",
+    "resumo": {
+      "andamento": "En cours et conforme au calendrier.",
+      "semOcorrencias": "Aucun incident actif.",
+      "equipeCompleta": "Équipe complète sur le chantier.",
+      "ultimoRelatorio": "Le dernier rapport quotidien a été envoyé hier."
+    },
+    "clima": {
+      "temperatura": "Température",
+      "condicao": "Météo"
+    }
+  },
+
+  "empresaPainel": {
+    "nomePadrao": "Entreprise",
+    "bemVindo": "Bienvenue",
+    "mensagemIntro": "Vos décisions construisent des résultats. Utilisez le tableau de bord pour gérer les projets et les équipes avec précision.",
+    "avisoInicial": "Aucune donnée pour le moment — tout est prêt à commencer ! Dès que vous créerez vos projets, les résultats apparaîtront ici automatiquement.",
+    "kpi": {
+      "obrasAtivas": "Projets actifs",
+      "obrasAtivasSub": "Nombre total de projets en cours",
+      "equipaCampo": "Équipe sur le terrain",
+      "equipaCampoSub": "Professionnels actuellement actifs",
+      "custosMes": "Coûts du mois (€)",
+      "custosMesSub": "Dépenses accumulées ce mois-ci",
+      "eficiencia": "Efficacité des projets (%)",
+      "eficienciaSub": "Projets livrés dans les délais",
+      "obrasAtrasadas": "Projets en retard",
+      "semAtrasos": "🎯 Aucun projet en retard",
+      "comAtraso": "Projet avec retard enregistré"
+    },
+    "obrasAtivasTitulo": "Projets actifs",
+    "tabela": {
+      "empresa": "Entreprise",
+      "local": "Emplacement",
+      "profissionais": "Professionnels",
+      "custo": "Coût",
+      "progresso": "Progression",
+      "status": "Statut",
+      "acoes": "Actions",
+      "emAndamento": "En cours",
+      "verDetalhes": "Voir les détails"
+    },
+    "semObras": "Dès que votre premier projet sera créé, les données réelles apparaîtront ici automatiquement."
+  },
+
+  "graficosPainel": {
+    "obrasPorMes": "Projets par mois",
+    "custosMensais": "Coûts mensuels (€)",
+    "semObras": "Aucun projet enregistré pour le moment 🚀",
+    "semCustos": "Aucun coût enregistré pour le moment 💸",
+    "acoesRapidas": "Actions rapides",
+    "pedido": "Demande",
+    "obra": "Projet",
+    "documento": "Document",
+    "equipa": "Équipe",
+    "atividadesRecentes": "Activités récentes",
+    "atividades": {
+      "novaObra": "Nouveau projet créé : Résidentiel Aurora",
+      "novosProfissionais": "2 nouveaux professionnels assignés",
+      "documentoValidado": "Document validé par l’équipe"
+    }
+  },
+
+  "empresaObras": {
+    "titulo": "Gestion de projets",
+    "subtitulo": "Suivez la progression, les coûts et les équipes en temps réel.",
+    "mapa": "Carte des projets",
+    "listaTitulo": "Projets enregistrés",
+    "filtros": {
+      "todas": "Toutes"
+    },
+    "status": {
+      "andamento": "En cours",
+      "atrasada": "En retard",
+      "concluida": "Terminée"
+    },
+    "profissionais": "Professionnels",
+    "custo": "Coût",
+    "prazo": "Délai",
+    "progresso": "Progression",
+    "verDetalhes": "Voir les détails",
+    "editar": "Modifier"
+  },
+
+  "empresaProfissionais": {
+    "titulo": "Gestion des professionnels",
+    "subtitulo": "Surveillez les équipes et filtrez par spécialité, ville ou disponibilité.",
+    "novo": "Nouveau professionnel",
+    "sincronizar": "Synchroniser",
+    "indicadores": {
+      "ativos": "Actifs sur les projets",
+      "disponiveis": "Disponibles",
+      "contratados": "Embauchés cette semaine",
+      "avaliacaoMedia": "Note moyenne"
+    },
+    "abas": {
+      "equipa": "👷 Équipe",
+      "base": "🌐 Base Acrobatas"
+    },
+    "equipaTitulo": "Équipe actuelle",
+    "baseTitulo": "Base de données Acrobatas Workforce",
+    "descricaoBase": "Explorez la base complète de professionnels enregistrés sur Acrobatas et ajoutez-les à vos projets.",
+    "botoes": {
+      "verDetalhes": "Voir les détails",
+      "verPerfil": "Voir le profil",
+      "adicionarObra": "Ajouter au projet"
+    },
+    "filtros": {
+      "todas": "Toutes",
+      "todos": "Tous",
+      "pesquisar": "Rechercher par nom ou fonction..."
+    }
+  },
+
+  "empresaRelatorios": {
+    "titulo": "Rapports et performance générale",
+    "descricao": "Suivez les indicateurs financiers, la productivité et la performance globale de l'entreprise.",
+    "atualizar": "Actualiser",
+    "exportar": "Exporter en PDF",
+    "gerar": "Générer le rapport complet",
+    "indicadores": {
+      "faturamento": "Chiffre d'affaires total",
+      "custos": "Coûts opérationnels",
+      "lucro": "Bénéfice net",
+      "produtividade": "Productivité moyenne",
+      "pontualidade": "Ponctualité"
+    },
+    "graficos": {
+      "financeiro": "Évolution financière (€)",
+      "custos": "Coûts par catégorie",
+      "produtividade": "Productivité par équipe"
+    },
+    "ranking": {
+      "obras": "🏗 Projets les plus rentables",
+      "profissionais": "👷 Professionnels en vedette",
+      "avaliacao": "⭐ Évaluation"
+    },
+    "mensagens": {
+      "carregando": "Chargement des données...",
+      "semDados": "Aucune donnée disponible pour le moment."
+    }
+  },
+
+  "chat": {
+    "titulo": "Vos conversations",
+    "novo": "Nouveau",
+    "buscar": "Rechercher une conversation...",
+    "semChats": "Aucune conversation pour le moment.",
+    "semMensagens": "Aucun message pour l'instant.",
+    "novaConversa": "Nouvelle conversation",
+    "placeholder": "Écrivez un message...",
+    "enviar": "Envoyer",
+    "encerrar": "Fermer",
+    "selecione": "Sélectionnez une conversation à gauche ou créez-en une nouvelle.",
+    "equipeTitulo": "Équipe Acrobatas",
+    "equipeSub": "Posez vos questions au support ou à la direction.",
+    "online": "Agents en ligne",
+    "perguntas": "Questions rapides",
+    "rodape": "Support interne",
+    "apagarTitulo": "Supprimer la conversation ?",
+    "apagarTexto": "Cette action est irréversible.",
+    "cancelar": "Annuler",
+    "apagar": "Supprimer",
+    "rapidas": {
+      "documentacao": "Documentation requise",
+      "respostaDocumentacao": "Pour commencer à travailler, vous devez envoyer : examen médical, carte d'identité et justificatif de domicile.",
+      "pagamentos": "Paiements",
+      "respostaPagamentos": "Les paiements sont effectués chaque semaine après confirmation de présence par l'équipe RH.",
+      "certidao": "Attestation de sécurité sociale",
+      "respostaCertidao": "Le certificat peut être demandé sur le portail de la Sécurité Sociale en utilisant le NISS et le mot de passe.",
+      "equipa": "Équipe et projets",
+      "respostaEquipa": "Nous avons actuellement des équipes actives à Lisbonne, Porto et Braga. Contactez l'équipe pour plus de détails."
+    },
+    "equipe": {
+      "rh": "Ressources humaines",
+      "obras": "Projets",
+      "financeiro": "Finance"
+    }
+  },
+
+  "empresaPedidos": {
+    "titulo": "Demandes",
+    "descricao": "Suivez toutes les demandes effectuées et leurs statuts respectifs.",
+    "mostrarTodos": "Tout afficher",
+    "buscarPlaceholder": "Rechercher par lieu, type ou ID...",
+    "profissional": "professionnel",
+    "profissionais": "professionnels",
+    "verDetalhes": "Voir les détails",
+    "criarObra": "Créer un projet",
+    "cancelar": "Annuler",
+    "nenhumPedido": "Aucune demande trouvée.",
+    "status": {
+      "emAvaliacao": "En évaluation",
+      "pendente": "En attente",
+      "aprovado": "Approuvé",
+      "cancelado": "Annulé"
+    },
+    "local": "Lieu",
+    "experiencia": "Expérience",
+    "quantidade": "Quantité",
+    "periodo": "Période",
+    "custoTotal": "Coût total",
+    "fechar": "Fermer",
+
+    "novoPedido": {
+      "titulo": "Nouvelle Demande",
+      "descricao": "Remplissez les informations ci-dessous pour créer une nouvelle demande de professionnels.",
+      "obraLocal": "🏗️ Projet et Emplacement",
+      "placeholderLocal": "Tapez ou sélectionnez l’emplacement du projet",
+      "detalhes": "Détails supplémentaires",
+      "tipoObra": "Type de projet",
+      "turno": "Quart de travail",
+      "alojamento": "Hébergement et Transport",
+      "alojamentoFornecido": "Hébergement fourni",
+      "transporteIncluido": "Transport inclus",
+      "datas": "Dates",
+      "dataInicio": "Date de début",
+      "dataFim": "Date de fin",
+      "dias": "jours de durée",
+      "observacoes": "Remarques",
+      "placeholderObs": "Informations supplémentaires (facultatif)",
+      "criarPedido": "Créer la demande",
+      "enviando": "Envoi en cours...",
+      "erroSalvar": "❌ Erreur lors de la création de la demande. Veuillez réessayer.",
+      "sucessoSalvar": "✅ Demande créée avec succès !"
+    },
+
+    "toast": {
+      "operacaoConcluida": "Opération terminée avec succès !",
+      "criarNovoPedido": "Créer une nouvelle demande",
+      "verPedidos": "Voir mes demandes"
+    },
+
+    "estimativa": {
+      "valorEstimado": "Valeur estimée",
+      "dia": "jour",
+      "baseAutomatica": "Base calculée automatiquement",
+      "comoFunciona": "Comment fonctionne le calcul :",
+      "item1": "La valeur est définie en fonction du type de professionnel et du niveau d’expérience.",
+      "item2": "Le système utilise une moyenne de prix/heure et de prix/jour ajustée automatiquement selon le marché.",
+      "item3": "Le coût total estimé multiplie le tarif journalier par la durée du projet et le nombre de professionnels.",
+      "ultimaAtualizacao": "Dernière mise à jour : Septembre/2025",
+      "fechar": "Fermer",
+      "custoTotal": "Coût total estimé"
+    }
+  }
+}

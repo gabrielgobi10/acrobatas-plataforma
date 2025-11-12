@@ -1,0 +1,354 @@
+{
+  "login": {
+    "entrar": "Sign in",
+    "cadastrar": "Register",
+    "email": "Email",
+    "senha": "Password",
+    "nomeCompleto": "Full name",
+    "profissional": "Professional",
+    "empresa": "Company",
+    "tipoUsuario": "User Type",
+    "esqueceuSenha": "Forgot password?",
+    "aguarde": "Please wait...",
+    "acessoAdmin": "Admin access",
+    "voltarLogin": "Back to normal login",
+    "painelAdmin": "Admin Panel",
+    "sistema": "Acrobatas System",
+    "cadastroGratuito": "Free registration",
+    "descricaoProfissionais": "Find jobs and connect with construction companies.",
+    "descricaoEmpresas": "Hire qualified professionals for your projects.",
+    "descricaoCadastro": "Create your account now and get access to all features.",
+    "cancelar": "Cancel",
+    "confirmar": "Confirm",
+    "erroCampos": "Please fill all required fields.",
+    "erroNome": "Please enter your full name.",
+    "erroEmail": "Invalid email address.",
+    "erroSenha": "Password must have at least 6 characters.",
+    "sucessoLogin": "Login successful!",
+    "sucessoCadastro": "Registration successful! Please sign in to continue.",
+    "erroGenerico": "Unexpected error. Please check your credentials.",
+    "chaveIncorreta": "❌ Incorrect key. Access denied.",
+    "digiteChave": "Enter the security key to access the admin panel.",
+    "placeholderChave": "Enter key..."
+  },
+
+  "empresa": {
+    "painelTitulo": "Company Dashboard",
+    "navPainel": "Dashboard",
+    "navPedidos": "Requests",
+    "navObras": "Projects",
+    "navProfissionais": "Professionals",
+    "navRelatorios": "Reports",
+    "navDocumentos": "Documents",
+    "navOutros": "Others",
+    "navChat": "Chat",
+    "notificacoes": {
+      "titulo": "Notifications",
+      "novaObra": "New project started",
+      "mensagens": "2 new messages from supervisors",
+      "atraso": "Delay alert on a project"
+    },
+    "utilizador": "User",
+    "statusAtivo": "Active",
+    "botaoSair": "Logout",
+    "pedidos": {
+      "titulo": "Requests",
+      "novos": "New Requests",
+      "avaliacao": "Under Review",
+      "aprovados": "Approved"
+    },
+    "obras": {
+      "titulo": "Projects",
+      "ativas": "Active Projects",
+      "historico": "History",
+      "adicionar": "Add Project"
+    },
+    "profissionais": {
+      "titulo": "Professionals",
+      "campo": "Teams On Site",
+      "adicionar": "Add Professional",
+      "presencas": "Absences / Attendance"
+    },
+    "relatorios": {
+      "titulo": "Reports and Performance",
+      "custos": "Monthly Costs",
+      "desempenho": "Performance",
+      "financeiro": "Financial"
+    },
+    "documentos": {
+      "titulo": "Documents",
+      "acrobatas": "Acrobatas",
+      "profissionais": "Professionals",
+      "meus": "My Documents"
+    },
+    "outros": {
+      "titulo": "Others",
+      "config": "Settings",
+      "notificacoes": "Notifications",
+      "perfil": "Company Profile"
+    }
+  },
+
+  "obra": {
+    "carregando": "Loading project information...",
+    "naoEncontrada": "No project found.",
+    "voltar": "Back",
+    "profissionais": "Workers",
+    "status": "Status",
+    "prazo": "Deadline",
+    "progresso": "Progress",
+    "progressoTitulo": "Project progress",
+    "concluido": "Completed",
+    "tabs": {
+      "visaoGeral": "Overview",
+      "relatorios": "Daily Reports",
+      "equipas": "Teams",
+      "custos": "Costs",
+      "documentos": "Documentation",
+      "ocorrencias": "Incidents"
+    },
+    "resumoTitulo": "Executive Summary",
+    "resumo": {
+      "andamento": "On schedule and progressing normally.",
+      "semOcorrencias": "No active incidents.",
+      "equipeCompleta": "Full team on site.",
+      "ultimoRelatorio": "Last daily report was sent yesterday."
+    },
+    "clima": {
+      "temperatura": "Temperature",
+      "condicao": "Weather"
+    }
+  },
+
+  "empresaPainel": {
+    "nomePadrao": "Company",
+    "bemVindo": "Welcome",
+    "mensagemIntro": "Your decisions build results. Use the dashboard to manage projects and teams with precision.",
+    "avisoInicial": "No data yet — everything is ready to begin! Once you create your projects, the results will appear here automatically.",
+    "kpi": {
+      "obrasAtivas": "Active Projects",
+      "obrasAtivasSub": "Total ongoing projects",
+      "equipaCampo": "Team On Site",
+      "equipaCampoSub": "Professionals currently active",
+      "custosMes": "Monthly Costs (€)",
+      "custosMesSub": "Accumulated expenses this month",
+      "eficiencia": "Project Efficiency (%)",
+      "eficienciaSub": "Projects delivered on time",
+      "obrasAtrasadas": "Delayed Projects",
+      "semAtrasos": "🎯 No delayed projects",
+      "comAtraso": "With delay recorded"
+    },
+    "obrasAtivasTitulo": "Active Projects",
+    "tabela": {
+      "empresa": "Company",
+      "local": "Location",
+      "profissionais": "Professionals",
+      "custo": "Cost",
+      "progresso": "Progress",
+      "status": "Status",
+      "acoes": "Actions",
+      "emAndamento": "In progress",
+      "verDetalhes": "View details"
+    },
+    "semObras": "As soon as your first project is created, real data will automatically appear here."
+  },
+
+  "graficosPainel": {
+    "obrasPorMes": "Projects per Month",
+    "custosMensais": "Monthly Costs (€)",
+    "semObras": "No projects registered yet 🚀",
+    "semCustos": "No costs recorded yet 💸",
+    "acoesRapidas": "Quick Actions",
+    "pedido": "Request",
+    "obra": "Project",
+    "documento": "Document",
+    "equipa": "Team",
+    "atividadesRecentes": "Recent Activities",
+    "atividades": {
+      "novaObra": "New project created: Residential Aurora",
+      "novosProfissionais": "2 new professionals assigned",
+      "documentoValidado": "Document validated by the team"
+    }
+  },
+
+  "empresaObras": {
+    "titulo": "Project Management",
+    "subtitulo": "Track progress, costs, and teams in real time.",
+    "mapa": "Project Map",
+    "listaTitulo": "Registered Projects",
+    "filtros": {
+      "todas": "All"
+    },
+    "status": {
+      "andamento": "In progress",
+      "atrasada": "Delayed",
+      "concluida": "Completed"
+    },
+    "profissionais": "Professionals",
+    "custo": "Cost",
+    "prazo": "Deadline",
+    "progresso": "Progress",
+    "verDetalhes": "View details",
+    "editar": "Edit"
+  },
+
+  "empresaProfissionais": {
+    "titulo": "Professional Management",
+    "subtitulo": "Monitor teams and filter by specialty, city, or availability.",
+    "novo": "New Professional",
+    "sincronizar": "Sync",
+    "indicadores": {
+      "ativos": "Active in Projects",
+      "disponiveis": "Available",
+      "contratados": "Hired this Week",
+      "avaliacaoMedia": "Average Rating"
+    },
+    "abas": {
+      "equipa": "👷 Team",
+      "base": "🌐 Acrobatas Database"
+    },
+    "equipaTitulo": "Current Team",
+    "baseTitulo": "Acrobatas Workforce Database",
+    "descricaoBase": "Explore the complete database of professionals registered in Acrobatas and add them to your projects.",
+    "botoes": {
+      "verDetalhes": "View details",
+      "verPerfil": "View Profile",
+      "adicionarObra": "Add to Project"
+    },
+    "filtros": {
+      "todas": "All",
+      "todos": "All",
+      "pesquisar": "Search by name or job..."
+    }
+  },
+
+  "empresaRelatorios": {
+    "titulo": "Reports and Overall Performance",
+    "descricao": "Monitor financial metrics, productivity, and overall company performance.",
+    "atualizar": "Refresh",
+    "exportar": "Export PDF",
+    "gerar": "Generate Full Report",
+    "indicadores": {
+      "faturamento": "Total Revenue",
+      "custos": "Operational Costs",
+      "lucro": "Net Profit",
+      "produtividade": "Average Productivity",
+      "pontualidade": "Punctuality"
+    },
+    "graficos": {
+      "financeiro": "Financial Evolution (€)",
+      "custos": "Costs by Category",
+      "produtividade": "Productivity by Team"
+    },
+    "ranking": {
+      "obras": "🏗 Top Profitable Projects",
+      "profissionais": "👷 Top Professionals",
+      "avaliacao": "⭐ Rating"
+    },
+    "mensagens": {
+      "carregando": "Loading data...",
+      "semDados": "No data available at the moment."
+    }
+  },
+
+  "chat": {
+    "titulo": "Your Chats",
+    "novo": "New",
+    "buscar": "Search for a chat...",
+    "semChats": "No chats yet.",
+    "semMensagens": "No messages yet.",
+    "novaConversa": "New conversation",
+    "placeholder": "Type a message...",
+    "enviar": "Send",
+    "encerrar": "Close",
+    "selecione": "Select a chat on the left or create a new one.",
+    "equipeTitulo": "Acrobatas Team",
+    "equipeSub": "Ask questions to support or management.",
+    "online": "Online Agents",
+    "perguntas": "Quick Questions",
+    "rodape": "Internal Support",
+    "apagarTitulo": "Delete conversation?",
+    "apagarTexto": "This action cannot be undone.",
+    "cancelar": "Cancel",
+    "apagar": "Delete",
+    "rapidas": {
+      "documentacao": "Required Documentation",
+      "respostaDocumentacao": "To start working, you must send: medical check, ID card, and proof of address.",
+      "pagamentos": "Payments",
+      "respostaPagamentos": "Payments are made weekly after attendance confirmation with the HR team.",
+      "certidao": "Social Security Certificate",
+      "respostaCertidao": "The certificate can be requested through the Social Security Direct portal using NISS and password.",
+      "equipa": "Team and Projects",
+      "respostaEquipa": "Currently, we have active teams in Lisbon, Porto, and Braga. Contact the team for more details."
+    },
+    "equipe": {
+      "rh": "Human Resources",
+      "obras": "Projects",
+      "financeiro": "Finance"
+    }
+  },
+
+  "empresaPedidos": {
+    "novoPedido": {
+      "titulo": "New Request",
+      "descricao": "Fill in the information below to create a new professional request.",
+      "obraLocal": "🏗️ Project & Location",
+      "placeholderLocal": "Type or select the project location",
+      "detalhes": "Additional Details",
+      "tipoObra": "Project Type",
+      "turno": "Work Shift",
+      "alojamento": "Accommodation & Transport",
+      "alojamentoFornecido": "Accommodation Provided",
+      "transporteIncluido": "Transport Included",
+      "datas": "Dates",
+      "dataInicio": "Start Date",
+      "dataFim": "End Date",
+      "dias": "days duration",
+      "observacoes": "Notes",
+      "placeholderObs": "Additional information (optional)",
+      "criarPedido": "Create Request",
+      "enviando": "Sending...",
+      "erroSalvar": "❌ Error creating the request. Please try again.",
+      "sucessoSalvar": "✅ Request created successfully!"
+    },
+    "toast": {
+      "operacaoConcluida": "Operation completed successfully!",
+      "criarNovoPedido": "Create new request",
+      "verPedidos": "View my requests"
+    },
+    "estimativa": {
+      "valorEstimado": "Estimated value",
+      "dia": "day",
+      "baseAutomatica": "Automatically calculated base",
+      "comoFunciona": "How the calculation works:",
+      "item1": "The value is defined based on the type of professional and experience level.",
+      "item2": "The system uses an average hourly and daily rate automatically adjusted according to the market.",
+      "item3": "The total estimated cost multiplies the daily rate by the project duration and number of professionals.",
+      "ultimaAtualizacao": "Last update: September/2025",
+      "fechar": "Close",
+      "custoTotal": "Total estimated cost"
+    },
+    "titulo": "Requests",
+    "descricao": "Track all requests made and their respective statuses.",
+    "mostrarTodos": "Show all",
+    "buscarPlaceholder": "Search by location, type or ID...",
+    "profissional": "professional",
+    "profissionais": "professionals",
+    "verDetalhes": "View details",
+    "criarObra": "Create Project",
+    "cancelar": "Cancel",
+    "nenhumPedido": "No requests found.",
+    "status": {
+      "emAvaliacao": "Under Review",
+      "pendente": "Pending",
+      "aprovado": "Approved",
+      "cancelado": "Cancelled"
+    },
+    "local": "Location",
+    "experiencia": "Experience",
+    "quantidade": "Quantity",
+    "periodo": "Period",
+    "custoTotal": "Total cost",
+    "fechar": "Close"
+  }
+}
