@@ -1,524 +1,378 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+// src/components/company/Profissionais.tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Search,
-  MapPin,
-  UserPlus,
-  Loader2,
-  Eye,
-  CheckCircle2,
-  X,
   Star,
-  Award,
-  Calendar,
+  MapPin,
   Briefcase,
-  FileCheck2,
-  Clock,
+  Award,
+  Flame,
+  Hammer,
+  ShieldCheck,
+  Wrench,
+  Zap,
+  Paintbrush,
+  HardHat,
   Building2,
+  UsersRound,
+  Globe2,
+  ArrowLeft,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/context/AuthContext";
 
-// ================================
-// Tipagem principal
-// ================================
 type Profissional = {
   id: string;
   nome: string;
-  area: string;
-  cidade?: string | null;
-  pais?: string | null;
-  disponibilidade?: boolean | null;
-  documentacao_ok?: boolean | null;
-  foto_url?: string | null;
-  criado_em?: string | null;
-  experiencia?: number | null;
-  avaliacao?: number | null;
-  nivel?: string | null;
-  obras_concluidas?: number | null;
+  funcao: string;
+  cidade: string;
+  nivel: string;
+  avaliacao: number;
+  obras: number;
+  experiencia: number;
+  disponibilidade: string;
+  foto_url: string;
+  capa_url: string;
+  descricao: string;
 };
 
-type Avaliacao = {
-  id: string;
-  empresa: string;
-  nota: number;
-  comentario: string;
-  data: string;
-};
-
-// Função utilitária: calcula tempo de plataforma
-function calcTempoPlataforma(data?: string | null) {
-  if (!data) return "—";
-  const diffMs = Date.now() - new Date(data).getTime();
-  const meses = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 30));
-  return meses < 1 ? "menos de 1 mês" : `${meses} ${meses === 1 ? "mês" : "meses"}`;
-}
-
-// Função utilitária: cor do nível
-function nivelColor(nivel?: string) {
-  switch (nivel) {
-    case "Aprendiz":
-      return "text-gray-400";
-    case "Auxiliar":
-      return "text-blue-400";
-    case "Profissional":
-      return "text-green-400";
-    case "Oficial":
-      return "text-purple-400";
-    case "Encarregado":
-      return "text-amber-400";
-    case "Mestre":
-      return "text-yellow-400";
-    default:
-      return "text-gray-400";
-  }
-}
-
-export default function AdicionarProfissionalPage() {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
+export default function Profissionais() {
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
-  const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
-  const [q, setQ] = useState("");
-  const [fProf, setFProf] = useState("Todas as funções");
-  const [fLocal, setFLocal] = useState("Todas as localidades");
-  const [fDisp, setFDisp] = useState("Disponibilidade");
-  const [obraSelecionada, setObraSelecionada] = useState<string | null>(null);
-  const [adicionando, setAdicionando] = useState<string | null>(null);
-  const [detalhe, setDetalhe] = useState<Profissional | null>(null);
-  const [carregandoAvaliacoes, setCarregandoAvaliacoes] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [filtroCidade, setFiltroCidade] = useState("todas");
+  const [filtroFuncao, setFiltroFuncao] = useState("todas");
+  const [filtroNivel, setFiltroNivel] = useState("todos");
 
-  // ================================
-  // 🔹 Carregar base global
-  // ================================
+  // alternar entre base global e equipa da empresa
+  const [modoEmpresa, setModoEmpresa] = useState(false);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // —— lê o state vindo de Equipas
+  const fromObra = Boolean((location.state as any)?.fromObra);
+  const backTo: string | undefined = (location.state as any)?.backTo;
+
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from("profissionais")
-          .select(
-            "id, nome, area, cidade, pais, disponibilidade, documentacao_ok, foto_url, criado_em, experiencia, avaliacao, nivel"
-          )
-          .order("criado_em", { ascending: false });
-
-        if (error) throw error;
-        setProfissionais(
-          (data || []).map((p: any) => ({
-            ...p,
-            obras_concluidas: Math.floor(Math.random() * 10) + 1,
-            nivel: p.nivel || "Aprendiz",
-          }))
-        );
-      } catch (err) {
-        console.error("Erro ao carregar base:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+    const data: Profissional[] = [
+      {
+        id: "1",
+        nome: "João Ferreira",
+        funcao: "Canalizador",
+        cidade: "Cascais",
+        nivel: "Oficial",
+        avaliacao: 4.8,
+        obras: 12,
+        experiencia: 6,
+        disponibilidade: "Disponível",
+        foto_url: "https://randomuser.me/api/portraits/men/44.jpg",
+        capa_url:
+          "https://images.unsplash.com/photo-1616627451873-bc1b3c48ffcd?auto=format&fit=crop&w=800&q=60",
+        descricao:
+          "Instalações e reparações hidráulicas em obras residenciais e comerciais.",
+      },
+      {
+        id: "2",
+        nome: "Pedro Almeida",
+        funcao: "Eletricista",
+        cidade: "Lisboa",
+        nivel: "Mestre",
+        avaliacao: 4.9,
+        obras: 27,
+        experiencia: 10,
+        disponibilidade: "Em obra",
+        foto_url: "https://randomuser.me/api/portraits/men/67.jpg",
+        capa_url:
+          "https://images.unsplash.com/photo-1604147706283-360c79c3d3a0?auto=format&fit=crop&w=800&q=60",
+        descricao:
+          "Eletricista certificado com especialização em sistemas industriais e prediais.",
+      },
+      {
+        id: "3",
+        nome: "Carla Nunes",
+        funcao: "Pintora",
+        cidade: "Porto",
+        nivel: "Profissional",
+        avaliacao: 4.7,
+        obras: 9,
+        experiencia: 4,
+        disponibilidade: "Disponível",
+        foto_url: "https://randomuser.me/api/portraits/women/68.jpg",
+        capa_url:
+          "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=60",
+        descricao:
+          "Especialista em pintura decorativa e acabamento fino de interiores.",
+      },
+      {
+        id: "4",
+        nome: "Carlos Pinto",
+        funcao: "Pedreiro",
+        cidade: "Sintra",
+        nivel: "Profissional",
+        avaliacao: 4.6,
+        obras: 18,
+        experiencia: 7,
+        disponibilidade: "Disponível",
+        foto_url: "https://randomuser.me/api/portraits/men/79.jpg",
+        capa_url:
+          "https://images.unsplash.com/photo-1581093458791-9b6c26fa2a67?auto=format&fit=crop&w=800&q=60",
+        descricao:
+          "Experiente em alvenaria estrutural, assentamento e acabamentos de obra.",
+      },
+    ];
+    setProfissionais(data);
   }, []);
 
-  // ================================
-  // 🔹 Filtros
-  // ================================
-  const funcoes = useMemo(
-    () => ["Todas as funções", ...new Set(profissionais.map((p) => p.area))],
-    [profissionais]
-  );
+  // IDs dos profissionais vinculados à empresa (simulação por enquanto)
+  const idsDaEmpresa = ["1", "3"];
 
-  const locais = useMemo(
-    () => [
-      "Todas as localidades",
-      ...new Set(profissionais.map((p) => p.cidade || "")),
-    ],
-    [profissionais]
-  );
+  const filtrados = profissionais.filter((p) => {
+    const combinaBusca =
+      busca === "" ||
+      p.nome.toLowerCase().includes(busca.toLowerCase()) ||
+      p.funcao.toLowerCase().includes(busca.toLowerCase());
 
-  const filtrados = useMemo(() => {
-    let base = profissionais;
-    const query = q.toLowerCase();
-    if (query)
-      base = base.filter(
-        (p) =>
-          p.nome.toLowerCase().includes(query) ||
-          p.area.toLowerCase().includes(query) ||
-          (p.cidade || "").toLowerCase().includes(query)
-      );
-    if (fProf !== "Todas as funções") base = base.filter((p) => p.area === fProf);
-    if (fLocal !== "Todas as localidades")
-      base = base.filter((p) => (p.cidade || "") === fLocal);
-    if (fDisp === "Disponível") base = base.filter((p) => p.disponibilidade === true);
-    if (fDisp === "Em obra") base = base.filter((p) => p.disponibilidade === false);
-    return base;
-  }, [profissionais, q, fProf, fLocal, fDisp]);
+    const combinaCidade = filtroCidade === "todas" || p.cidade === filtroCidade;
+    const combinaFuncao = filtroFuncao === "todas" || p.funcao === filtroFuncao;
+    const combinaNivel = filtroNivel === "todos" || p.nivel === filtroNivel;
 
-  // ================================
-  // 🔹 Adicionar à obra
-  // ================================
-  async function adicionarProfissional(prof: Profissional) {
-  if (!obraSelecionada) {
-    toast.error("⚠️ Selecione uma obra antes de adicionar um profissional.", {
-      style: {
-        background: "#1f2937",
-        color: "#fff",
-      },
-    });
-    return;
-  }
-  try {
-    setAdicionando(prof.id);
-    const { error } = await supabase.from("profissionais_obras").insert({
-      obra_id: obraSelecionada,
-      profissional_id: prof.id,
-      status: "convocado",
-    });
-    if (error) throw error;
+    // quando modoEmpresa = true, mostra apenas quem está vinculado
+    const pertenceEmpresa = !modoEmpresa || idsDaEmpresa.includes(p.id);
 
-    toast.success(`✅ ${prof.nome} foi adicionado à obra com sucesso.`, {
-      style: {
-        background: "#16a34a",
-        color: "#fff",
-      },
-    });
-  } catch (err) {
-    console.error("Erro ao adicionar profissional:", err);
-    toast.error("❌ Falha ao adicionar profissional. Tente novamente.", {
-      style: {
-        background: "#dc2626",
-        color: "#fff",
-      },
-    });
-  } finally {
-    setAdicionando(null);
-  }
-}
+    return (
+      combinaBusca &&
+      combinaCidade &&
+      combinaFuncao &&
+      combinaNivel &&
+      pertenceEmpresa
+    );
+  });
 
-
-  // ================================
-  // 🔹 Carregar avaliações do profissional
-  // ================================
-  async function carregarAvaliacoes(profId: string) {
-    setCarregandoAvaliacoes(true);
-    try {
-      const { data, error } = await supabase
-        .from("avaliacoes_profissionais")
-        .select("id, empresa, nota, comentario, data")
-        .eq("profissional_id", profId)
-        .order("data", { ascending: false });
-
-      if (error) throw error;
-      setAvaliacoes(data || []);
-    } catch (err) {
-      console.error("Erro ao carregar avaliações:", err);
-    } finally {
-      setCarregandoAvaliacoes(false);
+  const badgeCor = (nivel: string) => {
+    switch (nivel) {
+      case "Mestre":
+        return "bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-md";
+      case "Oficial":
+        return "bg-blue-600 text-white";
+      case "Profissional":
+        return "bg-green-600 text-white";
+      case "Auxiliar":
+        return "bg-yellow-400 text-slate-800";
+      default:
+        return "bg-slate-400 text-white";
     }
-  }
-// ================================
-// 🔹 Buscar obras reais do banco
-// ================================
-const [obras, setObras] = useState<any[]>([]);
+  };
 
-useEffect(() => {
-  async function carregarObras() {
-    const { data, error } = await supabase
-      .from("obras")
-      .select("id, nome")
-      .order("criado_em", { ascending: false });
+  const iconeFuncao = (funcao: string) => {
+    if (funcao.toLowerCase().includes("canal"))
+      return <Wrench className="w-4 h-4" />;
+    if (funcao.toLowerCase().includes("eletric"))
+      return <Zap className="w-4 h-4" />;
+    if (funcao.toLowerCase().includes("pint"))
+      return <Paintbrush className="w-4 h-4" />;
+    if (funcao.toLowerCase().includes("pedr"))
+      return <Hammer className="w-4 h-4" />;
+    return <HardHat className="w-4 h-4" />;
+  };
 
-    if (error) {
-      console.error("Erro ao carregar obras:", error);
-      return;
-    }
-    setObras(data || []);
-  }
-  carregarObras();
-}, []);
-
-  // ================================
-  // 🔹 UI principal
-  // ================================
   return (
-    <div className="p-6 sm:p-8 space-y-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Base de Profissionais
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm">
-          Encontre e adicione profissionais da base da Acrobatas às suas obras.
-        </p>
-      </header>
-
-   {/* Select de obras */}
-<div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-4 flex flex-wrap gap-4 items-center">
-  <span className="text-sm text-gray-700 dark:text-gray-300">Selecionar obra:</span>
-  <select
-    value={obraSelecionada || ""}
-    onChange={(e) => setObraSelecionada(e.target.value || null)}
-    className="bg-gray-100 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 text-sm rounded-lg px-3 py-2 text-gray-800 dark:text-white outline-none"
-  >
-    <option value="">Selecione uma obra</option>
-    {obras.map((obra) => (
-      <option key={obra.id} value={obra.id}>
-        {obra.nome}
-      </option>
-    ))}
-  </select>
-</div>
-
-
-
-      {/* Filtros */}
-      <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por nome, função, local..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 text-sm text-gray-900 dark:text-white outline-none"
-          />
-        </div>
-        {[fProf, fLocal, fDisp].map((filter, idx) => {
-          const setters = [setFProf, setFLocal, setFDisp];
-          const options =
-            idx === 0
-              ? funcoes
-              : idx === 1
-              ? locais
-              : ["Disponibilidade", "Disponível", "Em obra"];
-          return (
-            <select
-              key={idx}
-              value={filter}
-              onChange={(e) => setters[idx](e.target.value)}
-              className="bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 text-sm rounded-lg px-3 py-2 text-gray-800 dark:text-white outline-none"
-            >
-              {options.map((opt) => (
-                <option key={opt}>{opt}</option>
-              ))}
-            </select>
-          );
-        })}
-      </div>
-
-      {/* Lista */}
-      {loading ? (
-        <div className="text-gray-500 dark:text-gray-400 text-sm">Carregando profissionais...</div>
-      ) : (
-        <div className="grid sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filtrados.length ? (
-            filtrados.map((p) => (
-              <motion.div
-                key={p.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition"
-              >
-                <div className="flex justify-between items-center">
-                  <div className="font-semibold text-gray-900 dark:text-white text-sm">{p.nome}</div>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      p.disponibilidade
-                        ? "bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200"
-                        : "bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200"
-                    }`}
-                  >
-                    {p.disponibilidade ? "Disponível" : "Em obra"}
-                  </span>
-                </div>
-
-                <div className="mt-2 space-y-1 text-sm">
-                  <div className="text-gray-500 dark:text-gray-400">{p.area}</div>
-                  <div className="flex items-center gap-1 text-gray-400">
-                    <MapPin className="w-3 h-3" /> {p.cidade || "—"}
-                  </div>
-                  <div className="flex items-center gap-1 text-yellow-500">
-                    <Star className="w-3 h-3" /> {p.avaliacao || "—"} ({p.obras_concluidas} obras)
-                  </div>
-                  <div className={`flex items-center gap-1 ${nivelColor(p.nivel)}`}>
-                    <Award className="w-3 h-3" /> {p.nivel}
-                  </div>
-                  <div className="flex items-center gap-1 text-gray-400">
-                    <Clock className="w-3 h-3" /> {calcTempoPlataforma(p.criado_em)}
-                  </div>
-                  <div className="flex items-center gap-1 text-gray-400">
-                    <FileCheck2
-                      className={`w-3 h-3 ${
-                        p.documentacao_ok ? "text-green-500" : "text-yellow-500"
-                      }`}
-                    />
-                    {p.documentacao_ok ? "Documentos OK" : "Pendentes"}
-                  </div>
-                </div>
-
-                <div className="mt-4 flex justify-between items-center text-sm">
-                  <button
-                    onClick={() => {
-                      setDetalhe(p);
-                      carregarAvaliacoes(p.id);
-                    }}
-                    className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                  >
-                    <Eye className="w-4 h-4" /> Ver Perfil
-                  </button>
-                  <button
-                    onClick={() => adicionarProfissional(p)}
-                    disabled={adicionando === p.id}
-                    className="text-green-600 hover:text-green-800 font-medium flex items-center gap-1 disabled:opacity-50"
-                  >
-                    {adicionando === p.id ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" /> Adicionando
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-4 h-4" /> Adicionar à Obra
-                      </>
-                    )}
-                  </button>
-                </div>
-              </motion.div>
-            ))
-          ) : (
-            <div className="col-span-full text-gray-500 dark:text-gray-400 text-sm">
-              Nenhum profissional encontrado com os filtros aplicados.
-            </div>
-          )}
+    <div className="p-6 md:p-10">
+      {/* Voltar quando veio de uma obra */}
+      {fromObra && (
+        <div className="mb-4">
+          <button
+            onClick={() => (backTo ? navigate(backTo) : navigate(-1))}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Voltar para a obra
+          </button>
         </div>
       )}
 
-      {/* Modal Detalhes */}
-      <AnimatePresence>
-        {detalhe && (
-          <motion.div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {/* Cabeçalho */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            {modoEmpresa ? "Profissionais da Minha Empresa" : "Base Acrobatas"}
+          </h1>
+          <p className="text-slate-500 text-sm">
+            {modoEmpresa
+              ? "Profissionais já vinculados à sua empresa."
+              : "Explore profissionais verificados e encontre a equipa ideal para sua obra."}
+          </p>
+        </div>
+
+        {/* Busca */}
+        <div className="mt-4 md:mt-0 flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-xl shadow-sm">
+          <input
+            type="text"
+            placeholder="Pesquisar por nome ou função..."
+            className="bg-transparent outline-none text-sm w-64 text-slate-700 dark:text-slate-100"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Toggle Base / Empresa */}
+      <div className="flex gap-3 mb-6">
+        <button
+          onClick={() => setModoEmpresa(false)}
+          className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${
+            !modoEmpresa
+              ? "bg-blue-600 text-white"
+              : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+          }`}
+        >
+          <Globe2 className="w-4 h-4" />
+          Base Acrobatas
+        </button>
+
+        <button
+          onClick={() => setModoEmpresa(true)}
+          className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${
+            modoEmpresa
+              ? "bg-blue-600 text-white"
+              : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+          }`}
+        >
+          <UsersRound className="w-4 h-4" />
+          Minha Equipa
+        </button>
+      </div>
+
+      {/* Filtros (escondidos quando em modo empresa) */}
+      {!modoEmpresa && (
+        <div className="flex flex-wrap gap-3 mb-8">
+          <select
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm"
+            value={filtroCidade}
+            onChange={(e) => setFiltroCidade(e.target.value)}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-lg bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4 shadow-xl overflow-y-auto max-h-[90vh]"
+            <option value="todas">Todas as cidades</option>
+            <option value="Lisboa">Lisboa</option>
+            <option value="Cascais">Cascais</option>
+            <option value="Porto">Porto</option>
+            <option value="Sintra">Sintra</option>
+          </select>
+
+          <select
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm"
+            value={filtroFuncao}
+            onChange={(e) => setFiltroFuncao(e.target.value)}
+          >
+            <option value="todas">Todas as funções</option>
+            <option value="Canalizador">Canalizador</option>
+            <option value="Eletricista">Eletricista</option>
+            <option value="Pintora">Pintora</option>
+            <option value="Pedreiro">Pedreiro</option>
+          </select>
+
+          <select
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm"
+            value={filtroNivel}
+            onChange={(e) => setFiltroNivel(e.target.value)}
+          >
+            <option value="todos">Todos os níveis</option>
+            <option value="Aprendiz">Aprendiz</option>
+            <option value="Profissional">Profissional</option>
+            <option value="Oficial">Oficial</option>
+            <option value="Mestre">Mestre</option>
+          </select>
+        </div>
+      )}
+
+      {/* Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filtrados.map((p) => (
+          <motion.div
+            key={p.id}
+            whileHover={{ scale: 1.03 }}
+            transition={{ type: "spring", stiffness: 150 }}
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-md hover:shadow-lg overflow-hidden flex flex-col transition-all"
+          >
+            <div
+              className="h-24 bg-cover bg-center relative"
+              style={{ backgroundImage: `url(${p.capa_url})` }}
             >
-              <div className="flex justify-between items-center">
-                <div className="font-semibold text-gray-900 dark:text-white text-lg flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-blue-500" /> {detalhe.nome}
-                </div>
-                <button
-                  onClick={() => setDetalhe(null)}
-                  className="text-gray-400 hover:text-gray-800 dark:hover:text-white"
+              <div className="absolute inset-0 bg-black/20 dark:bg-black/40" />
+              <div className="absolute bottom-[-30px] left-1/2 transform -translate-x-1/2">
+                <img
+                  src={p.foto_url}
+                  alt={p.nome}
+                  className="w-20 h-20 rounded-full border-4 border-white shadow-md object-cover"
+                />
+              </div>
+            </div>
+
+            <div className="pt-10 pb-5 px-4 text-center">
+              <div className="flex items-center justify-center gap-2 text-blue-600 dark:text-blue-400 font-semibold text-sm mb-1">
+                {iconeFuncao(p.funcao)}
+                <span>{p.funcao}</span>
+              </div>
+
+              <h2 className="text-lg font-bold text-slate-800 dark:text-white">
+                {p.nome}
+              </h2>
+              <p className="text-slate-400 text-xs italic mb-1">{p.descricao}</p>
+
+              <div className="flex items-center justify-center gap-1 mt-1 text-yellow-500">
+                <Star className="w-4 h-4 fill-yellow-500" />
+                <span className="text-sm text-slate-600 dark:text-slate-300">
+                  {p.avaliacao.toFixed(1)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-center gap-1 mt-1 text-slate-500 dark:text-slate-400 text-sm">
+                <MapPin className="w-4 h-4" />
+                <span>{p.cidade}</span>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
+                <span
+                  className={`text-xs px-3 py-1 rounded-full font-medium ${
+                    p.disponibilidade === "Disponível"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-orange-100 text-orange-700"
+                  }`}
                 >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+                  {p.disponibilidade}
+                </span>
 
-              {/* PERFIL */}
-              <div className="space-y-3 text-sm text-gray-800 dark:text-gray-300">
-                <div className="flex gap-3 items-center">
-                  <img
-                    src={
-                      detalhe.foto_url ||
-                      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                        detalhe.nome
-                      )}`
-                    }
-                    className="w-16 h-16 rounded-full object-cover"
-                  />
-                  <div>
-                    <div className="font-bold text-lg">{detalhe.nome}</div>
-                    <div className={`flex items-center gap-1 ${nivelColor(detalhe.nivel)}`}>
-                      <Award className="w-4 h-4" /> {detalhe.nivel}
-                    </div>
-                    <div className="text-gray-500 dark:text-gray-400">
-                      {detalhe.area} • {detalhe.experiencia} anos
-                    </div>
-                  </div>
-                </div>
-
-                <hr className="border-gray-200 dark:border-zinc-800" />
-
-                <div>
-                  <MapPin className="inline w-4 h-4 text-blue-500" /> {detalhe.cidade},{" "}
-                  {detalhe.pais}
-                </div>
-                <div>
-                  <Star className="inline w-4 h-4 text-yellow-500" />{" "}
-                  {detalhe.avaliacao || "—"} ({detalhe.obras_concluidas} obras)
-                </div>
-                <div>
-                  <Calendar className="inline w-4 h-4 text-gray-500" /> Tempo na
-                  plataforma: {calcTempoPlataforma(detalhe.criado_em)}
-                </div>
-                <div>
-                  <Briefcase className="inline w-4 h-4 text-gray-500" />{" "}
-                  Disponibilidade:{" "}
-                  {detalhe.disponibilidade ? "Disponível" : "Em obra"}
-                </div>
-                <div>
-                  <FileCheck2
-                    className={`inline w-4 h-4 ${
-                      detalhe.documentacao_ok ? "text-green-500" : "text-yellow-500"
-                    }`}
-                  />{" "}
-                  Documentação:{" "}
-                  {detalhe.documentacao_ok ? "Completa ✅" : "Pendente ⚠️"}
-                </div>
-
-                {/* Avaliações */}
-                <div className="mt-4">
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 mb-1 flex items-center gap-1">
-                    <Star className="w-4 h-4 text-yellow-500" /> Avaliações
-                  </div>
-                  {carregandoAvaliacoes ? (
-                    <p className="text-gray-400 text-sm">Carregando avaliações...</p>
-                  ) : avaliacoes.length ? (
-                    <div className="space-y-2">
-                      {avaliacoes.map((a) => (
-                        <div
-                          key={a.id}
-                          className="border border-gray-200 dark:border-zinc-800 rounded-lg p-2"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-1 text-sm font-medium text-gray-800 dark:text-gray-200">
-                              <Building2 className="w-4 h-4 text-blue-500" /> {a.empresa}
-                            </div>
-                            <div className="flex items-center gap-1 text-yellow-500">
-                              {Array.from({ length: a.nota }).map((_, i) => (
-                                <Star key={i} className="w-3 h-3 fill-yellow-500" />
-                              ))}
-                            </div>
-                          </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {a.comentario}
-                          </p>
-                          <span className="text-[10px] text-gray-400">
-                            {new Date(a.data).toLocaleDateString("pt-BR")}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-400 text-sm">Sem avaliações registradas.</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-4">
-                <button
-                  onClick={() => setDetalhe(null)}
-                  className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm"
+                <span
+                  className={`text-xs px-3 py-1 rounded-full font-semibold ${badgeCor(
+                    p.nivel
+                  )} flex items-center gap-1`}
                 >
-                  Fechar
-                </button>
+                  {p.nivel === "Mestre" && <Flame className="w-3 h-3" />}
+                  {p.nivel === "Oficial" && <Award className="w-3 h-3" />}
+                  {p.nivel === "Profissional" && <Hammer className="w-3 h-3" />}
+                  {p.nivel}
+                </span>
               </div>
-            </motion.div>
+
+              <div className="flex justify-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
+                <div className="flex items-center gap-1">
+                  <Briefcase className="w-4 h-4" /> {p.obras} obras
+                </div>
+                <div className="flex items-center gap-1">
+                  <Building2 className="w-4 h-4" /> {p.experiencia} anos
+                </div>
+              </div>
+
+              <button
+                onClick={() => navigate(`/empresa/profissional/${p.id}`)}
+                className="mt-4 w-full flex items-center justify-center gap-2 bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-full hover:bg-blue-700 transition-all"
+              >
+                <ShieldCheck className="w-4 h-4" /> Ver Perfil
+              </button>
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        ))}
+      </div>
     </div>
   );
 }

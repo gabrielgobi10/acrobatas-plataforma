@@ -13,13 +13,20 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 
+type ObraInfo = {
+  id: string;
+  nome?: string | null;
+  endereco?: string | null;
+};
+
 type Pagamento = {
   id: string;
-  valor_total: number;
-  valor_hora: number;
-  horas_trabalhadas: number;
+  valor_total: number | null;
+  valor_hora: number | null;
+  horas_trabalhadas: number | null;
   status_pagamento: string;
   data_pagamento?: string | null;
+  obra_id?: string | null;
   obra?: {
     nome?: string | null;
     endereco?: string | null;
@@ -27,55 +34,127 @@ type Pagamento = {
 };
 
 export default function MeusGanhos() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [ganhos, setGanhos] = useState<Pagamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroMes, setFiltroMes] = useState("todos");
 
-  // 🔹 Carrega dados
+  // id do profissional (se existir no contexto)
+  const profissionalId = profile?.id || user?.id;
+
   useEffect(() => {
     async function carregar() {
-      if (!user) return;
       setLoading(true);
+
+      console.log("[MEUS GANHOS] profissionalId:", profissionalId);
+
+      // 1) Busca pagamentos (sem travar se não tiver profissionalId)
       let query = supabase
         .from("pagamentos_profissionais")
         .select(
-          `id, valor_total, valor_hora, horas_trabalhadas, status_pagamento, data_pagamento, obras ( nome, endereco )`
+          `
+          id,
+          valor_total,
+          valor_hora,
+          horas_trabalhadas,
+          status_pagamento,
+          data_pagamento,
+          obra_id
+        `
         )
-        .eq("profissional_id", user.id)
         .order("data_pagamento", { ascending: false });
 
-      if (filtroStatus !== "todos") query = query.eq("status_pagamento", filtroStatus);
+      // aplica filtro por profissional só se tiver id
+      if (profissionalId) {
+        query = query.eq("profissional_id", profissionalId);
+      }
+
+      if (filtroStatus !== "todos") {
+        query = query.eq("status_pagamento", filtroStatus);
+      }
 
       if (filtroMes !== "todos") {
-        const [ano, mes] = filtroMes.split("-");
-        const inicio = `${ano}-${mes}-01`;
-        const fim = new Date(parseInt(ano), parseInt(mes), 0).toISOString().slice(0, 10);
+        const [anoStr, mesStr] = filtroMes.split("-");
+        const ano = parseInt(anoStr, 10);
+        const mes = parseInt(mesStr, 10);
+
+        const inicio = `${anoStr}-${mesStr}-01`;
+        const fim = new Date(ano, mes, 0).toISOString().slice(0, 10);
+
         query = query.gte("data_pagamento", inicio).lte("data_pagamento", fim);
       }
 
       const { data, error } = await query;
-      if (!error && data) setGanhos(data);
+
+      console.log("[MEUS GANHOS] data:", data);
+      console.log("[MEUS GANHOS] error:", error);
+
+      if (error) {
+        console.error("Erro ao carregar pagamentos_profissionais:", error);
+        setGanhos([]);
+        setLoading(false);
+        return;
+      }
+
+      const pagamentos = (data || []) as Pagamento[];
+
+      // 2) Busca obras relacionadas em lote
+      const obraIds = Array.from(
+        new Set(
+          pagamentos
+            .map((p) => p.obra_id)
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      let mapaObras: Record<string, ObraInfo> = {};
+
+      if (obraIds.length > 0) {
+        const { data: obrasData, error: obrasError } = await supabase
+          .from("obras")
+          .select("id, nome, endereco")
+          .in("id", obraIds);
+
+        if (obrasError) {
+          console.error("Erro ao carregar obras:", obrasError);
+        } else if (obrasData) {
+          mapaObras = Object.fromEntries(
+            obrasData.map((o) => [(o as ObraInfo).id, o as ObraInfo])
+          );
+        }
+      }
+
+      // 3) Enriquecer os pagamentos com os dados da obra
+      const pagamentosComObra = pagamentos.map((p) => ({
+        ...p,
+        obra: p.obra_id ? mapaObras[p.obra_id] || null : null,
+      }));
+
+      setGanhos(pagamentosComObra);
       setLoading(false);
     }
+
     carregar();
-  }, [user, filtroStatus, filtroMes]);
+  }, [profissionalId, filtroStatus, filtroMes]);
 
   // 🔹 Estatísticas
   const totalRecebido = ganhos
     .filter((g) => g.status_pagamento === "pago")
-    .reduce((acc, g) => acc + g.valor_total, 0);
+    .reduce((acc, g) => acc + (g.valor_total || 0), 0);
 
   const totalPendente = ganhos
     .filter((g) => g.status_pagamento !== "pago")
-    .reduce((acc, g) => acc + g.valor_total, 0);
+    .reduce((acc, g) => acc + (g.valor_total || 0), 0);
 
-  const ultimaData = ganhos.find((g) => g.status_pagamento === "pago")?.data_pagamento;
+  const horasTrabalhadasPeriodo = ganhos.reduce(
+    (acc, g) => acc + (g.horas_trabalhadas || 0),
+    0
+  );
 
-  // ========================================================================
-  // 🔹 UI Responsiva + Modo claro/escuro
-  // ========================================================================
+  const ultimaData = ganhos.find((g) => g.status_pagamento === "pago")
+    ?.data_pagamento;
+
   return (
     <div className="p-4 sm:p-8 text-gray-900 dark:text-gray-100 transition-colors duration-300">
       {/* Cabeçalho */}
@@ -85,11 +164,13 @@ export default function MeusGanhos() {
       </div>
 
       <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base mb-6 sm:mb-8">
-        Aqui você vê todos os seus ganhos, pagamentos pendentes e históricos por obra.
+        Aqui você acompanha seus ganhos, valores pendentes e suas horas
+        trabalhadas por período.
       </p>
 
       {/* Estatísticas */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+        {/* Total Recebido */}
         <div className="bg-white dark:bg-[#1e2a3a] border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 sm:p-4 text-center shadow-sm">
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             Total Recebido
@@ -99,6 +180,7 @@ export default function MeusGanhos() {
           </p>
         </div>
 
+        {/* Pendentes */}
         <div className="bg-white dark:bg-[#1e2a3a] border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 sm:p-4 text-center shadow-sm">
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             Pendentes
@@ -108,15 +190,19 @@ export default function MeusGanhos() {
           </p>
         </div>
 
+        {/* Horas trabalhadas */}
         <div className="bg-white dark:bg-[#1e2a3a] border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 sm:p-4 text-center shadow-sm">
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-            Obras Trabalhadas
+            {filtroMes === "todos"
+              ? "Horas trabalhadas (total)"
+              : "Horas trabalhadas no mês"}
           </p>
           <p className="text-base sm:text-xl font-semibold text-blue-500">
-            {new Set(ganhos.map((g) => g.obra?.nome)).size}
+            {horasTrabalhadasPeriodo.toFixed(1)} h
           </p>
         </div>
 
+        {/* Último pagamento */}
         <div className="bg-white dark:bg-[#1e2a3a] border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 sm:p-4 text-center shadow-sm">
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             Último Pagamento
@@ -151,9 +237,10 @@ export default function MeusGanhos() {
           {Array.from({ length: 12 }).map((_, i) => {
             const ano = new Date().getFullYear();
             const mes = (i + 1).toString().padStart(2, "0");
-            const label = new Date(`${ano}-${mes}-01`).toLocaleDateString("pt-PT", {
-              month: "long",
-            });
+            const label = new Date(`${ano}-${mes}-01`).toLocaleDateString(
+              "pt-PT",
+              { month: "long" }
+            );
             return (
               <option key={mes} value={`${ano}-${mes}`}>
                 {label.charAt(0).toUpperCase() + label.slice(1)}
@@ -188,16 +275,27 @@ export default function MeusGanhos() {
                   <p className="text-gray-900 dark:text-gray-100 font-medium text-sm sm:text-base mb-1">
                     {g.obra?.nome || "Obra não identificada"}
                   </p>
+
                   <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-2">
                     <MapPin size={13} /> {g.obra?.endereco || "—"}
                   </p>
+
                   <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-2">
-                    <Euro size={13} /> Valor/hora: € {g.valor_hora.toFixed(2)} |{" "}
-                    {g.horas_trabalhadas.toFixed(1)}h
+                    <Euro size={13} /> Valor/hora: €{" "}
+                    {g.valor_hora != null ? g.valor_hora.toFixed(2) : "0.00"} |{" "}
+                    {g.horas_trabalhadas != null
+                      ? g.horas_trabalhadas.toFixed(1)
+                      : "0.0"}
+                    h
                   </p>
+
                   <p className="text-gray-800 dark:text-gray-200 font-semibold text-sm sm:text-base">
-                    Total: € {g.valor_total.toFixed(2)}
+                    Total: €{" "}
+                    {g.valor_total != null
+                      ? g.valor_total.toFixed(2)
+                      : "0.00"}
                   </p>
+
                   {g.data_pagamento && (
                     <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
                       <Calendar size={11} />{" "}
@@ -227,3 +325,4 @@ export default function MeusGanhos() {
     </div>
   );
 }
+

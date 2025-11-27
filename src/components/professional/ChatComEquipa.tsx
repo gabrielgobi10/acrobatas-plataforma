@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+// src/components/professional/ChatComEquipa.tsx
+import { useEffect, useRef, useState } from "react";
 import {
   Send,
   Paperclip,
@@ -14,25 +15,62 @@ import {
   MessageSquare,
   Users,
   Zap,
+  LifeBuoy,
+  MessageCircle,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
-import { motion } from "framer-motion";
 
+/* =============================
+   Tipos
+============================= */
+type ChatSessao = {
+  id: string;
+  profissional_id?: string;
+  titulo: string;
+  status: "ativo" | "inativo";
+  criado_em: string;
+  ultima_mensagem?: string | null;
+  statusLabel?: "Ativa" | "Inativa";
+};
+
+type Mensagem = {
+  id: string;
+  sessao_id: string;
+  remetente_id: string | null;
+  conteudo: string;
+  tipo: "texto";
+  criado_em: string;
+};
+
+/* =============================
+   Componente
+============================= */
 export default function ChatComEquipa() {
   const { user } = useAuth();
 
-  const [chats, setChats] = useState<any[]>([]);
-  const [chatSelecionado, setChatSelecionado] = useState<any>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [abaMobile, setAbaMobile] = useState<"chats" | "equipa" | "rapidas" | "chat">(
+    "chats"
+  );
+
+  const [chats, setChats] = useState<ChatSessao[]>([]);
+  const [chatSelecionado, setChatSelecionado] = useState<ChatSessao | null>(null);
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [novaMensagem, setNovaMensagem] = useState("");
-  const [mensagens, setMensagens] = useState<any[]>([]);
+
   const [editandoTitulo, setEditandoTitulo] = useState(false);
   const [tituloTemp, setTituloTemp] = useState("");
+
   const [mostrarModal, setMostrarModal] = useState(false);
   const [chatParaApagar, setChatParaApagar] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
-  const [abaMobile, setAbaMobile] = useState<"chats" | "equipa" | "rapidas" | "chat">("chats");
 
+  // refs para UX
+  const listaRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  /* ---- Dados laterais (profissional) ---- */
   const agentes = [
     { nome: "Débora", cargo: "RH", online: true },
     { nome: "Francisco", cargo: "Obras", online: true },
@@ -43,44 +81,47 @@ export default function ChatComEquipa() {
     {
       titulo: "Documentação obrigatória",
       respostaAutomatica:
-        "Para iniciar em obra é obrigatório enviar: ficha médica, cartão cidadão e comprovativo de morada.",
-      icon: <FileText className="w-4 h-4 text-blue-500" />,
+        "Para iniciar em obra é obrigatório enviar: ficha médica, cartão de cidadão e comprovativo de morada.",
+      icon: <FileText className="w-4 h-4" />,
     },
     {
       titulo: "Pagamentos",
       respostaAutomatica:
-        "Os pagamentos são efetuados semanalmente, mediante conferência de presença com a equipa de RH.",
-      icon: <DollarSign className="w-4 h-4 text-yellow-500" />,
+        "Os pagamentos são efetuados semanalmente, depois da confirmação das presenças com a equipa de RH.",
+      icon: <DollarSign className="w-4 h-4" />,
     },
     {
       titulo: "Certidão de Segurança Social",
       respostaAutomatica:
-        "A certidão pode ser solicitada pelo portal da Segurança Social Direta, acessando com NISS e palavra-passe.",
-      icon: <Landmark className="w-4 h-4 text-gray-500" />,
+        "A certidão pode ser emitida no portal da Segurança Social Direta, com NISS e palavra-passe.",
+      icon: <Landmark className="w-4 h-4" />,
     },
     {
       titulo: "Equipa e obras",
       respostaAutomatica:
-        "No momento temos equipas ativas em Lisboa, Porto e Braga. Consulte a equipa para saber mais detalhes.",
-      icon: <Building2 className="w-4 h-4 text-red-500" />,
+        "Temos equipas ativas em Lisboa, Porto e Braga. Fale com a equipa para saber sobre novas vagas e obras.",
+      icon: <Building2 className="w-4 h-4" />,
     },
   ];
 
-  // Detectar mobile
+  /* ---------------- Responsividade --------------- */
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // 📦 Carregar conversas
+  /* ---------------- Carregar conversas --------------- */
   useEffect(() => {
-    if (user) carregarConversas();
+    if (!user) return;
+    carregarConversas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const carregarConversas = async () => {
     if (!user) return;
+
     const { data: sessoes, error } = await supabase
       .from("chat_sessoes")
       .select("*")
@@ -92,37 +133,39 @@ export default function ChatComEquipa() {
       return;
     }
 
-    const validas = await Promise.all(
-      (sessoes || []).map(async (chat) => {
+    const enriquecidas = await Promise.all(
+      (sessoes || []).map(async (chat: ChatSessao) => {
         const { data: ultimaMsg } = await supabase
           .from("chat_mensagens")
-          .select("criado_em")
+          .select("criado_em, conteudo")
           .eq("sessao_id", chat.id)
           .order("criado_em", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
-        if (!ultimaMsg) return null;
+        let statusLabel: "Ativa" | "Inativa" = "Inativa";
+        let ultima_mensagem: string | null = null;
 
-        const diffHoras =
-          (new Date().getTime() - new Date(ultimaMsg.criado_em).getTime()) /
-          (1000 * 60 * 60);
+        if (ultimaMsg) {
+          const diffHoras =
+            (Date.now() - new Date(ultimaMsg.criado_em).getTime()) /
+            (1000 * 60 * 60);
+          statusLabel = diffHoras < 24 ? "Ativa" : "Inativa";
+          ultima_mensagem = (ultimaMsg as any).conteudo ?? null;
+        }
 
-        return {
-          ...chat,
-          status: diffHoras < 24 ? "Ativa" : "Inativa",
-        };
+        return { ...chat, statusLabel, ultima_mensagem };
       })
     );
 
-    const conversasComMensagens = validas.filter(Boolean);
-    setChats(conversasComMensagens);
+    setChats(enriquecidas as ChatSessao[]);
   };
 
-  // ➕ Criar nova conversa
-  const criarChat = async (titulo?: string) => {
-    if (!user) return;
+  /* --------- Criar/abrir conversa --------- */
+  const criarChat = async (titulo?: string): Promise<ChatSessao | null> => {
+    if (!user) return null;
     const tituloChat = titulo || "Nova conversa";
+
     const { data: existente } = await supabase
       .from("chat_sessoes")
       .select("*")
@@ -131,27 +174,33 @@ export default function ChatComEquipa() {
       .maybeSingle();
 
     if (existente) {
-      setChatSelecionado(existente);
-      setTituloTemp(existente.titulo);
+      const s = existente as ChatSessao;
+      setChatSelecionado(s);
+      setTituloTemp(s.titulo);
       if (isMobile) setAbaMobile("chat");
-      return;
+      return s;
     }
 
-    const { data, error } = await supabase
+    const r = await supabase
       .from("chat_sessoes")
       .insert([{ profissional_id: user.id, titulo: tituloChat, status: "ativo" }])
       .select()
       .single();
 
-    if (!error && data) {
-      setChats((prev) => [data, ...prev]);
-      setChatSelecionado(data);
-      setTituloTemp(data.titulo);
+    if (!r.error && r.data) {
+      const inserido = r.data as ChatSessao;
+      setChats((prev) => [inserido, ...prev]);
+      setChatSelecionado(inserido);
+      setTituloTemp(inserido.titulo);
       if (isMobile) setAbaMobile("chat");
+      setTimeout(() => inputRef.current?.focus(), 50);
+      return inserido;
     }
+
+    return null;
   };
 
-  // ✏️ Salvar novo título
+  /* --------- Salvar título --------- */
   const salvarTitulo = async () => {
     if (!chatSelecionado || !tituloTemp.trim()) return;
     await supabase
@@ -159,73 +208,97 @@ export default function ChatComEquipa() {
       .update({ titulo: tituloTemp })
       .eq("id", chatSelecionado.id);
     setChats((prev) =>
-      prev.map((c) =>
-        c.id === chatSelecionado.id ? { ...c, titulo: tituloTemp } : c
-      )
+      prev.map((c) => (c.id === chatSelecionado.id ? { ...c, titulo: tituloTemp } : c))
     );
     setChatSelecionado({ ...chatSelecionado, titulo: tituloTemp });
     setEditandoTitulo(false);
   };
 
-  // 📤 Enviar mensagem
+  /* --------- Enviar mensagens --------- */
   const enviarMensagem = async (conteudoCustom?: string) => {
-    const conteudo = conteudoCustom || novaMensagem.trim();
+    const conteudo = (conteudoCustom ?? novaMensagem).trim();
     if (!conteudo || !chatSelecionado) return;
+
     const { error } = await supabase.from("chat_mensagens").insert([
       {
         sessao_id: chatSelecionado.id,
-        remetente_id: user?.id,
+        remetente_id: user?.id ?? null,
         conteudo,
         tipo: "texto",
       },
     ]);
+
     if (!error) setNovaMensagem("");
   };
 
-  // 💬 Perguntas rápidas
-  const enviarPerguntaRapida = async (r: any) => {
-    if (!chatSelecionado) return;
+  const enviarPerguntaRapida = async (r: {
+    titulo: string;
+    respostaAutomatica: string;
+  }) => {
+    let sess = chatSelecionado;
+    if (!sess) sess = await criarChat("Suporte Acrobatas");
+    if (!sess) return;
+
+    setChatSelecionado(sess);
+    if (isMobile) setAbaMobile("chat");
+
     await enviarMensagem(r.titulo);
     setTimeout(async () => {
       await supabase.from("chat_mensagens").insert([
         {
-          sessao_id: chatSelecionado.id,
+          sessao_id: sess!.id,
           remetente_id: null,
           conteudo: r.respostaAutomatica,
           tipo: "texto",
         },
       ]);
-    }, 600);
+    }, 400);
   };
 
-  // 🧠 Realtime mensagens
+  /* --------- Realtime + histórico --------- */
   useEffect(() => {
     if (!chatSelecionado) return;
+
     const canal = supabase
       .channel(`mensagens-${chatSelecionado.id}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_mensagens" },
         (payload) => {
-          const nova = payload.new;
-          if (nova.sessao_id === chatSelecionado.id)
+          const nova = payload.new as Mensagem;
+          if (nova.sessao_id === chatSelecionado.id) {
             setMensagens((prev) => [...prev, nova]);
+          }
         }
       )
       .subscribe();
 
-    const carregarMensagens = async () => {
+    const carregar = async () => {
       const { data } = await supabase
         .from("chat_mensagens")
         .select("*")
         .eq("sessao_id", chatSelecionado.id)
         .order("criado_em", { ascending: true });
-      setMensagens(data || []);
-    };
-    carregarMensagens();
-    return () => supabase.removeChannel(canal);
-  }, [chatSelecionado]);
 
+      setMensagens((data as Mensagem[]) || []);
+    };
+    carregar();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [chatSelecionado, user?.id]);
+
+  // autoscroll
+  useEffect(() => {
+    if (!listaRef.current) return;
+    listaRef.current.scrollTo({
+      top: listaRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [mensagens.length]);
+
+  /* --------- Apagar --------- */
   const confirmarApagarChat = (id: string) => {
     setChatParaApagar(id);
     setMostrarModal(true);
@@ -241,117 +314,292 @@ export default function ChatComEquipa() {
     setChatParaApagar(null);
   };
 
-  // ✅ MOBILE
+  /* ===================== MOBILE ===================== */
   if (isMobile) {
     return (
-    <div className="min-h-screen flex flex-col bg-transparent backdrop-blur-xl text-slate-900 dark:text-slate-100 transition-all duration-500 border border-white/10 shadow-[0_4px_25px_rgba(0,0,0,0.2)] rounded-2xl">
-
-
-        {/* Abas topo */}
+      <div className="min-h-screen bg-transparent flex flex-col">
+        {/* SEGMENTED TABS */}
         {abaMobile !== "chat" && (
-          <div className="flex justify-around border-b border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
-            <button onClick={() => setAbaMobile("chats")} className={`flex-1 py-3 flex flex-col items-center text-sm font-medium ${abaMobile === "chats" ? "text-blue-600 dark:text-cyan-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
-              <MessageSquare className="w-5 h-5 mb-0.5" /> Conversas
-            </button>
-            <button onClick={() => setAbaMobile("equipa")} className={`flex-1 py-3 flex flex-col items-center text-sm font-medium ${abaMobile === "equipa" ? "text-blue-600 dark:text-cyan-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
-              <Users className="w-5 h-5 mb-0.5" /> Equipa
-            </button>
-            <button onClick={() => setAbaMobile("rapidas")} className={`flex-1 py-3 flex flex-col items-center text-sm font-medium ${abaMobile === "rapidas" ? "text-blue-600 dark:text-cyan-400 border-b-2 border-blue-500" : "text-slate-500"}`}>
-              <Zap className="w-5 h-5 mb-0.5" /> Rápidas
-            </button>
+          <div className="sticky top-0 z-30 px-4 pt-3 pb-2 bg-transparent border-b border-slate-200 dark:border-slate-800">
+            <div className="relative w-full bg-slate-100 dark:bg-slate-800 rounded-full p-1 flex">
+              {["chats", "equipa", "rapidas"].map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setAbaMobile(k as any)}
+                  className={`flex-1 relative z-10 text-sm font-medium px-3 py-2 rounded-full transition ${
+                    abaMobile === (k as any)
+                      ? "text-slate-900 dark:text-white"
+                      : "text-slate-500"
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    {k === "chats" && <MessageSquare className="w-4 h-4" />}
+                    {k === "equipa" && <Users className="w-4 h-4" />}
+                    {k === "rapidas" && <Zap className="w-4 h-4" />}
+                    {k === "chats"
+                      ? "Conversas"
+                      : k === "equipa"
+                      ? "Equipa"
+                      : "Rápidas"}
+                  </span>
+                </button>
+              ))}
+
+              <motion.span
+                layout
+                className="absolute top-1 bottom-1 w-1/3 rounded-full bg-white dark:bg-slate-700 shadow"
+                animate={{
+                  x:
+                    abaMobile === "chats"
+                      ? 0
+                      : abaMobile === "equipa"
+                      ? "100%"
+                      : "200%",
+                }}
+                transition={{ type: "spring", stiffness: 400, damping: 35 }}
+              />
+            </div>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto">
-          {/* Conversas */}
-          {abaMobile === "chats" && (
-            <div className="p-4 space-y-3">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="font-semibold text-lg">💬 Suas conversas</h2>
-                <button onClick={() => criarChat()} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm">+ Novo</button>
+        {/* LISTA DE CONVERSAS */}
+        {abaMobile === "chats" && (
+          <div className="p-4">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <MessageCircle className="w-5 h-5" /> Suas conversas
+                </h2>
+                <button
+                  onClick={() => criarChat()}
+                  className="px-3 py-1.5 rounded-full text-white bg-gradient-to-r from-blue-600 to-cyan-500 active:scale-[.98] text-sm shadow"
+                >
+                  + Novo
+                </button>
               </div>
-              {chats.map((chat) => (
-                <div key={chat.id} onClick={() => { setChatSelecionado(chat); setAbaMobile("chat"); }} className={`p-3 rounded-lg border flex justify-between items-center ${chatSelecionado?.id === chat.id ? "bg-blue-50 dark:bg-slate-800 border-blue-400" : "hover:bg-slate-50 dark:hover:bg-slate-800 border-transparent"}`}>
-                  <div className="w-full">
-                    <p className="font-medium text-sm">{chat.titulo}</p>
-                    <p className="text-xs text-slate-500 truncate">{chat.status === "Ativa" ? "🟢 Ativa" : "⚪ Inativa"}</p>
+
+              <div className="p-3 space-y-2">
+                {chats.length === 0 && (
+                  <div className="text-center py-10">
+                    <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                      <MessageCircle className="w-6 h-6 text-slate-400" />
+                    </div>
+                    <p className="text-sm text-slate-500">Nenhum chat ainda.</p>
+                    <button
+                      onClick={() => criarChat()}
+                      className="mt-3 text-sm px-3 py-1.5 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                    >
+                      Começar conversa
+                    </button>
                   </div>
-                  <Trash2 onClick={(e) => { e.stopPropagation(); confirmarApagarChat(chat.id); }} className="w-4 h-4 text-slate-400 hover:text-red-500" />
+                )}
+
+                {chats.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setChatSelecionado(c);
+                      setAbaMobile("chat");
+                    }}
+                    className={`w-full text-left p-3 rounded-xl border flex items-center justify-between transition ${
+                      chatSelecionado?.id === c.id
+                        ? "bg-blue-50 dark:bg-slate-800 border-blue-300"
+                        : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{c.titulo}</p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {c.ultima_mensagem || "Sem mensagens ainda"}
+                      </p>
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] mt-1 ${
+                          c.statusLabel === "Ativa"
+                            ? "text-green-600"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                        {c.statusLabel}
+                      </span>
+                    </div>
+                    <Trash2
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmarApagarChat(c.id);
+                      }}
+                      className="w-4 h-4 text-slate-400 hover:text-red-500 shrink-0"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* EQUIPA */}
+        {abaMobile === "equipa" && (
+          <div className="p-4">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-5">
+              <h3 className="font-semibold text-lg flex items-center gap-2 mb-3">
+                <LifeBuoy className="w-5 h-5" /> Equipa Acrobatas
+              </h3>
+              <div className="space-y-2">
+                {agentes.map((a, i) => (
+                  <button
+                    key={i}
+                    onClick={() => criarChat(`Bate-papo com ${a.nome}`)}
+                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    <span className="text-sm">
+                      👤 {a.nome} — {a.cargo}
+                    </span>
+                    <span className="inline-flex items-center gap-2 text-xs text-slate-500">
+                      <Circle
+                        size={10}
+                        className={a.online ? "text-green-500" : "text-slate-400"}
+                      />
+                      {a.online ? "online" : "offline"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* RÁPIDAS */}
+        {abaMobile === "rapidas" && (
+          <div className="p-4">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-5">
+              <h3 className="font-semibold text-lg mb-3">⚡ Perguntas rápidas</h3>
+              <div className="space-y-2">
+                {respostas.map((r, i) => (
+                  <button
+                    key={i}
+                    onClick={() => enviarPerguntaRapida(r)}
+                    className="w-full text-left text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  >
+                    {r.icon} {r.titulo}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CHAT */}
+        {abaMobile === "chat" && chatSelecionado && (
+          <motion.div
+            initial={{ opacity: 0, x: 28 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex flex-col flex-1"
+          >
+            <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800">
+              <button
+                onClick={() => setAbaMobile("chats")}
+                className="p-1 rounded-md"
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-500" />
+              </button>
+
+              {editandoTitulo ? (
+                <div className="flex items-center gap-2 flex-1 mx-2">
+                  <input
+                    value={tituloTemp}
+                    onChange={(e) => setTituloTemp(e.target.value)}
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                  <button onClick={salvarTitulo} className="text-green-600">
+                    <Check size={16} />
+                  </button>
+                </div>
+              ) : (
+                <h3
+                  className="font-semibold text-sm truncate flex-1 mx-2"
+                  onDoubleClick={() => {
+                    setTituloTemp(chatSelecionado.titulo);
+                    setEditandoTitulo(true);
+                  }}
+                >
+                  {chatSelecionado.titulo}
+                </h3>
+              )}
+
+              <button
+                onClick={() => setChatSelecionado(null)}
+                className="text-xs text-red-500"
+              >
+                Encerrar
+              </button>
+            </div>
+
+            <div ref={listaRef} className="flex-1 overflow-y-auto p-4 space-y-2">
+              {mensagens.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex ${
+                    m.remetente_id === user?.id ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`px-4 py-2 rounded-2xl max-w-[80%] text-sm ${
+                      m.remetente_id === user?.id
+                        ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white"
+                        : "bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    }`}
+                  >
+                    {m.conteudo}
+                  </div>
                 </div>
               ))}
             </div>
-          )}
 
-          {/* Equipa */}
-          {abaMobile === "equipa" && (
-            <div className="p-5 space-y-4">
-              <h3 className="font-semibold text-lg">💼 Equipa Acrobatas</h3>
-              {agentes.map((a, i) => (
-                <button key={i} onClick={() => criarChat(`Bate-papo com ${a.nome}`)} className="flex justify-between w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
-                  <span className="text-sm">👤 {a.nome} — {a.cargo}</span>
-                  <Circle size={10} className={a.online ? "text-green-500" : "text-gray-400"} />
-                </button>
-              ))}
+            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 flex items-center gap-2 [padding-bottom:calc(env(safe-area-inset-bottom)+12px)]">
+              <Paperclip className="w-5 h-5 text-slate-400" />
+              <input
+                ref={inputRef}
+                value={novaMensagem}
+                onChange={(e) => setNovaMensagem(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    enviarMensagem();
+                  }
+                }}
+                placeholder="Escreva uma mensagem..."
+                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+              />
+              <button
+                disabled={!novaMensagem.trim()}
+                onClick={() => enviarMensagem()}
+                className="disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-2 rounded-lg flex items-center gap-1 active:scale-[.98] shadow"
+              >
+                <Send size={16} />
+              </button>
             </div>
-          )}
+          </motion.div>
+        )}
 
-          {/* Rápidas */}
-          {abaMobile === "rapidas" && (
-            <div className="p-5 space-y-3">
-              <h3 className="font-semibold text-lg">⚡ Perguntas rápidas</h3>
-              {respostas.map((r, i) => (
-                <button key={i} onClick={() => enviarPerguntaRapida(r)} className="w-full text-left text-sm text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-2">
-                  {r.icon} {r.titulo}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Chat */}
-          {abaMobile === "chat" && chatSelecionado && (
-            <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="flex flex-col h-full">
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 sticky top-0">
-                <button onClick={() => setAbaMobile("chats")}>
-                  <ArrowLeft className="w-5 h-5 text-slate-500" />
-                </button>
-                <h3 className="font-semibold text-sm">{chatSelecionado.titulo}</h3>
-                <button onClick={() => setChatSelecionado(null)} className="text-xs text-red-500">
-                  Encerrar
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {mensagens.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.remetente_id === user?.id ? "justify-end" : "justify-start"}`}>
-                    <div className={`px-4 py-2 rounded-2xl max-w-[80%] text-sm ${msg.remetente_id === user?.id ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100"}`}>
-                      {msg.conteudo}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="p-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center gap-2">
-                <Paperclip className="w-5 h-5 text-slate-400" />
-                <input value={novaMensagem} onChange={(e) => setNovaMensagem(e.target.value)} onKeyDown={(e) => e.key === "Enter" && enviarMensagem()} placeholder="Escreva uma mensagem..." className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
-                <button onClick={() => enviarMensagem()} className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-2 rounded-lg flex items-center gap-1">
-                  <Send size={16} />
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Modal */}
+        {/* Modal apagar */}
         {mostrarModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-slate-900 rounded-xl p-6 text-center max-w-sm w-full border border-slate-200 dark:border-slate-700">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 text-center max-w-sm w-full border border-slate-200 dark:border-slate-700 shadow-2xl">
               <h3 className="text-lg font-semibold mb-2">Apagar conversa?</h3>
-              <p className="text-sm text-slate-500 mb-4">Esta ação não poderá ser desfeita.</p>
+              <p className="text-sm text-slate-500 mb-4">
+                Esta ação não poderá ser desfeita.
+              </p>
               <div className="flex justify-center gap-3">
-                <button onClick={() => setMostrarModal(false)} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600">
+                <button
+                  onClick={() => setMostrarModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600"
+                >
                   Cancelar
                 </button>
-                <button onClick={apagarChat} className="px-4 py-2 rounded-lg bg-red-600 text-white">
+                <button
+                  onClick={apagarChat}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white"
+                >
                   Apagar
                 </button>
               </div>
@@ -362,16 +610,14 @@ export default function ChatComEquipa() {
     );
   }
 
-  // ✅ DESKTOP
+  /* ===================== DESKTOP ===================== */
   return (
-    <>
-    <div className="min-h-screen w-full px-6 py-10 bg-transparent flex justify-center transition-all duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full max-w-7xl">
-        {/* Sidebar */}
-        <div className="col-span-1 bg-white dark:bg-[#111827]/90 rounded-2xl shadow-[0_4px_25px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.7)] backdrop-blur-xl border border-gray-200 dark:border-[#1e293b]/70 flex flex-col transition-all duration-500">
-          
-                   <div className="flex items-center justify-between p-4 border-b dark:border-[#1e293b]/70">
-            <h2 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200">
+    <div className="min-h-screen w-full px-6 py-8 bg-transparent flex justify-center">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6 w-full max-w-7xl">
+        {/* Conversas (esquerda) */}
+        <div className="col-span-1 bg-white dark:bg-[#111827]/90 rounded-2xl border border-gray-200 dark:border-[#1e293b]/70 shadow-sm flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b dark:border-[#1e293b]/70">
+            <h2 className="font-semibold text-gray-700 dark:text-gray-200">
               💬 Suas conversas
             </h2>
             <button
@@ -396,48 +642,38 @@ export default function ChatComEquipa() {
                 Nenhum chat ainda.
               </p>
             ) : (
-              chats.map((chat) => (
+              chats.map((c) => (
                 <div
-                  key={chat.id}
-                  onClick={() => setChatSelecionado(chat)}
+                  key={c.id}
+                  onClick={() => setChatSelecionado(c)}
                   className={`p-3 rounded-lg cursor-pointer flex justify-between items-center border transition ${
-                    chatSelecionado?.id === chat.id
+                    chatSelecionado?.id === c.id
                       ? "bg-blue-50 dark:bg-[#1e293b] border-blue-400"
                       : "hover:bg-gray-50 dark:hover:bg-[#1e2536] border-transparent"
                   }`}
                 >
-                  <div className="flex flex-col w-full">
-                    <div className="flex justify-between items-center">
-                      <p className="font-medium text-sm text-gray-700 dark:text-gray-100 truncate">
-                        {chat.titulo}
-                      </p>
-                      <span className="text-[10px] text-gray-400">
-                        {new Date(chat.criado_em).toLocaleTimeString("pt-PT", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
-                      {chat.ultima_mensagem || "Sem mensagens ainda"}
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm text-gray-700 dark:text-gray-100 truncate">
+                      {c.titulo}
                     </p>
-
-                    <p
-                      className={`text-xs mt-1 ${
-                        chat.status === "Ativa"
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {c.ultima_mensagem || "Sem mensagens ainda"}
+                    </p>
+                    <span
+                      className={`text-[11px] ${
+                        c.statusLabel === "Ativa"
                           ? "text-green-500"
-                          : "text-gray-400 italic"
+                          : "text-gray-400"
                       }`}
                     >
-                      {chat.status === "Ativa" ? "🟢 Ativa" : "⚪ Inativa"}
-                    </p>
+                      {c.statusLabel === "Ativa" ? "🟢 Ativa" : "⚪ Inativa"}
+                    </span>
                   </div>
 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      confirmarApagarChat(chat.id);
+                      confirmarApagarChat(c.id);
                     }}
                   >
                     <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
@@ -448,8 +684,8 @@ export default function ChatComEquipa() {
           </div>
         </div>
 
-        {/* Chat principal */}
-        <div className="col-span-2 bg-white dark:bg-[#111827]/90 rounded-2xl shadow-[0_4px_25px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.7)] border border-gray-200 dark:border-[#1e293b]/70 flex flex-col transition-all duration-500">
+        {/* Chat (centro) */}
+        <div className="col-span-3 bg-white dark:bg-[#111827]/90 rounded-2xl border border-gray-200 dark:border-[#1e293b]/70 shadow-sm flex flex-col">
           {chatSelecionado ? (
             <>
               <div className="p-4 border-b dark:border-[#1e293b]/70 flex justify-between items-center">
@@ -490,67 +726,71 @@ export default function ChatComEquipa() {
                 )}
               </div>
 
-              {/* Mensagens */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-3 bg-transparent">
+              <div
+                ref={listaRef}
+                className="flex-1 overflow-y-auto p-6 space-y-3"
+              >
                 {mensagens.length === 0 ? (
                   <p className="text-center text-gray-400">
                     Nenhuma mensagem ainda. Comece a conversar!
                   </p>
                 ) : (
-                  mensagens.map((msg, i) => (
+                  mensagens.map((m) => (
                     <div
-                      key={i}
+                      key={m.id}
                       className={`flex ${
-                        msg.remetente_id === user?.id
+                        m.remetente_id === user?.id
                           ? "justify-end"
                           : "justify-start"
                       }`}
                     >
                       <div
                         className={`px-4 py-2 rounded-2xl max-w-[70%] text-sm ${
-                          msg.remetente_id === user?.id
+                          m.remetente_id === user?.id
                             ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-br-none"
                             : "bg-gray-200 dark:bg-[#1e293b] dark:text-gray-100 rounded-bl-none"
                         }`}
                       >
-                        {msg.conteudo}
+                        {m.conteudo}
                       </div>
                     </div>
                   ))
                 )}
               </div>
 
-              {/* Input */}
               <div className="p-4 border-t bg-white dark:bg-[#0f172a]/80 flex items-center gap-3">
-                <Paperclip className="w-5 h-5 text-gray-400 cursor-pointer" />
+                <Paperclip className="w-5 h-5 text-gray-400" />
                 <input
+                  ref={inputRef}
                   type="text"
                   placeholder="Escreva uma mensagem..."
                   value={novaMensagem}
                   onChange={(e) => setNovaMensagem(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && enviarMensagem()}
-                  className="flex-1 p-2 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-[#1e293b]/70 text-sm text-gray-800 dark:text-gray-100"
+                  className="flex-1 p-2 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-[#1e293b]/70 text-sm"
                 />
                 <button
                   onClick={() => enviarMensagem()}
-                  className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-2 rounded-lg hover:opacity-90 transition flex items-center gap-2"
+                  disabled={!novaMensagem.trim()}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-2 rounded-lg flex items-center gap-2"
                 >
                   <Send className="w-4 h-4" /> Enviar
                 </button>
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-400 text-sm">
+              <MessageCircle className="w-8 h-8" />
               Selecione um chat à esquerda ou crie um novo.
             </div>
           )}
         </div>
 
-        {/* Lateral direita */}
-        <div className="col-span-1 bg-white dark:bg-[#111827]/90 rounded-2xl shadow-[0_4px_25px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.7)] border border-gray-200 dark:border-[#1e293b]/70 flex flex-col transition-all duration-500">
+        {/* Suporte (direita) */}
+        <div className="col-span-1 bg-white dark:bg-[#111827]/90 rounded-2xl border border-gray-200 dark:border-[#1e293b]/70 shadow-sm flex flex-col">
           <div className="p-5 border-b dark:border-[#1e293b]/70">
             <h3 className="font-semibold text-gray-700 dark:text-gray-100 flex items-center gap-2">
-              💼 Equipa Acrobatas
+              <LifeBuoy className="w-5 h-5" /> Equipa Acrobatas
             </h3>
             <p className="text-xs text-gray-400 mt-1">
               Tire dúvidas com o suporte ou gestão.
@@ -558,14 +798,14 @@ export default function ChatComEquipa() {
           </div>
 
           <div className="p-5 border-b dark:border-[#1e293b]/70">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
               Agentes online
-            </h3>
+            </h4>
             {agentes.map((a, i) => (
               <button
                 key={i}
                 onClick={() => criarChat(`Bate-papo com ${a.nome}`)}
-                className="flex items-center justify-between w-full mb-2 p-2 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-[#1e2536] transition"
+                className="flex items-center justify-between w-full mb-2 p-2 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-[#1e2536]"
               >
                 <span className="text-sm text-gray-700 dark:text-gray-200">
                   👤 {a.nome} — {a.cargo}
@@ -578,19 +818,15 @@ export default function ChatComEquipa() {
             ))}
           </div>
 
-          {/* Perguntas rápidas */}
           <div className="flex-1 p-5 space-y-3 overflow-y-auto">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
               Perguntas rápidas
-            </h3>
+            </h4>
             {respostas.map((r, i) => (
               <button
                 key={i}
                 onClick={() => enviarPerguntaRapida(r)}
-                className="w-full text-left text-sm text-gray-700 dark:text-gray-200 
-                  bg-gray-50 dark:bg-[#1e293b]/60 hover:bg-gray-100 dark:hover:bg-[#1e2536] 
-                  px-4 py-3 rounded-xl border border-gray-200 dark:border-[#1e293b] 
-                  flex items-center gap-2 transition-all duration-200"
+                className="w-full text-left text-sm bg-gray-50 dark:bg-[#1e293b]/60 hover:bg-gray-100 dark:hover:bg-[#1e2536] px-4 py-3 rounded-xl border border-gray-200 dark:border-[#1e293b] flex items-center gap-2"
               >
                 {r.icon} {r.titulo}
               </button>
@@ -603,10 +839,10 @@ export default function ChatComEquipa() {
         </div>
       </div>
 
-      {/* 🔥 Modal de confirmação */}
+      {/* Modal apagar */}
       {mostrarModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
-          <div className="bg-white dark:bg-[#111827]/95 rounded-2xl p-6 shadow-2xl text-center max-w-sm w-full border border-gray-200 dark:border-[#1e293b]/70 transition-all duration-300">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-[#111827]/95 rounded-2xl p-6 shadow-2xl text-center max-w-sm w-full border border-gray-200 dark:border-[#1e293b]/70">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
               Apagar conversa?
             </h3>
@@ -616,15 +852,13 @@ export default function ChatComEquipa() {
             <div className="flex justify-center gap-3 mt-5">
               <button
                 onClick={() => setMostrarModal(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 
-                  hover:bg-gray-100 dark:hover:bg-[#1e2536] text-gray-700 dark:text-gray-300 text-sm transition-all"
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-[#1e2536] text-gray-700 dark:text-gray-300 text-sm"
               >
                 Cancelar
               </button>
               <button
                 onClick={apagarChat}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 
-                  text-white text-sm shadow transition-all"
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm shadow"
               >
                 Apagar
               </button>
@@ -632,8 +866,6 @@ export default function ChatComEquipa() {
           </div>
         </div>
       )}
-    </div>   {/* 👈 fecha layout desktop */}
-    </>
-  );   {/* 👈 fecha return e componente */}
+    </div>
+  );
 }
-

@@ -1,7 +1,7 @@
 // src/components/company/Relatorios.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText,
@@ -15,6 +15,8 @@ import {
   RefreshCcw,
   Download,
   Percent,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -32,6 +34,21 @@ import {
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+
+/* ===========================
+   Paleta neutra p/ gráficos
+   =========================== */
+const COLOR_PRIMARY = "#3b82f6"; // blue-500
+const COLOR_SECONDARY = "#64748b"; // slate-500
+const COLOR_SUCCESS = "#10b981"; // emerald-500
+const GRID_LIGHT = "#eef2f7";
+const GRID_DARK = "rgba(148,163,184,0.15)";
+
+const fmtEUR = new Intl.NumberFormat("pt-PT", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
 
 export default function Relatorios() {
   const { t } = useTranslation();
@@ -88,8 +105,14 @@ export default function Relatorios() {
   /* ==========================
    *   CÁLCULOS
    * ========================== */
-  const custosOperacionais = faturamentoTotal * (custoPercent / 100);
-  const lucroLiquido = faturamentoTotal - custosOperacionais;
+  const custosOperacionais = useMemo(
+    () => faturamentoTotal * (custoPercent / 100),
+    [faturamentoTotal, custoPercent]
+  );
+  const lucroLiquido = useMemo(
+    () => faturamentoTotal - custosOperacionais,
+    [faturamentoTotal, custosOperacionais]
+  );
 
   async function handleSalvarPercent() {
     if (!empresaId) return;
@@ -107,7 +130,7 @@ export default function Relatorios() {
   /* ==========================
    *   MOCKS & GRÁFICOS
    * ========================== */
-  const cores = ["#ef4444", "#22c55e", "#3b82f6", "#f59e0b"];
+  const pieColors = [COLOR_PRIMARY, COLOR_SECONDARY];
 
   const dadosFinanceiros = [
     { mes: "Jan", faturamento: 75000, custos: 52000, lucro: 23000 },
@@ -118,8 +141,8 @@ export default function Relatorios() {
   ];
 
   const dadosCustos = [
-    { name: "Custos Operacionais", value: custosOperacionais },
-    { name: "Lucro Líquido", value: lucroLiquido },
+    { name: "Custos Operacionais", value: Math.max(custosOperacionais, 0) },
+    { name: "Lucro Líquido", value: Math.max(lucroLiquido, 0) },
   ];
 
   const dadosProdutividade = [
@@ -141,66 +164,71 @@ export default function Relatorios() {
     { nome: "Marcos Silva", funcao: "Pintor", avaliacao: 4.7 },
   ];
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-screen text-gray-500">
-        Carregando dados...
-      </div>
-    );
-
   /* ==========================
    *   LAYOUT
    * ========================== */
   return (
-    <div className="min-h-screen p-4 sm:p-6 space-y-6 sm:space-y-10">
-      {/* HEADER */}
+    <div className="min-h-screen p-4 sm:p-6 space-y-6 sm:space-y-8">
+      {/* HEADER — instantâneo; sem bloquear a renderização */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-r from-blue-600 via-purple-600 to-blue-500 text-white rounded-2xl shadow-lg"
+        className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724] shadow-sm"
       >
         <div className="p-4 sm:p-6">
-          <h1 className="text-lg sm:text-2xl font-bold flex items-center gap-2">
-            <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
-            Relatórios e Desempenho Geral
-          </h1>
-          <p className="text-xs sm:text-sm opacity-80 mt-1">
-            Acompanhe métricas financeiras, produtividade e desempenho global da empresa.
-          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+            <div className="sm:col-span-2">
+              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                Relatórios e Desempenho Geral
+              </h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Acompanhe métricas financeiras, produtividade e desempenho global da empresa.
+              </p>
+            </div>
 
-          <div className="flex gap-2 sm:gap-3 flex-wrap mt-3 sm:mt-4">
-            <button
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 transition-all px-3 sm:px-4 py-2 rounded-lg"
-            >
-              <RefreshCcw className="w-4 h-4" /> Atualizar
-            </button>
-            <button className="flex items-center gap-2 bg-white text-blue-700 hover:bg-blue-100 dark:bg-[#1e2a3a] dark:text-blue-400 transition-all px-3 sm:px-4 py-2 rounded-lg">
-              <Download className="w-4 h-4" /> Exportar PDF
-            </button>
+            <div className="flex sm:justify-end gap-2">
+              <button
+                onClick={() => window.location.reload()}
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111827] hover:bg-gray-50 dark:hover:bg-[#0b1220] text-gray-700 dark:text-gray-200 px-4 py-2.5 rounded-xl"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                {loading ? "Atualizando…" : "Atualizar"}
+              </button>
+              <button
+                disabled={loading || faturamentoTotal === 0}
+                className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-[#0b1a33] text-blue-700 dark:text-blue-300 px-4 py-2.5 rounded-xl ${
+                  loading || faturamentoTotal === 0
+                    ? "opacity-60 cursor-not-allowed"
+                    : "hover:bg-blue-100 dark:hover:bg-[#0e2242]"
+                }`}
+              >
+                <Download className="w-4 h-4" />
+                Exportar PDF
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
 
       {/* ================= DESKTOP ================= */}
-      <div className="hidden md:block space-y-8">
+      <div className="hidden md:block space-y-10">
+        {/* KPIs */}
         <div className="grid grid-cols-5 gap-4">
           <CardIndicador
             titulo="Faturamento Total"
-            valor={`€${faturamentoTotal.toLocaleString()}`}
-            cor="from-blue-500 to-cyan-500"
-            icone={<DollarSign />}
-            variacao="+12%"
+            valor={fmtEUR.format(faturamentoTotal)}
+            icone={<DollarSign className="w-5 h-5" />}
+            hint="+12%"
           />
           <CardIndicador
             titulo="Custos Operacionais"
-            valor={`€${custosOperacionais.toLocaleString()}`}
-            cor="from-green-500 to-emerald-500"
-            icone={<ArrowDownCircle />}
-            variacao={`${custoPercent}%`}
+            valor={fmtEUR.format(custosOperacionais)}
+            icone={<ArrowDownCircle className="w-5 h-5" />}
+            hint={`${custoPercent}%`}
           />
           <CardLucroLiquido
-            valor={`€${lucroLiquido.toLocaleString()}`}
+            valor={fmtEUR.format(lucroLiquido)}
             custoPercent={custoPercent}
             setCustoPercent={setCustoPercent}
             onSalvar={handleSalvarPercent}
@@ -208,61 +236,72 @@ export default function Relatorios() {
           <CardIndicador
             titulo="Produtividade Média"
             valor="87%"
-            cor="from-yellow-500 to-orange-500"
-            icone={<TrendingUp />}
-            variacao="↑ Estável"
+            icone={<TrendingUp className="w-5 h-5" />}
+            hint="Estável"
           />
           <CardIndicador
             titulo="Pontualidade"
             valor="93%"
-            cor="from-indigo-500 to-blue-700"
-            icone={<Building2 />}
-            variacao="↑ Boa"
+            icone={<Building2 className="w-5 h-5" />}
+            hint="Boa"
           />
         </div>
 
         {/* Gráficos */}
         <div className="grid grid-cols-3 gap-6">
-          <GraficoCard titulo="Evolução Financeira (€)" icone={<TrendingUp className="text-blue-600" />}>
+          <GraficoCard
+            titulo="Evolução Financeira (€)"
+            icone={<TrendingUp className="text-blue-600 dark:text-blue-400" />}
+          >
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={dadosFinanceiros}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-                <XAxis dataKey="mes" stroke="#999" />
+                <CartesianGrid strokeDasharray="2 4" stroke={GRID_LIGHT} />
+                <XAxis dataKey="mes" stroke="#9ca3af" />
                 <Tooltip />
-                <Line type="monotone" dataKey="faturamento" stroke="#3b82f6" strokeWidth={2} />
-                <Line type="monotone" dataKey="custos" stroke="#ef4444" strokeWidth={2} />
-                <Line type="monotone" dataKey="lucro" stroke="#22c55e" strokeWidth={2} />
+                <Line type="monotone" dataKey="faturamento" stroke={COLOR_PRIMARY} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="custos" stroke={COLOR_SECONDARY} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="lucro" stroke={COLOR_SUCCESS} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </GraficoCard>
 
-          <GraficoCard titulo="Custos x Lucro" icone={<PieIcon className="text-green-600" />}>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChartRecharts>
-                <Pie
-                  data={dadosCustos}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={95}
-                  label
-                >
-                  {dadosCustos.map((_, i) => (
-                    <Cell key={i} fill={cores[i % cores.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChartRecharts>
-            </ResponsiveContainer>
+          <GraficoCard
+            titulo="Custos x Lucro"
+            icone={<PieIcon className="text-blue-600 dark:text-blue-400" />}
+          >
+            {faturamentoTotal > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChartRecharts>
+                  <Pie
+                    data={dadosCustos}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={95}
+                    label
+                  >
+                    {dadosCustos.map((_, i) => (
+                      <Cell key={i} fill={pieColors[i % pieColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChartRecharts>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState height={260} />
+            )}
           </GraficoCard>
 
-          <GraficoCard titulo="Produtividade por Equipe" icone={<BarChart3 className="text-orange-500" />}>
+          <GraficoCard
+            titulo="Produtividade por Equipe"
+            icone={<BarChart3 className="text-blue-600 dark:text-blue-400" />}
+          >
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={dadosProdutividade}>
-                <XAxis dataKey="nome" stroke="#999" />
+                <XAxis dataKey="nome" stroke="#9ca3af" />
                 <Tooltip />
-                <Bar dataKey="produtividade" fill="#3b82f6" radius={[10, 10, 0, 0]} />
+                <Bar dataKey="produtividade" fill={COLOR_PRIMARY} radius={[10, 10, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </GraficoCard>
@@ -278,48 +317,91 @@ export default function Relatorios() {
       {/* ================= MOBILE ================= */}
       <div className="md:hidden space-y-6">
         {/* KPIs */}
-        <div className="grid grid-cols-2 gap-3">
-          <KpiMobile titulo="Faturamento" valor={`€${faturamentoTotal.toLocaleString()}`} grad="from-blue-500 to-cyan-500" />
-          <KpiMobile titulo="Custos" valor={`€${custosOperacionais.toLocaleString()}`} grad="from-green-500 to-emerald-500" />
-          <KpiMobile titulo="Lucro" valor={`€${lucroLiquido.toLocaleString()}`} grad="from-fuchsia-500 to-purple-500" />
-          <KpiMobile titulo="Produtividade" valor="87%" grad="from-yellow-500 to-orange-500" />
-        </div>
+        <section aria-label="Indicadores">
+          <div className="grid grid-cols-2 gap-3">
+            <KpiMobile
+              titulo="Faturamento"
+              valor={fmtEUR.format(faturamentoTotal)}
+              icone={<DollarSign className="w-4 h-4" />}
+            />
+            <KpiMobile
+              titulo="Custos"
+              valor={fmtEUR.format(custosOperacionais)}
+              icone={<ArrowDownCircle className="w-4 h-4" />}
+            />
+            <KpiMobile
+              titulo="Lucro"
+              valor={fmtEUR.format(lucroLiquido)}
+              icone={<ArrowUpCircle className="w-4 h-4" />}
+            />
+            <KpiMobile
+              titulo="Produtividade"
+              valor="87%"
+              icone={<TrendingUp className="w-4 h-4" />}
+            />
+          </div>
+        </section>
 
-        {/* Input de % */}
-        <div className="bg-[#0f1724] dark:bg-[#161d27] rounded-2xl p-4 text-white shadow-md border border-gray-800">
-          <div className="flex items-center gap-2 mb-2">
-            <Percent className="w-4 h-4 text-blue-400" />
-            <h3 className="font-semibold text-sm">Percentual de Custo Operacional</h3>
+        {/* Percentual de Custo Operacional */}
+        <section
+          aria-label="Percentual de Custo Operacional"
+          className="rounded-2xl p-4 shadow-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724]"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Percent className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <h3 className="font-semibold text-sm text-gray-800 dark:text-gray-100">
+              Percentual de Custo Operacional
+            </h3>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              value={custoPercent}
-              onChange={(e) => setCustoPercent(Number(e.target.value))}
-              className="bg-gray-800 text-white px-3 py-2 rounded-lg w-20 text-center focus:outline-none"
-            />
+            <div className="inline-flex items-center rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <button
+                aria-label="Diminuir percentual"
+                onClick={() => setCustoPercent((v) => Math.max(0, v - 1))}
+                className="px-3 py-2 text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-[#111827] active:scale-[0.98]"
+              >
+                –
+              </button>
+              <input
+                type="number"
+                value={custoPercent}
+                onChange={(e) => setCustoPercent(Number(e.target.value))}
+                className="bg-white dark:bg-[#0f1724] text-gray-900 dark:text-gray-100 px-3 py-2 w-20 text-center outline-none"
+              />
+              <button
+                aria-label="Aumentar percentual"
+                onClick={() => setCustoPercent((v) => Math.min(100, v + 1))}
+                className="px-3 py-2 text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-[#111827] active:scale-[0.98]"
+              >
+                +
+              </button>
+            </div>
+
             <button
               onClick={handleSalvarPercent}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 transition-all py-2 rounded-lg text-sm"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white transition-all py-2.5 rounded-lg text-sm"
             >
               Salvar
             </button>
           </div>
-        </div>
+        </section>
 
         {/* Carrossel */}
-        <div className="bg-[#0f1724] dark:bg-[#161d27] border border-gray-100/10 rounded-2xl p-3">
+        <section
+          aria-label="Gráficos"
+          className="rounded-2xl p-3 border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724]"
+        >
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-white/90">
-              {slide === 0
-                ? "Evolução Financeira (€)"
-                : slide === 1
-                ? "Custos x Lucro"
-                : "Produtividade"}
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+              {slide === 0 ? "Evolução Financeira (€)" : slide === 1 ? "Custos x Lucro" : "Produtividade"}
             </h3>
             <div className="flex items-center gap-2">
-              <button onClick={() => setSlide((slide + 2) % 3)} className="w-8 h-8 rounded-full bg-white/10 text-white/70">‹</button>
-              <button onClick={() => setSlide((slide + 1) % 3)} className="w-8 h-8 rounded-full bg-white/10 text-white/70">›</button>
+              <NavBtn onClick={() => setSlide((slide + 2) % 3)} ariaLabel="Anterior">
+                <ChevronLeft className="w-4 h-4" />
+              </NavBtn>
+              <NavBtn onClick={() => setSlide((slide + 1) % 3)} ariaLabel="Próximo">
+                <ChevronRight className="w-4 h-4" />
+              </NavBtn>
             </div>
           </div>
 
@@ -329,46 +411,50 @@ export default function Relatorios() {
               initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.22 }}
             >
               {slide === 0 && (
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={dadosFinanceiros}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2a3647" />
+                    <CartesianGrid strokeDasharray="2 4" stroke={GRID_DARK} />
                     <XAxis dataKey="mes" stroke="#94a3b8" tick={{ fontSize: 11 }} />
                     <Tooltip />
-                    <Line type="monotone" dataKey="faturamento" stroke="#60a5fa" strokeWidth={2} />
-                    <Line type="monotone" dataKey="custos" stroke="#f87171" strokeWidth={2} />
-                    <Line type="monotone" dataKey="lucro" stroke="#34d399" strokeWidth={2} />
+                    <Line type="monotone" dataKey="faturamento" stroke={COLOR_PRIMARY} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="custos" stroke={COLOR_SECONDARY} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="lucro" stroke={COLOR_SUCCESS} strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
               {slide === 1 && (
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChartRecharts>
-                    <Pie
-                      data={dadosCustos}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      label
-                    >
-                      {dadosCustos.map((_, i) => (
-                        <Cell key={i} fill={cores[i % cores.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChartRecharts>
-                </ResponsiveContainer>
+                faturamentoTotal > 0 ? (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChartRecharts>
+                      <Pie
+                        data={dadosCustos}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={85}
+                        label
+                      >
+                        {dadosCustos.map((_, i) => (
+                          <Cell key={i} fill={pieColors[i % pieColors.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChartRecharts>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyState height={220} />
+                )
               )}
               {slide === 2 && (
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={dadosProdutividade}>
                     <XAxis dataKey="nome" stroke="#94a3b8" tick={{ fontSize: 11 }} />
                     <Tooltip />
-                    <Bar dataKey="produtividade" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="produtividade" fill={COLOR_PRIMARY} radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -380,56 +466,111 @@ export default function Relatorios() {
               <button
                 key={i}
                 onClick={() => setSlide(i)}
-                className={`w-2.5 h-2.5 rounded-full ${
-                  slide === i ? "bg-blue-500 scale-110" : "bg-white/20"
+                className={`h-3.5 px-2 rounded-full transition ${
+                  slide === i ? "bg-blue-600 dark:bg-blue-400" : "bg-gray-300 dark:bg-gray-600"
                 }`}
+                aria-label={`Ir para slide ${i + 1}`}
               />
             ))}
           </div>
-        </div>
+        </section>
 
         {/* Rankings */}
-        <div className="space-y-4">
+        <section className="space-y-4">
           <RankingCard titulo="Obras com Melhor Lucro" dados={obrasTop} />
           <RankingCard titulo="Profissionais Destaque" dados={profissionaisTop} />
-        </div>
+        </section>
       </div>
     </div>
   );
 }
 
 /* ===== COMPONENTES ===== */
-function CardIndicador({ titulo, valor, cor, icone, variacao }: any) {
+
+function NavBtn({
+  onClick,
+  ariaLabel,
+  children,
+}: {
+  onClick: () => void;
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
   return (
-    <motion.div whileHover={{ scale: 1.02 }} className={`bg-gradient-to-r ${cor} text-white p-5 rounded-2xl shadow-lg`}>
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-sm opacity-90">{titulo}</span>
-        {icone}
+    <button
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className="w-9 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200 active:scale-[0.98]"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Card KPI neutro, com ícone em badge consistente */
+function CardIndicador({
+  titulo,
+  valor,
+  icone,
+  hint,
+}: {
+  titulo: string;
+  valor: string;
+  icone: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <motion.div
+      whileHover={{ scale: 1.015 }}
+      className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724] p-5 shadow-sm"
+    >
+      <div className="flex items-start justify-between">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{titulo}</span>
+        <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 dark:bg-[#0b1a33] dark:text-blue-300">
+          {icone}
+        </div>
       </div>
-      <h3 className="text-2xl font-bold">{valor}</h3>
-      <span className="text-sm opacity-90">{variacao}</span>
+      <h3 className="text-2xl font-semibold mt-2 text-gray-900 dark:text-gray-100">{valor}</h3>
+      {hint && <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 inline-block">{hint}</span>}
     </motion.div>
   );
 }
 
-function CardLucroLiquido({ valor, custoPercent, setCustoPercent, onSalvar }: any) {
+/** Card de lucro com input % — visual neutro */
+function CardLucroLiquido({
+  valor,
+  custoPercent,
+  setCustoPercent,
+  onSalvar,
+}: {
+  valor: string;
+  custoPercent: number;
+  setCustoPercent: (n: number) => void;
+  onSalvar: () => void;
+}) {
   return (
-    <motion.div whileHover={{ scale: 1.02 }} className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-5 rounded-2xl shadow-lg">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-sm opacity-90">Lucro Líquido</span>
-        <ArrowUpCircle />
+    <motion.div
+      whileHover={{ scale: 1.015 }}
+      className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724] p-5 shadow-sm"
+    >
+      <div className="flex items-start justify-between">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Lucro Líquido</span>
+        <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+          <ArrowUpCircle className="w-5 h-5" />
+        </div>
       </div>
-      <h3 className="text-2xl font-bold">{valor}</h3>
-      <div className="flex items-center gap-2 mt-2">
+      <h3 className="text-2xl font-semibold mt-2 text-gray-900 dark:text-gray-100">{valor}</h3>
+
+      <div className="flex items-center gap-2 mt-3">
         <input
           type="number"
           value={custoPercent}
           onChange={(e) => setCustoPercent(Number(e.target.value))}
-          className="text-black px-2 py-1 rounded-md w-14 text-center focus:outline-none"
+          className="bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 px-2.5 py-2 rounded-lg w-20 text-center focus:outline-none"
         />
         <button
           onClick={onSalvar}
-          className="bg-white text-purple-700 font-semibold px-3 py-1 rounded-md hover:bg-purple-100 transition"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-2 rounded-lg transition"
         >
           Salvar
         </button>
@@ -438,23 +579,40 @@ function CardLucroLiquido({ valor, custoPercent, setCustoPercent, onSalvar }: an
   );
 }
 
-/* KPI compacto (mobile) */
-function KpiMobile({ titulo, valor, grad }: any) {
+/** KPI compacto (mobile) com ícone e altura uniforme */
+function KpiMobile({
+  titulo,
+  valor,
+  icone,
+}: {
+  titulo: string;
+  valor: string;
+  icone?: React.ReactNode;
+}) {
   return (
-    <div
-      className={`bg-gradient-to-br ${grad} text-white rounded-xl p-3 shadow-md h-[86px] flex flex-col justify-between`}
-    >
-      <span className="text-[11px] leading-tight opacity-90">{titulo}</span>
-      <strong className="text-lg leading-none">{valor}</strong>
+    <div className="rounded-xl p-3 shadow-sm h-[92px] flex flex-col justify-between border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724]">
+      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+        {icone && <span className="text-blue-600 dark:text-blue-400">{icone}</span>}
+        <span className="text-[11px] leading-tight">{titulo}</span>
+      </div>
+      <strong className="text-lg leading-none text-gray-900 dark:text-gray-100">{valor}</strong>
     </div>
   );
 }
 
-/* Cartão de gráfico (desktop e carrossel) */
-function GraficoCard({ titulo, icone, children }: any) {
+/** Cartão de gráfico */
+function GraficoCard({
+  titulo,
+  icone,
+  children,
+}: {
+  titulo: string;
+  icone?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="bg-white dark:bg-[#161d27] border border-gray-100 dark:border-[#1f2a37] rounded-2xl p-5 shadow-sm">
-      <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
+    <div className="bg-white dark:bg-[#0f1724] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm">
+      <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
         {icone} {titulo}
       </h2>
       {children}
@@ -462,29 +620,29 @@ function GraficoCard({ titulo, icone, children }: any) {
   );
 }
 
-/* Ranking de obras/profissionais */
+/** Ranking de obras/profissionais */
 function RankingCard({ titulo, dados }: any) {
   if (!dados || dados.length === 0) {
     return (
-      <div className="bg-white dark:bg-[#161d27] border border-gray-100 dark:border-[#1f2a37] rounded-2xl p-5 shadow-sm flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 h-[180px]">
+      <div className="bg-white dark:bg-[#0f1724] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 h-[180px]">
         <p>Nenhum dado disponível ainda.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white dark:bg-[#161d27] border border-gray-100 dark:border-[#1f2a37] rounded-2xl p-4 sm:p-5 shadow-sm">
-      <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-3 sm:mb-4">
+    <div className="bg-white dark:bg-[#0f1724] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 sm:p-5 shadow-sm">
+      <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">
         {titulo}
       </h2>
       <div className="space-y-2 sm:space-y-3">
         {dados.map((item: any, i: number) => (
           <div
             key={i}
-            className="flex justify-between items-center bg-gray-50 dark:bg-[#1e2a3a] hover:bg-gray-100 dark:hover:bg-[#263447] px-3 py-2 sm:p-3 rounded-lg transition-all"
+            className="flex justify-between items-center bg-gray-50 dark:bg-[#111827] hover:bg-gray-100 dark:hover:bg-[#0b1220] px-3 py-2 sm:p-3 rounded-lg transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700"
           >
             <div>
-              <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm sm:text-base">
+              <p className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">
                 {item.nome}
               </p>
               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
@@ -494,12 +652,25 @@ function RankingCard({ titulo, dados }: any) {
             <p className="font-medium text-blue-600 dark:text-blue-400 text-sm sm:text-base">
               {item.valor ||
                 (item.lucro
-                  ? `€${item.lucro.toLocaleString()}`
+                  ? fmtEUR.format(item.lucro)
                   : item.funcao || "-")}
             </p>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Placeholder elegante para gráficos sem dados */
+function EmptyState({ height = 220 }: { height?: number }) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 rounded-xl border border-dashed border-gray-200 dark:border-gray-700"
+      style={{ height }}
+    >
+      <div className="text-sm">Sem dados suficientes.</div>
+      <div className="text-xs">Registe custos ou faturamento para visualizar.</div>
     </div>
   );
 }

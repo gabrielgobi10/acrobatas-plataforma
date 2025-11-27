@@ -47,8 +47,6 @@ import Suporte from "./CentralDeNavegacaoProfissional/Comunicacao/Suporte";
 
 // 🏆 Minha Carreira
 import CarreiraPageVisual from "./carreira";
-
-
 import Certificacoes from "./CentralDeNavegacaoProfissional/MinhaCarreira/Certificacoes";
 import Ranking from "./CentralDeNavegacaoProfissional/MinhaCarreira/Ranking";
 import Conquistas from "./CentralDeNavegacaoProfissional/MinhaCarreira/Conquistas";
@@ -62,17 +60,35 @@ import Feedbacks from "./CentralDeNavegacaoProfissional/PerfilConta/Feedbacks";
 import VagasDisponiveis from "./VagasDisponiveis";
 import MinhasCandidaturas from "./MinhasCandidaturas";
 
+/* =========================================================
+   Anti-Flash: aplicar tema ANTES do primeiro render
+========================================================= */
+try {
+  if (typeof window !== "undefined") {
+    const themeSaved = localStorage.getItem("theme");
+    if (themeSaved === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }
+} catch {
+  /* ignore */
+}
+
 export const ProfessionalDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<any>(null);
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [theme, setTheme] = useState<"light" | "dark">(
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("theme") as "light" | "dark")) || "dark"
+  );
   const [activePage, setActivePage] = useState<string>("painel");
   const [showNotifications, setShowNotifications] = useState(false);
   const [profissionalId, setProfissionalId] = useState<string | null>(null);
-  const [perfilCompleto, setPerfilCompleto] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [perfilCompleto, setPerfilCompleto] = useState<boolean>(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [stats] = useState({
@@ -84,29 +100,26 @@ export const ProfessionalDashboard = () => {
 
   // 🌗 Tema
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") setTheme("dark");
-  }, []);
-
-  useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem("theme", theme);
+    try {
+      localStorage.setItem("theme", theme);
+    } catch {}
   }, [theme]);
 
   // 👤 Buscar perfil principal
   useEffect(() => {
-    if (user) fetchProfile();
+    const fetchProfile = async () => {
+      if (!user?.email) return;
+      const { data, error } = await supabase
+        .from("usuarios")
+        .select("nome, email, tipo_usuario")
+        .eq("email", user.email)
+        .maybeSingle();
+
+      if (!error && data) setProfile(data);
+    };
+    fetchProfile();
   }, [user]);
-
-  const fetchProfile = async () => {
-    const { data, error } = await supabase
-      .from("usuarios")
-      .select("nome, email, tipo_usuario")
-      .eq("email", user?.email)
-      .maybeSingle();
-
-    if (!error && data) setProfile(data);
-  };
 
   // 👷 Buscar profissional + status de perfil
   useEffect(() => {
@@ -119,16 +132,16 @@ export const ProfessionalDashboard = () => {
         .maybeSingle();
 
       if (!profissional) {
-        setPerfilCompleto(false);
-        setLoading(false);
+        setPerfilCompleto(true);
         return;
       }
 
       setProfissionalId(profissional.id);
       const completo = !!profissional.perfil_completo;
       setPerfilCompleto(completo);
-      localStorage.setItem("perfil_completo", completo ? "true" : "false");
-      setTimeout(() => setLoading(false), 400);
+      try {
+        localStorage.setItem("perfil_completo", completo ? "true" : "false");
+      } catch {}
     };
     fetchProfissional();
   }, [user]);
@@ -151,127 +164,81 @@ export const ProfessionalDashboard = () => {
   };
 
   const safeSetActivePage = (page: string) => {
-    if (!perfilCompleto && !["painel", "perfil"].includes(page)) return;
     setActivePage(page);
     setIsMobileMenuOpen(false);
   };
 
-  // 🔄 Renderização dinâmica
-const renderContent = () => {
-  switch (activePage) {
-    case "painel":
-      return (
-        <PainelProfissional
-          profile={profile}
-          theme={theme}
-          stats={stats}
-          setActivePage={safeSetActivePage}
-        />
-      );
-    case "obras_ativas":
-      return <ObrasAtivas />;
-    case "obras_relatorios":
-      return <RelatoriosDoDia />;
-    case "obras_presencas":
-      return <FaltasPresencas />;
-    case "obras_historico":
-      return <HistoricoObras />;
-    case "financeiro_ganhos":
-      return <MeusGanhos />;
-    case "financeiro_recibos":
-      return <RecibosFaturas />;
-    case "financeiro_custos":
-      return <CustosDespesas />;
-    case "relatorios_desempenho":
-      return <DesempenhoGeral />;
-    case "relatorios_horas":
-      return <HorasTrabalhadas />;
-    case "relatorios_avaliacoes":
-      return <Avaliacoes />;
-    case "documentos_meus":
-      return <MeusDocumentos />;
-    case "documentos_alertas":
-      return <AlertasValidade />;
-    case "notificacoes":
-      return <Notificacoes />;
-    case "batepapo":
-      return <ChatComEquipa />;
-    case "suporte":
-      return <Suporte />;
+  const renderContent = () => {
+    switch (activePage) {
+      case "painel":
+        return (
+          <PainelProfissional
+            profile={profile}
+            theme={theme}
+            stats={stats}
+            setActivePage={safeSetActivePage}
+          />
+        );
+      case "obras_ativas":
+        return <ObrasAtivas />;
+      case "obras_relatorios":
+        return <RelatoriosDoDia />;
+      case "obras_presencas":
+        return <FaltasPresencas />;
+      case "obras_historico":
+        return <HistoricoObras />;
+      case "financeiro_ganhos":
+        return <MeusGanhos />;
+      case "financeiro_recibos":
+        return <RecibosFaturas />;
+      case "financeiro_custos":
+        return <CustosDespesas />;
+      case "relatorios_desempenho":
+        return <DesempenhoGeral />;
+      case "relatorios_horas":
+        return <HorasTrabalhadas />;
+      case "relatorios_avaliacoes":
+        return <Avaliacoes />;
+      case "documentos_meus":
+        return <MeusDocumentos />;
+      case "documentos_alertas":
+        return <AlertasValidade />;
+      case "notificacoes":
+        return <Notificacoes />;
+      case "batepapo":
+        return <ChatComEquipa />;
+      case "suporte":
+        return <Suporte />;
+      case "carreira_progresso":
+        return <CarreiraPageVisual />;
+      case "carreira_certificacoes":
+        return <Certificacoes />;
+      case "carreira_ranking":
+        return <Ranking />;
+      case "carreira_conquistas":
+        return <Conquistas />;
+      case "perfil":
+        return <PerfilProfissional />;
+      case "configuracoes":
+        return <Configuracoes />;
+      case "feedbacks":
+        return <Feedbacks />;
+      case "vagas":
+        return <VagasDisponiveis />;
+      case "candidaturas":
+        return <MinhasCandidaturas />;
+      default:
+        return (
+          <PainelProfissional
+            profile={profile}
+            theme={theme}
+            stats={stats}
+            setActivePage={safeSetActivePage}
+          />
+        );
+    }
+  };
 
-    // 🔁 AQUI É A TROCA
-    case "carreira_progresso":
-      return <CarreiraPageVisual />;
-
-    case "carreira_certificacoes":
-      return <Certificacoes />;
-    case "carreira_ranking":
-      return <Ranking />;
-    case "carreira_conquistas":
-      return <Conquistas />;
-    case "perfil":
-      return <PerfilProfissional />;
-    case "configuracoes":
-      return <Configuracoes />;
-    case "feedbacks":
-      return <Feedbacks />;
-    case "vagas":
-      return <VagasDisponiveis />;
-    case "candidaturas":
-      return <MinhasCandidaturas />;
-    default:
-      return (
-        <PainelProfissional
-          profile={profile}
-          theme={theme}
-          stats={stats}
-          setActivePage={safeSetActivePage}
-        />
-      );
-  }
-};
-  // 🔄 Loader
-  if (loading || perfilCompleto === null) {
-    return (
-      <motion.div
-        className="flex h-screen items-center justify-center text-slate-400 bg-[#0b1221]"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
-        Verificando perfil...
-      </motion.div>
-    );
-  }
-
-  // 🔒 Perfil incompleto
-  if (!loading && perfilCompleto === false) {
-    return (
-      <motion.div
-        className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0b1221] to-[#101b33]"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
-        <div className="text-center bg-slate-800/80 border border-slate-700 rounded-3xl p-10 max-w-lg shadow-2xl backdrop-blur-xl">
-          <h1 className="text-2xl font-bold mb-3">
-            👋 Bem-vindo à{" "}
-            <span className="text-sky-400 font-semibold">Acrobatas</span>!
-          </h1>
-          <p className="text-slate-400 mb-6 leading-relaxed text-sm">
-            Complete o seu <b>perfil</b> para mostrar suas habilidades e receber{" "}
-            <b>vagas compatíveis</b>.
-          </p>
-          <button
-            onClick={() => safeSetActivePage("perfil")}
-            className="bg-gradient-to-r from-sky-500 to-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:opacity-90 transition-all shadow-md"
-          >
-            🚀 Criar meu perfil agora
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
-
-  // ✅ Painel normal
   return (
     <div
       className={`min-h-screen transition-all duration-700 ${
@@ -289,6 +256,7 @@ const renderContent = () => {
         }`}
       >
         <div className="max-w-7xl mx-auto flex justify-between items-center p-4">
+          {/* Esquerda: menu + título/email */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
@@ -296,9 +264,7 @@ const renderContent = () => {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <div className="hidden md:block bg-gradient-to-br from-blue-600 to-cyan-400 p-2 rounded-xl shadow-md">
-              <LayoutDashboard className="text-white w-6 h-6" />
-            </div>
+
             <div>
               <h1 className="text-lg font-bold tracking-tight">
                 Painel Profissional
@@ -338,7 +304,7 @@ const renderContent = () => {
             ))}
           </nav>
 
-          {/* Ações */}
+          {/* Ações direita */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -360,16 +326,7 @@ const renderContent = () => {
               <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full" />
             </button>
 
-            <div className="hidden md:flex items-center gap-2 border-l pl-3">
-              <User className="w-6 h-6 text-blue-500" />
-              <div>
-                <span className="font-semibold text-sm">
-                  {profile?.nome || "Profissional"}
-                </span>
-                <span className="text-xs text-green-400 block">On-line</span>
-              </div>
-            </div>
-
+            {/* Botão sair (desktop) */}
             <button
               onClick={handleLogout}
               className="hidden md:flex bg-gradient-to-r from-blue-600 to-indigo-500 text-white px-4 py-2 rounded-lg shadow-md items-center gap-2 hover:from-indigo-600 hover:to-blue-700 transition"
@@ -380,7 +337,7 @@ const renderContent = () => {
         </div>
       </header>
 
-      {/* 🔹 NAV MOBILE aprimorada */}
+      {/* NAV MOBILE (tabs inferiores) */}
       <motion.div
         initial={{ y: -10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -404,9 +361,7 @@ const renderContent = () => {
               key={key}
               onClick={() => safeSetActivePage(key)}
               className={`relative flex flex-col items-center text-[11px] font-medium transition ${
-                isActive
-                  ? "text-sky-400"
-                  : "text-gray-400 hover:text-blue-400"
+                isActive ? "text-sky-400" : "text-gray-400 hover:text-blue-400"
               }`}
             >
               {isActive && (
@@ -430,17 +385,11 @@ const renderContent = () => {
           activeSection={activePage}
         />
         <main className="flex-1 px-6 py-8 flex justify-center ml-64 transition-all">
-          <div className="w-full max-w-7xl space-y-8">
-            {profissionalId ? (
-              renderContent()
-            ) : (
-              <div className="py-20 text-gray-400">Carregando perfil...</div>
-            )}
-          </div>
+          <div className="w-full max-w-7xl space-y-8">{renderContent()}</div>
         </main>
       </div>
 
-      {/* MOBILE MENU */}
+      {/* MOBILE MENU (drawer lateral) */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <>
@@ -488,19 +437,7 @@ const renderContent = () => {
       </AnimatePresence>
 
       {/* CONTEÚDO MOBILE */}
-      <div className="md:hidden px-4 py-6">
-        {profissionalId ? (
-          renderContent()
-        ) : (
-          <div className="text-gray-400 text-center py-10">
-            Carregando perfil...
-          </div>
-        )}
-      </div>
+      <div className="md:hidden px-4 py-6">{renderContent()}</div>
     </div>
   );
 };
-
-
-
-

@@ -1,956 +1,1003 @@
-// Empresa/Documentos/Profissionais/ListPage.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// src/components/company/DocumentosProfissionaisEmpresa.tsx
+"use client";
+
 import {
-  Search,
-  Filter,
-  Building2,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { motion } from "framer-motion";
+import {
+  FileText,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
   Eye,
-  X,
+  Search,
+  Calendar,
+  Clock4,
+  RefreshCcw,
   ChevronDown,
-  ChevronUp,
-  SlidersHorizontal,
-  Info,
+  SortAsc,
+  SortDesc,
+  Shield,
+  User as UserIcon,
+  Users,
+  CircleDot,
+  Circle,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 
-/** ============================
- * Tipos do domínio
- * ============================ */
-type DocStatus = "válido" | "pendente" | "vencido";
-type SortField = "criticidade" | "nome" | "validos";
+/* ======================
+   Tipos
+====================== */
+type Status = "Válido" | "Pendente" | "Vencido" | "Reprovado";
+type SortKey = "nome" | "categoria" | "validade" | "atualizado_em" | "status";
+type Responsabilidade = "profissional" | "acrobatas" | "ambos";
 
 type Documento = {
   id: string;
-  nome?: string | null;
-  grupo?: string | null;
-  status: DocStatus;
-  validade?: string | null; // ISO string
-  arquivo_url?: string | null;
+  profissional_id: string;
+  tipo_id: string;
+  nome: string;
+  categoria: string | null;
+  validade?: string | null; // dd/mm/yyyy
+  status: Status;
+  atualizado_em?: string | null; // dd/mm/yyyy
+  url?: string | null;
+  obrigatorio?: boolean | null;
+  responsabilidade: Responsabilidade;
+  prof_pode_enviar?: boolean | null;
+  bloqueado?: boolean | null;
+  comentario_admin?: string | null;
 };
 
-type Prof = {
+type ProfissionalResumo = {
   id: string;
   nome: string;
-  funcao: string; // profissão
-  senioridade?: string | null; // se houver
-  obras: string[];
-  documentos: Documento[];
-  counters: { validos: number; pendentes: number; vencidos: number };
-  criticidade: number; // 0..100 derivado de counters
+  ativoEmObra: boolean;
+  totalDocs: number;
+  pendentes: number;
+  vencidos: number;
+  validos: number;
 };
 
-/** ============================
- * Utils de UI e helpers
- * ============================ */
-function cn(...a: Array<string | false | null | undefined>) {
-  return a.filter(Boolean).join(" ");
+/* ======================
+   Helpers de data
+====================== */
+function parsePTDate(d?: string | null): Date | null {
+  if (!d) return null;
+  const [dd, mm, yyyy] = d.split("/").map((v) => parseInt(v, 10));
+  if (!dd || !mm || !yyyy) return null;
+  return new Date(yyyy, mm - 1, dd, 12);
 }
-function useDebounced<T>(v: T, d = 250) {
-  const [x, s] = useState(v);
-  useEffect(() => {
-    const id = setTimeout(() => s(v), d);
-    return () => clearTimeout(id);
-  }, [v, d]);
-  return x;
+
+function daysUntil(dateStr?: string | null): number | null {
+  const dt = parsePTDate(dateStr);
+  if (!dt) return null;
+  const t0 = new Date();
+  const ms = dt.setHours(0, 0, 0, 0) - t0.setHours(0, 0, 0, 0);
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
 }
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-function mark(text: string, q: string) {
-  if (!q) return text;
-  const i = text.toLowerCase().indexOf(q.toLowerCase());
-  if (i === -1) return text;
+
+/* ======================
+   UI helpers
+====================== */
+function StatusBadge({ status }: { status: Status }) {
+  const cls =
+    status === "Válido"
+      ? "bg-green-100 text-green-700 dark:bg-green-700/30 dark:text-green-400"
+      : status === "Pendente"
+      ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-700/30 dark:text-yellow-400"
+      : status === "Reprovado"
+      ? "bg-rose-100 text-rose-700 dark:bg-rose-700/30 dark:text-rose-300"
+      : "bg-red-100 text-red-700 dark:bg-red-700/30 dark:text-red-400";
+
   return (
-    <>
-      {text.slice(0, i)}
-      <mark className="rounded px-0.5 bg-yellow-300/60 dark:bg-yellow-400/30">
-        {text.slice(i, i + q.length)}
-      </mark>
-      {text.slice(i + q.length)}
-    </>
+    <span className={`px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold rounded-full ${cls}`}>
+      {status}
+    </span>
   );
 }
-function critClass(n: number) {
-  if (n >= 40) return { bar: "from-red-500 to-rose-600", text: "text-red-500" };
-  if (n >= 20) return { bar: "from-amber-500 to-orange-600", text: "text-amber-500" };
-  return { bar: "from-blue-500 to-indigo-600", text: "text-blue-500" };
-}
-function CritBar({ value }: { value: number }) {
-  const { bar, text } = critClass(value);
-  const w = Math.min(100, Math.max(0, value));
+
+function VencimentoBadge({ validade }: { validade?: string | null }) {
+  const d = daysUntil(validade);
+  if (d === null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
+        <Calendar size={14} /> Sem validade
+      </span>
+    );
+  }
+  if (d < 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-red-600">
+        <Calendar size={14} /> Vencido há {Math.abs(d)}d
+      </span>
+    );
+  }
+  const near = d <= 15;
   return (
-    <div className="min-w-[220px] text-right">
-      <div className="text-[11px] uppercase opacity-60">criticidade</div>
-      <div className={cn("text-xl font-semibold", text)}>{value}</div>
-      <div className="h-2 w-40 bg-black/10 dark:bg-white/10 rounded-full mt-1 overflow-hidden ml-auto">
-        <div className={cn("h-full bg-gradient-to-r", bar)} style={{ width: `${w}%` }} />
+    <span
+      className={`inline-flex items-center gap-1 text-xs ${
+        near ? "text-yellow-600" : "text-zinc-600 dark:text-zinc-300"
+      }`}
+    >
+      <Calendar size={14} /> Vence em {d}d
+    </span>
+  );
+}
+
+/* Mantemos o tipo de responsabilidade por consistência,
+   mas não exibimos mais isso para a empresa. */
+function ResponsabilidadeBadge({ resp }: { resp: Responsabilidade }) {
+  if (resp === "profissional") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-700/30 dark:text-emerald-300">
+        <UserIcon size={12} /> Profissional
+      </span>
+    );
+  }
+  if (resp === "acrobatas") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-blue-100 text-blue-700 dark:bg-blue-700/30 dark:text-blue-300">
+        <Shield size={12} /> Acrobatas
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-purple-100 text-purple-700 dark:bg-purple-700/30 dark:text-purple-300">
+      <UserIcon size={12} />
+      <Shield size={12} /> Ambos
+    </span>
+  );
+}
+
+/* ======================
+   Barra de filtros docs
+====================== */
+function FiltroBar({
+  categorias,
+  query,
+  setQuery,
+  categoria,
+  setCategoria,
+  status,
+  setStatus,
+  sortKey,
+  setSortKey,
+  sortDir,
+  setSortDir,
+  onReset,
+}: {
+  categorias: string[];
+  query: string;
+  setQuery: (s: string) => void;
+  categoria: string;
+  setCategoria: (s: string) => void;
+  status: "Todos" | Status;
+  setStatus: (s: "Todos" | Status) => void;
+  sortKey: SortKey;
+  setSortKey: (k: SortKey) => void;
+  sortDir: "asc" | "desc";
+  setSortDir: (d: "asc" | "desc") => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
+      <div className="flex-1 flex items-center gap-2">
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70" size={16} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Pesquisar documento..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2">
+          <div className="relative">
+            <select
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+            >
+              <option value="Todas">Todas categorias</option>
+              {categorias.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={14}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70"
+            />
+          </div>
+
+          <div className="relative">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as any)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+            >
+              <option value="Todos">Todos status</option>
+              <option value="Válido">Válidos</option>
+              <option value="Pendente">Pendentes</option>
+              <option value="Vencido">Vencidos</option>
+              <option value="Reprovado">Reprovados</option>
+            </select>
+          </div>
+
+          <div className="relative">
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+            >
+              <option value="validade">Ordenar por validade</option>
+              <option value="status">Ordenar por status</option>
+              <option value="nome">Ordenar por nome</option>
+              <option value="categoria">Ordenar por categoria</option>
+              <option value="atualizado_em">Ordenar por atualização</option>
+            </select>
+            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70">
+              {sortDir === "asc" ? <SortAsc size={14} /> : <SortDesc size={14} />}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+            className="px-2 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            title="Inverter ordem"
+          >
+            {sortDir === "asc" ? <SortAsc size={16} /> : <SortDesc size={16} />}
+          </button>
+
+          <button
+            onClick={onReset}
+            className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            title="Limpar filtros"
+          >
+            <RefreshCcw size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-/** ============================
- * MultiSelect (sem bugs de hover)
- * ============================ */
-type Option = { label: string; value: string };
-function MultiSelect({
-  options,
-  value,
-  onChange,
-  icon,
-  placeholder = "Selecionar…",
-  allLabel = "Todas",
+/* ======================
+   Card de resumo
+====================== */
+function ResumoCard({
+  titulo,
+  valor,
+  cor,
+  icone,
 }: {
-  options: Option[];
-  value: string[];
-  onChange: (v: string[]) => void;
-  icon?: React.ReactNode;
-  placeholder?: string;
-  allLabel?: string;
+  titulo: string;
+  valor: number | string;
+  cor: string;
+  icone: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return !s ? options : options.filter((o) => o.label.toLowerCase().includes(s));
-  }, [q, options]);
-
-  const toggle = (v: string) => {
-    if (value.includes(v)) onChange(value.filter((x) => x !== v));
-    else onChange([...value, v]);
-  };
-  const clear = () => onChange([]);
-
-  const label =
-    value.length === 0
-      ? allLabel
-      : value.length === 1
-      ? options.find((o) => o.value === value[0])?.label || placeholder
-      : `${value.length} selecionados`;
-
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-md border border-black/10 dark:border-white/10 px-2 py-1.5 text-sm bg-white dark:bg-neutral-900 hover:bg-black/5 dark:hover:bg-white/5"
-        aria-expanded={open}
-      >
-        {icon}
-        {label}
-        <ChevronDown className="ml-1 h-4 w-4 opacity-60" />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 6, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
-            transition={{ duration: 0.16 }}
-            className="absolute z-20 top-full left-0 mt-1 w-[280px] rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-xl p-2"
-            role="menu"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar…"
-                  className="w-full pl-8 pr-2 py-1.5 text-sm rounded-md border border-black/10 dark:border-white/10 bg-transparent"
-                />
-              </div>
-              <button onClick={clear} className="text-xs rounded-md border border-black/10 dark:border-white/10 px-2 py-1">
-                Limpar
-              </button>
-            </div>
-            <div className="max-h-64 overflow-auto pr-1 space-y-1">
-              <label className="flex items-center gap-2 px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/5 text-sm">
-                <input type="checkbox" checked={value.length === 0} onChange={() => onChange([])} />
-                <span>{allLabel}</span>
-              </label>
-              {filtered.map((o) => (
-                <label key={o.value} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/5 text-sm">
-                  <input type="checkbox" checked={value.includes(o.value)} onChange={() => toggle(o.value)} />
-                  <span className="truncate">{o.label}</span>
-                </label>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    <motion.div
+      whileHover={{ scale: 1.04 }}
+      className="rounded-xl p-3 sm:p-4 text-center shadow-sm hover:shadow-md transition bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700"
+    >
+      <div className={`flex justify-center mb-1 sm:mb-2 ${cor}`}>{icone}</div>
+      <p className="text-[11px] sm:text-sm text-zinc-600 dark:text-zinc-400">
+        {titulo}
+      </p>
+      <p className="text-base sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+        {valor}
+      </p>
+    </motion.div>
   );
 }
 
-/** ============================
- * helpers de status
- * ============================ */
-function normalizeStatus(s: any): DocStatus {
-  const t = String(s ?? "").toLowerCase();
-  if (t.startsWith("v")) return "vencido"; // "vencido"/"vencidos"
-  if (t.startsWith("p")) return "pendente"; // "pendente"/"pendentes"
-  return "válido"; // "valido"/"válido"
-}
-function countStatuses(arr: Documento[]) {
-  return arr.reduce(
-    (acc, d) => {
-      if (d.status === "válido") acc.validos++;
-      else if (d.status === "pendente") acc.pendentes++;
-      else acc.vencidos++;
-      return acc;
-    },
-    { validos: 0, pendentes: 0, vencidos: 0 },
-  );
-}
+/* ======================
+   Página principal
+====================== */
 
-/** ============================
- * Drawer de detalhe
- * ============================ */
-function QuickDrawer({ prof, onClose }: { prof: Prof; onClose: () => void }) {
-  return (
-    <AnimatePresence>
-      {prof && (
-        <>
-          <motion.div
-            className="fixed inset-0 bg-black/30 z-40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-          <motion.aside
-            className="fixed right-0 top-0 h-full w-full sm:w-[420px] z-50 bg-white dark:bg-neutral-950 border-l border-black/10 dark:border-white/10 p-4 overflow-auto"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 30, stiffness: 300 }}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 shrink-0 rounded-full grid place-items-center text-[12px] font-semibold bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border border-blue-600/30">
-                  {initials(prof.nome)}
-                </div>
-                <div>
-                  <div className="font-semibold leading-tight">{prof.nome}</div>
-                  <div className="text-sm opacity-70">
-                    {prof.senioridade ? `${prof.senioridade} • ` : ""}
-                    {prof.funcao}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={onClose}
-                className="rounded-md border border-black/10 dark:border-white/10 p-1.5 hover:bg-black/5 dark:hover:bg-white/5"
-                aria-label="Fechar"
-              >
-                <X size={16} />
-              </button>
-            </div>
+export default function DocumentosProfissionaisEmpresa() {
+  const { user } = useAuth();
 
-            <div className="mt-4 grid gap-3">
-              <div className="rounded-lg border border-black/10 dark:border-white/10 p-3">
-                <div className="text-[11px] uppercase opacity-60">criticidade</div>
-                <CritBar value={prof.criticidade} />
-              </div>
+  const [loading, setLoading] = useState(true);
+  const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [profissionais, setProfissionais] = useState<ProfissionalResumo[]>([]);
+  const [selectedProfId, setSelectedProfId] = useState<string | null>(null);
 
-              <div className="rounded-lg border border-black/10 dark:border-white/10 p-3">
-                <div className="text-[11px] uppercase opacity-60 mb-2">obras</div>
-                <ul className="text-sm space-y-1">
-                  {prof.obras.map((o, i) => (
-                    <li key={o + i} className="flex items-center gap-2">
-                      <Building2 size={14} className="opacity-60" />
-                      <span>{o}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+  // filtros docs
+  const [query, setQuery] = useState("");
+  const [categoria, setCategoria] = useState<string>("Todas");
+  const [status, setStatus] = useState<"Todos" | Status>("Todos");
+  const [sortKey, setSortKey] = useState<SortKey>("validade");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-              <div className="rounded-lg border border-black/10 dark:border-white/10 p-3">
-                <div className="text-[11px] uppercase opacity-60">documentos</div>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-[12px]">
-                  <div className="rounded border border-green-500/30 text-green-600 dark:text-green-300 bg-green-500/5 p-2 text-center">
-                    <div className="text-[11px] uppercase opacity-70">válidos</div>
-                    <div className="text-base font-semibold">{prof.counters.validos}</div>
-                  </div>
-                  <div className="rounded border border-amber-500/30 text-amber-600 dark:text-amber-300 bg-amber-500/5 p-2 text-center">
-                    <div className="text-[11px] uppercase opacity-70">pendentes</div>
-                    <div className="text-base font-semibold">{prof.counters.pendentes}</div>
-                  </div>
-                  <div className="rounded border border-red-500/30 text-red-600 dark:text-red-300 bg-red-500/5 p-2 text-center">
-                    <div className="text-[11px] uppercase opacity-70">vencidos</div>
-                    <div className="text-base font-semibold">{prof.counters.vencidos}</div>
-                  </div>
-                </div>
-              </div>
+  // filtros profissionais
+  const [buscaProf, setBuscaProf] = useState("");
+  const [filtroAtividade, setFiltroAtividade] = useState<"todos" | "ativos" | "inativos">("todos");
 
-              <a
-                onClick={(e) => e.preventDefault()}
-                href="#"
-                className="inline-flex items-center gap-2 text-sm text-blue-600"
-                title="Abrir página completa de documentos"
-              >
-                <Eye size={16} />
-                Abrir página completa
-              </a>
-            </div>
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
-  );
-}
+  useEffect(() => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
-/** ============================
- * Data layer (Supabase) — completo com fallbacks
- * ============================ */
-async function fetchProfissionaisComUsuarios(): Promise<Prof[]> {
-  // 0) Tenta a VIEW principal
-  try {
-    const { data: view, error: ev } = await supabase
-      .from("profissionais_view")
-      .select(
-        "profissional_id, nome_profissional, profissao, senioridade, nome_obra, nome_empresa"
+    let ativo = true;
+
+    async function carregar() {
+      setLoading(true);
+
+      // 1) pega empresa do utilizador
+      const { data: empresa, error: empError } = await supabase
+        .from("empresas")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (empError || !empresa) {
+        console.error("Erro a obter empresa:", empError);
+        if (ativo) {
+          setDocumentos([]);
+          setProfissionais([]);
+          setSelectedProfId(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const empresaId = empresa.id;
+
+      // 2) carrega docs de todos profissionais ligados à empresa
+      const { data: rows, error: docsError } = await supabase
+        .from("empresa_docs_prof_v")
+        .select("*")
+        .eq("empresa_id", empresaId)
+        .order("profissional_nome", { ascending: true })
+        .order("documento_nome", { ascending: true });
+
+      if (!ativo) return;
+
+      if (docsError) {
+        console.error("Erro a carregar documentos:", docsError);
+        setDocumentos([]);
+        setProfissionais([]);
+        setSelectedProfId(null);
+        setLoading(false);
+        return;
+      }
+
+      const mappedDocs: Documento[] = [];
+      const profMap = new Map<string, ProfissionalResumo>();
+
+      (rows || []).forEach((d: any) => {
+        const originalNome: string = d.documento_nome || "";
+
+        const nomeNormalizado = originalNome.startsWith(
+          "Comprovativo de regularização de trabalhadores estrangeiros",
+        )
+          ? "Comprovativo de regularização de trabalhadores estrangeiros (Título ou Autorização de Residência/CPLP/TR)"
+          : originalNome;
+
+        const validadeStr = d.validade
+          ? new Date(d.validade).toLocaleDateString("pt-PT")
+          : null;
+        const atualizadoStr = d.atualizado_em
+          ? new Date(d.atualizado_em).toLocaleDateString("pt-PT")
+          : null;
+
+        let statusDoc: Status = d.status as Status;
+        if (validadeStr && statusDoc !== "Pendente" && statusDoc !== "Reprovado") {
+          const diff = daysUntil(validadeStr);
+          if (diff !== null && diff < 0) statusDoc = "Vencido";
+        }
+
+        let resp: Responsabilidade;
+        const r = (d.responsavel || "").toLowerCase();
+        if (r === "profissional") resp = "profissional";
+        else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
+        else resp = "ambos";
+
+        if (
+          nomeNormalizado.includes("Ficha de Aptidão Médica") ||
+          nomeNormalizado.includes("Registo de distribuição de EPI") ||
+          nomeNormalizado.includes(
+            "Comprovativo de Comunicação de Admissão na Segurança Social",
+          )
+        ) {
+          resp = "acrobatas";
+        }
+
+        mappedDocs.push({
+          id: d.doc_id,
+          profissional_id: d.profissional_id,
+          tipo_id: d.tipo_id,
+          nome: nomeNormalizado,
+          categoria: d.categoria,
+          validade: validadeStr,
+          status: statusDoc,
+          atualizado_em: atualizadoStr,
+          url: d.arquivo_url,
+          obrigatorio: d.obrigatorio,
+          responsabilidade: resp,
+          prof_pode_enviar: d.prof_pode_enviar,
+          bloqueado: d.bloqueado,
+          comentario_admin: d.comentario_admin ?? null,
+        });
+
+        // resumo do profissional
+        const profId = d.profissional_id as string;
+        const nomeProf = d.profissional_nome as string;
+        const ativoEmObra = !!d.profissional_ativo;
+
+        let resumo = profMap.get(profId);
+        if (!resumo) {
+          resumo = {
+            id: profId,
+            nome: nomeProf,
+            ativoEmObra,
+            totalDocs: 0,
+            pendentes: 0,
+            vencidos: 0,
+            validos: 0,
+          };
+          profMap.set(profId, resumo);
+        }
+
+        resumo.totalDocs += 1;
+        if (statusDoc === "Pendente") resumo.pendentes += 1;
+        if (statusDoc === "Vencido") resumo.vencidos += 1;
+        if (statusDoc === "Válido") resumo.validos += 1;
+        if (ativoEmObra) resumo.ativoEmObra = true;
+      });
+
+      const profList = Array.from(profMap.values()).sort((a, b) =>
+        a.nome.localeCompare(b.nome, "pt"),
       );
 
-    if (ev) console.warn("VIEW profissionais_view:", ev.message);
+      setDocumentos(mappedDocs);
+      setProfissionais(profList);
 
-    if (view && view.length) {
-      // documentos + meta
-      const { data: docs } = await supabase
-        .from("documentos_profissionais")
-        .select("id, profissional_id, tipo_id, status, validade, arquivo_url");
-
-      const { data: tipos } = await supabase
-        .from("tipos_documentos")
-        .select("id, nome, grupo_id");
-
-      const { data: grupos } = await supabase
-        .from("grupos_documentos")
-        .select("id, nome");
-
-      const tipoMap = new Map((tipos ?? []).map((t: any) => [t.id, t]));
-      const grupoMap = new Map((grupos ?? []).map((g: any) => [g.id, g.nome]));
-
-      const docsByProf = new Map<string, Documento[]>();
-      (docs ?? []).forEach((d: any) => {
-        const t = tipoMap.get(d.tipo_id);
-        const gNome = t ? (grupoMap.get(t.grupo_id) ?? null) : null;
-        const arr = docsByProf.get(d.profissional_id) ?? [];
-        arr.push({
-          id: d.id,
-          nome: t?.nome ?? null,
-          grupo: gNome,
-          status: normalizeStatus(d.status),
-          validade: d.validade ?? null,
-          arquivo_url: d.arquivo_url ?? null,
-        });
-        docsByProf.set(d.profissional_id, arr);
-      });
-
-      return (view ?? []).map((p: any) => {
-        const documentos = docsByProf.get(p.profissional_id) ?? [];
-        const counters = countStatuses(documentos);
-        const crit = Math.min(100, counters.vencidos * 20 + counters.pendentes * 10);
-        return {
-          id: p.profissional_id,
-          nome: p.nome_profissional ?? "Sem nome",
-          funcao: p.profissao ?? "—",
-          senioridade: p.senioridade ?? null,
-          obras: p.nome_obra ? [p.nome_obra] : [],
-          documentos,
-          counters,
-          criticidade: crit,
-        };
-      });
-    }
-  } catch (e) {
-    console.warn("Sem VIEW ou sem permissão, usando tabelas base…", e);
-  }
-
-  // 1) Tabelas base (sem 'uuid'): tenta detectar coluna do vínculo com usuários
-  let profs: any[] = [];
-  {
-    const try1 = await supabase
-      .from("profissionais")
-      .select("id, usuario_uuid, senioridade");
-    if (!try1.error) {
-      profs = try1.data ?? [];
-    } else {
-      const try2 = await supabase
-        .from("profissionais")
-        .select("id, usuario, senioridade");
-      if (!try2.error) {
-        profs = (try2.data ?? []).map((p: any) => ({
-          id: p.id,
-          usuario_uuid: p.usuario,
-          senioridade: p.senioridade,
-        }));
+      if (profList.length > 0) {
+        const primeiroAtivo = profList.find((p) => p.ativoEmObra);
+        setSelectedProfId((primeiroAtivo || profList[0]).id);
       } else {
-        const try3 = await supabase
-          .from("profissionais")
-          .select("id, senioridade");
-        if (try3.error) throw try3.error;
-        profs = try3.data ?? [];
+        setSelectedProfId(null);
       }
+
+      setLoading(false);
     }
-  }
 
-  // 2) Usuários
-  const { data: usuarios } = await supabase
-    .from("usuarios")
-    .select("uuid, nome, profissão, profissao, status");
-  const uMap = new Map((usuarios ?? []).map((u: any) => [u.uuid, u]));
+    carregar();
 
-  // 3) Obras (tenta view simplificada; fallback para relacionamento)
-  const obrasByProf = new Map<string, string[]>();
-  try {
-    const { data: obrasView, error: eov } = await supabase
-      .from("obras_com_profissionais")
-      .select("profissional_id, obra_nome");
-    if (!eov && obrasView?.length) {
-      obrasView.forEach((r: any) => {
-        const arr = obrasByProf.get(r.profissional_id) ?? [];
-        arr.push(r.obra_nome);
-        obrasByProf.set(r.profissional_id, arr);
-      });
-    } else {
-      const { data: po } = await supabase
-        .from("profissionais_obras")
-        .select("profissional_id, obras(nome)");
-      (po ?? []).forEach((r: any) => {
-        const arr = obrasByProf.get(r.profissional_id) ?? [];
-        arr.push(r.obras?.nome ?? "Obra");
-        obrasByProf.set(r.profissional_id, arr);
-      });
-    }
-  } catch (e) {
-    console.warn("Sem relação de obras (ok em dev)", e);
-  }
-
-  // 4) Documentos
-  const { data: docs } = await supabase
-    .from("documentos_profissionais")
-    .select("id, profissional_id, tipo_id, status, validade, arquivo_url");
-  const { data: tipos } = await supabase
-    .from("tipos_documentos")
-    .select("id, nome, grupo_id");
-  const { data: grupos } = await supabase
-    .from("grupos_documentos")
-    .select("id, nome");
-
-  const tipoMap = new Map((tipos ?? []).map((t: any) => [t.id, t]));
-  const grupoMap = new Map((grupos ?? []).map((g: any) => [g.id, g.nome]));
-
-  const docsByProf = new Map<string, Documento[]>();
-  (docs ?? []).forEach((d: any) => {
-    const t = tipoMap.get(d.tipo_id);
-    const gNome = t ? (grupoMap.get(t.grupo_id) ?? null) : null;
-    const arr = docsByProf.get(d.profissional_id) ?? [];
-    arr.push({
-      id: d.id,
-      nome: t?.nome ?? null,
-      grupo: gNome,
-      status: normalizeStatus(d.status),
-      validade: d.validade ?? null,
-      arquivo_url: d.arquivo_url ?? null,
-    });
-    docsByProf.set(d.profissional_id, arr);
-  });
-
-  // 5) Monta resposta
-  return (profs ?? []).map((p: any) => {
-    const u = uMap.get(p.usuario_uuid); // pode ser undefined
-    const nome = u?.nome ?? "Sem nome";
-    const funcao = u?.profissão ?? u?.profissao ?? "—";
-    const documentos = docsByProf.get(p.id) ?? [];
-    const counters = countStatuses(documentos);
-    const crit = Math.min(100, counters.vencidos * 20 + counters.pendentes * 10);
-    return {
-      id: p.id,
-      nome,
-      funcao,
-      senioridade: p.senioridade ?? null,
-      obras: obrasByProf.get(p.id) ?? [],
-      documentos,
-      counters,
-      criticidade: crit,
-    };
-  });
-}
-
-/** ============================
- * Página (Lista)
- * ============================ */
-type ListPageProps = { onOpenDetails?: (profId: string) => void };
-
-export default function ListPage({ onOpenDetails }: ListPageProps) {
-  // ===== Dados (Supabase)
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<Prof[]>([]);
-
-  // Drawer control
-  const [drawerProf, setDrawerProf] = useState<Prof | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const res = await fetchProfissionaisComUsuarios();
-        if (mounted) setData(res);
-      } catch (e: any) {
-        console.error(e);
-        if (mounted) setError(e?.message ?? "Erro ao carregar dados");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
     return () => {
-      mounted = false;
+      ativo = false;
     };
-  }, []);
+  }, [user?.id]);
 
-  const obrasAll = useMemo(
+  // docs do profissional selecionado
+  const docsDoProf = useMemo(
     () =>
-      Array.from(new Set(data.flatMap((p) => p.obras))).map((o) => ({
-        label: o,
-        value: o,
-      })),
-    [data],
-  );
-  const funcoesAll = useMemo(
-    () =>
-      Array.from(new Set(data.map((p) => p.funcao))).map((f) => ({
-        label: f,
-        value: f,
-      })),
-    [data],
+      documentos.filter((d) =>
+        selectedProfId ? d.profissional_id === selectedProfId : false,
+      ),
+    [documentos, selectedProfId],
   );
 
-  // ===== Estado de filtros/ordenação
-  const [q, setQ] = useState("");
-  const qDeb = useDebounced(q, 250);
-  const [obrasSel, setObrasSel] = useState<string[]>([]);
-  const [funcSel, setFuncSel] = useState<string[]>([]);
-  const [status, setStatus] = useState<DocStatus | "todos">("todos");
-  const [sortBy, setSortBy] = useState<SortField>("criticidade");
+  const resumoSelecionado = useMemo(() => {
+    const validos = docsDoProf.filter((d) => d.status === "Válido").length;
+    const pendentes = docsDoProf.filter((d) => d.status === "Pendente").length;
+    const vencidos = docsDoProf.filter((d) => d.status === "Vencido").length;
+    const obrigatorios =
+      docsDoProf.filter((d) => d.obrigatorio).length || docsDoProf.length;
+    const completion = obrigatorios
+      ? Math.round((validos / obrigatorios) * 100)
+      : 0;
+    return { validos, pendentes, vencidos, completion };
+  }, [docsDoProf]);
 
-  const searchRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        searchRef.current?.focus();
+  const categorias = useMemo(
+    () =>
+      Array.from(
+        new Set(docsDoProf.map((d) => d.categoria).filter(Boolean) as string[]),
+      ).sort((a, b) => a.localeCompare(b)),
+    [docsDoProf],
+  );
+
+  const docsFiltrados = useMemo(() => {
+    let arr = [...docsDoProf];
+
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      arr = arr.filter(
+        (d) =>
+          d.nome.toLowerCase().includes(q) ||
+          (d.categoria || "").toLowerCase().includes(q) ||
+          (d.validade || "").includes(q),
+      );
+    }
+    if (categoria !== "Todas")
+      arr = arr.filter((d) => d.categoria === categoria);
+    if (status !== "Todos") arr = arr.filter((d) => d.status === status);
+
+    arr.sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortKey === "validade" || sortKey === "atualizado_em") {
+        const da = parsePTDate(a[sortKey] || "");
+        const db = parsePTDate(b[sortKey] || "");
+        const va = da
+          ? da.getTime()
+          : sortDir === "asc"
+          ? Number.POSITIVE_INFINITY
+          : Number.NEGATIVE_INFINITY;
+        const vb = db
+          ? db.getTime()
+          : sortDir === "asc"
+          ? Number.POSITIVE_INFINITY
+          : Number.NEGATIVE_INFINITY;
+        return va > vb ? dir : va < vb ? -dir : 0;
       }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // ===== Filtragem/Ordenação — determinística (nada “gruda”)
-  const filteredSorted = useMemo(() => {
-    const s = qDeb.trim().toLowerCase();
-    let arr = data.filter((p) => {
-      const byQ =
-        !s ||
-        p.nome.toLowerCase().includes(s) ||
-        p.funcao.toLowerCase().includes(s) ||
-        p.obras.join(", ").toLowerCase().includes(s);
-
-      const byObra = obrasSel.length === 0 ? true : p.obras.some((o) => obrasSel.includes(o));
-      const byFunc = funcSel.length === 0 ? true : funcSel.includes(p.funcao);
-      const byStatus = status === "todos" ? true : p.documentos.some((d) => d.status === status);
-
-      return byQ && byObra && byFunc && byStatus;
-    });
-
-    // Ordenação DESC fixa (sem “Desc/Asc”)
-    arr = arr.sort((a, b) => {
-      if (sortBy === "criticidade") return b.criticidade - a.criticidade;
-      if (sortBy === "nome") return a.nome.localeCompare(b.nome);
-      return b.counters.validos - a.counters.validos;
+      const va = String(a[sortKey] ?? "").toLowerCase();
+      const vb = String(b[sortKey] ?? "").toLowerCase();
+      return va > vb ? dir : va < vb ? -dir : 0;
     });
 
     return arr;
-  }, [data, qDeb, obrasSel, funcSel, status, sortBy]);
+  }, [docsDoProf, query, categoria, status, sortKey, sortDir]);
 
-  // ===== Contadores do cabeçalho (derivados da lista base filtrada por Q/obra/função também, para ficar consistente)
-  const statusCounts = useMemo(() => {
-    // Contamos no universo afetado por q/obras/funções, mas independente do “status” chip atual
-    const s = qDeb.trim().toLowerCase();
-    const base = data.filter((p) => {
-      const byQ =
-        !s ||
-        p.nome.toLowerCase().includes(s) ||
-        p.funcao.toLowerCase().includes(s) ||
-        p.obras.join(", ").toLowerCase().includes(s);
-      const byObra = obrasSel.length === 0 ? true : p.obras.some((o) => obrasSel.includes(o));
-      const byFunc = funcSel.length === 0 ? true : funcSel.includes(p.funcao);
-      return byQ && byObra && byFunc;
-    });
+  const profSelecionado = useMemo(
+    () => profissionais.find((p) => p.id === selectedProfId) || null,
+    [profissionais, selectedProfId],
+  );
 
-    const t = { valido: 0, pendente: 0, vencido: 0 };
-    base.forEach((p) => {
-      t.valido += p.counters.validos;
-      t.pendente += p.counters.pendentes;
-      t.vencido += p.counters.vencidos;
-    });
-    return t;
-  }, [data, qDeb, obrasSel, funcSel]);
+  const profissionaisFiltrados = useMemo(() => {
+    let arr = [...profissionais];
 
-  // ===== Resumo final
-  const summary = useMemo(() => {
-    const t = filteredSorted.reduce(
-      (acc, p) => {
-        acc.v += p.counters.validos;
-        acc.p += p.counters.pendentes;
-        acc.x += p.counters.vencidos;
-        acc.c += p.criticidade;
-        return acc;
-      },
-      { v: 0, p: 0, x: 0, c: 0 },
-    );
-    const avg = filteredSorted.length ? Math.round(t.c / filteredSorted.length) : 0;
-    return { validos: t.v, pendentes: t.p, vencidos: t.x, avgCrit: avg };
-  }, [filteredSorted]);
+    if (filtroAtividade === "ativos") {
+      arr = arr.filter((p) => p.ativoEmObra);
+    } else if (filtroAtividade === "inativos") {
+      arr = arr.filter((p) => !p.ativoEmObra);
+    }
 
-  const resetAll = () => {
-    setQ("");
-    setObrasSel([]);
-    setFuncSel([]);
-    setStatus("todos");
-    setSortBy("criticidade");
+    if (buscaProf.trim()) {
+      const q = buscaProf.toLowerCase();
+      arr = arr.filter((p) => p.nome.toLowerCase().includes(q));
+    }
+
+    return arr;
+  }, [profissionais, filtroAtividade, buscaProf]);
+
+  const handleResetFiltrosDocs = () => {
+    setQuery("");
+    setCategoria("Todas");
+    setStatus("Todos");
+    setSortKey("validade");
+    setSortDir("asc");
   };
 
-  // ========================= Render
+  function openInNewTab(url?: string | null) {
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center mt-20">
+        <FileText className="animate-pulse text-blue-500" size={28} />
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-[1400px] mx-auto px-4 py-6">
-      {/* Título (no padrão das “Obras Ativas”) */}
-      <div className="mb-2">
-        <h1 className="text-xl font-semibold">
-          Documentos — <span className="text-blue-600">Profissionais</span>
+    <div className="p-4 sm:p-8 text-zinc-900 dark:text-zinc-100">
+      {/* Título geral */}
+      <div className="flex items-center gap-3 mb-2">
+        <Users className="text-blue-500 dark:text-blue-400 w-6 h-6 sm:w-7 sm:h-7" />
+        <h1 className="text-lg sm:text-2xl font-semibold">
+          Documentos dos Profissionais
         </h1>
-        <p className="text-sm opacity-70">Acompanhe a situação documental por função e obra.</p>
       </div>
+      <p className="text-zinc-500 dark:text-zinc-400 text-sm sm:text-base mb-6 max-w-3xl">
+        Consulte a documentação dos trabalhadores associados à sua empresa,
+        verifique prazos de validade e faça download dos ficheiros quando
+        necessário.
+      </p>
 
-      {/* Toolbar (duas linhas: 1) busca + ordenar  |  2) filtros + chips de status) */}
-      <div className="sticky top-0 z-10 -mx-4 px-4">
-        <div className="rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-950 shadow-sm p-4">
-          {/* Linha 1 */}
-          <div className="grid gap-x-6 gap-y-2 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] items-start">
-            {/* Busca */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Sidebar – lista de profissionais */}
+        <aside className="lg:w-72 xl:w-80 bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Users size={18} className="text-blue-500" />
+            <h2 className="text-sm font-semibold">Profissionais</h2>
+          </div>
+
+          <div className="mb-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
-              <input
-                ref={searchRef}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Pesquisar por nome, função ou obra… (⌘/Ctrl + K)"
-                className="w-full h-10 pl-9 pr-10 text-sm rounded-md border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900"
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
               />
-              {q && (
-                <button
-                  onClick={() => setQ("")}
-                  aria-label="Limpar"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 grid place-items-center rounded-md hover:bg-black/5 dark:hover:bg-white/5"
-                >
-                  <X size={14} />
-                </button>
-              )}
+              <input
+                value={buscaProf}
+                onChange={(e) => setBuscaProf(e.target.value)}
+                placeholder="Pesquisar profissional..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] focus:ring-2 focus:ring-blue-500 outline-none"
+              />
             </div>
+          </div>
 
-            {/* Ordenar (DESC fixo) */}
-            <div className="flex items-center gap-3 justify-start lg:justify-end">
-              <span className="text-xs opacity-60">Ordenar</span>
-              <div className="inline-flex rounded-lg border border-black/10 dark:border-white/10 overflow-hidden shadow-sm">
-                {(["criticidade", "validos", "nome"] as const).map((f) => (
+          <div className="flex gap-1 mb-3 text-[11px]">
+            <button
+              onClick={() => setFiltroAtividade("todos")}
+              className={`flex-1 px-2 py-1 rounded-md border text-center ${
+                filtroAtividade === "todos"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setFiltroAtividade("ativos")}
+              className={`flex-1 px-2 py-1 rounded-md border text-center flex items-center justify-center gap-1 ${
+                filtroAtividade === "ativos"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
+              }`}
+            >
+              <CircleDot size={11} /> Ativos
+            </button>
+            <button
+              onClick={() => setFiltroAtividade("inativos")}
+              className={`flex-1 px-2 py-1 rounded-md border text-center flex items-center justify-center gap-1 ${
+                filtroAtividade === "inativos"
+                  ? "bg-zinc-700 text-white border-zinc-700"
+                  : "border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
+              }`}
+            >
+              <Circle size={11} /> Inativos
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
+            {profissionaisFiltrados.length === 0 ? (
+              <p className="text-xs text-zinc-500">
+                Nenhum profissional encontrado.
+              </p>
+            ) : (
+              profissionaisFiltrados.map((p) => {
+                const isSelected = p.id === selectedProfId;
+                return (
                   <button
-                    key={f}
-                    onClick={() => setSortBy(f)}
-                    className={cn(
-                      "px-3 py-1.5 text-sm font-medium",
-                      sortBy === f
-                        ? "bg-blue-600 text-white"
-                        : "bg-white dark:bg-neutral-950 hover:bg-black/5 dark:hover:bg-white/5",
-                      f !== "criticidade" && "border-l border-black/10 dark:border-white/10"
-                    )}
+                    key={p.id}
+                    onClick={() => setSelectedProfId(p.id)}
+                    className={`w-full text-left rounded-xl px-3 py-2 text-xs border transition flex flex-col gap-1 ${
+                      isSelected
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                        : "border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60"
+                    }`}
                   >
-                    {f === "criticidade" ? "Criticidade" : f === "validos" ? "Válidos" : "Nome"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* divisor suave */}
-          <div className="mt-3 h-px bg-black/5 dark:bg-white/10" />
-
-          {/* Linha 2 — Filtros + chips de status */}
-          <div className="pt-2 flex flex-wrap gap-2 items-center">
-            <MultiSelect
-              options={funcoesAll}
-              value={funcSel}
-              onChange={setFuncSel}
-              icon={<SlidersHorizontal className="h-4 w-4 opacity-60" />}
-              allLabel="Todas as funções"
-            />
-            <MultiSelect
-              options={obrasAll}
-              value={obrasSel}
-              onChange={setObrasSel}
-              icon={<Filter className="h-4 w-4 opacity-60" />}
-              allLabel="Todas as obras"
-            />
-
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {(["todos", "válido", "pendente", "vencido"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatus(s)}
-                  className={cn(
-                    "h-8 px-3 rounded-full text-xs font-medium border transition",
-                    status === s
-                      ? "bg-blue-600 border-blue-600 text-white"
-                      : "bg-white dark:bg-neutral-900 border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5"
-                  )}
-                >
-                  {s === "todos" ? (
-                    "todos"
-                  ) : s === "válido" ? (
-                    <>válidos <span className="opacity-70">({statusCounts.valido})</span></>
-                  ) : s === "pendente" ? (
-                    <>pendentes <span className="opacity-70">({statusCounts.pendente})</span></>
-                  ) : (
-                    <>vencidos <span className="opacity-70">({statusCounts.vencido})</span></>
-                  )}
-                </button>
-              ))}
-
-              <button
-                onClick={resetAll}
-                className="h-8 px-3 rounded-full text-xs font-medium border bg-white dark:bg-neutral-900 border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5"
-              >
-                Limpar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Resumo */}
-      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[
-          { k: "resultado", label: "resultado", value: `${filteredSorted.length} profissionais`, tone: "" },
-          { k: "validos", label: "válidos", value: summary.validos, tone: "text-green-600 dark:text-green-400" },
-          { k: "pendentes", label: "pendentes", value: summary.pendentes, tone: "text-amber-600 dark:text-amber-400" },
-          { k: "vencidos", label: "vencidos", value: summary.vencidos, tone: "text-red-600 dark:text-red-400" },
-        ].map((c) => (
-          <div key={c.k} className="rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-950 shadow-sm p-2">
-            <div className="text-[11px] uppercase opacity-60">{c.label}</div>
-            <div className={cn("text-sm font-medium", c.tone)}>{c.value}</div>
-          </div>
-        ))}
-        <div className="rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-950 shadow-sm p-2 sm:col-span-4 flex items-center justify-between">
-          <div className="text-[11px] uppercase opacity-60">criticidade média</div>
-          <div className={cn("text-sm font-semibold", critClass(summary.avgCrit).text)}>{summary.avgCrit}</div>
-        </div>
-      </div>
-
-      {/* Lista */}
-      {loading && (
-        <div className="py-16 text-center text-sm opacity-70">Carregando…</div>
-      )}
-      {error && !loading && (
-        <div className="py-16 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-black/10 dark:border-white/10 text-xs">
-            <Info size={14} /> {error}
-          </div>
-        </div>
-      )}
-      {!loading && !error && (
-        <div className="mt-2 grid gap-3">
-          <AnimatePresence initial={false}>
-            {filteredSorted.map((p) => {
-              const more = Math.max(0, p.obras.length - 1);
-              const main = p.obras[0];
-              const health =
-                p.counters.vencidos > 0
-                  ? "from-red-500/70 to-rose-500/70"
-                  : p.counters.pendentes > 0
-                  ? "from-amber-500/70 to-orange-500/70"
-                  : "from-blue-500/60 to-indigo-500/60";
-
-              const openDrawer = () => {
-                if (onOpenDetails) onOpenDetails(p.id);
-                else setDrawerProf(p);
-              };
-
-              return (
-                <motion.div
-                  key={p.id}
-                  layout
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18 }}
-                  role="button"
-                  tabIndex={0}
-                  className={cn(
-                    "group rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] backdrop-blur-sm p-4 relative overflow-hidden hover:shadow-md hover:ring-1 hover:ring-black/10 dark:hover:ring-white/10 focus:outline-none",
-                  )}
-                  onClick={openDrawer}
-                >
-                  {/* indicador de saúde */}
-                  <div className={cn("absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-gradient-to-b", health)} aria-hidden />
-
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    {/* left */}
-                    <div className="min-w-0 flex items-start gap-3">
-                      <div className="h-10 w-10 shrink-0 rounded-full grid place-items-center text-[12px] font-semibold bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border border-blue-600/30">
-                        {initials(p.nome)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-medium truncate">{mark(p.nome, qDeb)}</h3>
-                          {p.senioridade && (
-                            <span className="text-[11px] px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10">
-                              {p.senioridade}
-                            </span>
-                          )}
-                          <span className="text-xs opacity-70">• {mark(p.funcao, qDeb)}</span>
-                        </div>
-
-                        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm opacity-80">
-                          <span className="inline-flex items-center gap-1">
-                            <Building2 size={14} />
-                            <span className="truncate">{mark(main || "—", qDeb)}</span>
-                            {more > 0 && <ObrasPopover obras={p.obras} q={qDeb} />}
-                          </span>
-                        </div>
-
-                        <div className="mt-3 flex items-center gap-2 text-[12px]">
-                          <span className="px-2 py-0.5 text-[12px] rounded border border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300">
-                            {p.counters.validos} válidos
-                          </span>
-                          <span className="px-2 py-0.5 text-[12px] rounded border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
-                            {p.counters.pendentes} pendentes
-                          </span>
-                          <span className="px-2 py-0.5 text-[12px] rounded border border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300">
-                            {p.counters.vencidos} vencidos
-                          </span>
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-[11px] line-clamp-1">
+                        {p.nome}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-1.5 py-[2px] rounded-full text-[10px] ${
+                          p.ativoEmObra
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-700/30 dark:text-emerald-300"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-700/40 dark:text-zinc-200"
+                        }`}
+                      >
+                        {p.ativoEmObra ? (
+                          <>
+                            <CircleDot size={9} /> Ativo em obra
+                          </>
+                        ) : (
+                          <>
+                            <Circle size={9} /> Sem obra
+                          </>
+                        )}
+                      </span>
                     </div>
+                    <div className="flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400">
+                      <span>Total: {p.totalDocs}</span>
+                      <span>Pendentes: {p.pendentes}</span>
+                      <span>Vencidos: {p.vencidos}</span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </aside>
 
-                    {/* right */}
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-[11px] uppercase opacity-60">ordenado por</div>
-                        <div className="text-xs">
-                          {sortBy === "validos" ? "Válidos" : sortBy === "nome" ? "Nome" : "Criticidade"}
-                        </div>
-                      </div>
-                      <CritBar value={p.criticidade} />
-                      <div className="hidden sm:flex items-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onOpenDetails) onOpenDetails(p.id);
-                            else setDrawerProf(p);
-                          }}
-                          className="px-3 py-1.5 rounded-md text-white text-sm inline-flex items-center gap-1 shadow-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:brightness-110 active:scale-[0.99]"
-                        >
-                          <Eye size={14} /> Ver documentos
-                        </button>
+        {/* Conteúdo principal: documentos do profissional selecionado */}
+        <main className="flex-1">
+          {!profSelecionado ? (
+            <div className="h-full flex items-center justify-center">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Selecione um profissional à esquerda para ver os documentos.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Header do profissional */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-blue-600/10 flex items-center justify-center">
+                      <UserIcon size={18} className="text-blue-500" />
+                    </div>
+                    <div>
+                      <h2 className="text-base sm:text-lg font-semibold">
+                        Documentos de {profSelecionado.nome}
+                      </h2>
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        <span className="inline-flex items-center gap-1">
+                          <Users size={11} /> Profissional ligado à sua empresa
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          {profSelecionado.ativoEmObra ? (
+                            <>
+                              <CircleDot size={10} className="text-emerald-500" />{" "}
+                              Ativo em obra
+                            </>
+                          ) : (
+                            <>
+                              <Circle size={10} className="text-zinc-400" /> Sem obra ativa
+                            </>
+                          )}
+                        </span>
                       </div>
                     </div>
                   </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-
-          {filteredSorted.length === 0 && (
-            <div className="py-24 text-center">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-black/10 dark:border-white/10 text-xs">
-                <Info size={14} /> Nenhum profissional encontrado
+                </div>
               </div>
-              <p className="mt-2 text-sm opacity-70">
-                Ajuste os filtros ou{" "}
-                <button onClick={resetAll} className="underline">
-                  limpe tudo
-                </button>
-                .
-              </p>
-            </div>
+
+              {/* Cards resumo */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
+                <ResumoCard
+                  titulo="Válidos"
+                  valor={resumoSelecionado.validos}
+                  cor="text-green-500"
+                  icone={<CheckCircle2 size={18} />}
+                />
+                <ResumoCard
+                  titulo="Pendentes"
+                  valor={resumoSelecionado.pendentes}
+                  cor="text-yellow-500"
+                  icone={<AlertTriangle size={18} />}
+                />
+                <ResumoCard
+                  titulo="Vencidos"
+                  valor={resumoSelecionado.vencidos}
+                  cor="text-red-500"
+                  icone={<XCircle size={18} />}
+                />
+              </div>
+
+              {/* Barra de completude */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                    Completude do perfil de documentos
+                  </span>
+                  <span className="text-sm font-medium">
+                    {resumoSelecionado.completion}%
+                  </span>
+                </div>
+                <div className="h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full transition-all"
+                    style={{ width: `${resumoSelecionado.completion}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Filtros de documentos */}
+              <FiltroBar
+                categorias={categorias}
+                query={query}
+                setQuery={setQuery}
+                categoria={categoria}
+                setCategoria={setCategoria}
+                status={status}
+                setStatus={setStatus}
+                sortKey={sortKey}
+                setSortKey={setSortKey}
+                sortDir={sortDir}
+                setSortDir={setSortDir}
+                onReset={handleResetFiltrosDocs}
+              />
+
+              {/* Lista de docs */}
+              <div className="bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 sm:p-6 shadow-sm">
+                <h3 className="text-sm sm:text-lg font-medium mb-4 flex items-center gap-2 text-blue-500 dark:text-blue-400">
+                  <FileText size={18} /> Documentos
+                </h3>
+
+                {docsFiltrados.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-8 text-center">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      Nenhum documento encontrado para este profissional.
+                    </p>
+                    <button
+                      onClick={handleResetFiltrosDocs}
+                      className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs"
+                    >
+                      <RefreshCcw size={16} /> Limpar filtros
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* MOBILE – Cards */}
+                    <div className="space-y-3 sm:hidden">
+                      {docsFiltrados.map((doc) => (
+                        <motion.div
+                          key={doc.id}
+                          whileHover={{ scale: 1.02 }}
+                          className="rounded-xl p-3 border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#232c3d]"
+                        >
+                          <div className="flex justify-between items-start gap-3 mb-1">
+                            <div className="flex-1">
+                              <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">
+                                {doc.nome}
+                              </p>
+                              <div className="flex items-center gap-2 mt-[2px] flex-wrap">
+                                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                  {doc.categoria || "—"}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-[11px]">
+                                {doc.url ? (
+                                  <button
+                                    onClick={() => openInNewTab(doc.url)}
+                                    className="inline-flex items-center gap-1 text-blue-400 hover:underline underline-offset-2 break-all"
+                                  >
+                                    <FileText size={11} />
+                                    Ver documento enviado
+                                  </button>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                                    <FileText size={11} />
+                                    Nenhum ficheiro enviado
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <StatusBadge status={doc.status} />
+                          </div>
+
+                          <div className="flex items-center justify-between mt-2 text-xs">
+                            <VencimentoBadge validade={doc.validade} />
+                            <span className="text-zinc-500 dark:text-zinc-400">
+                              <Clock4 size={12} className="inline mr-1" />
+                              {doc.atualizado_em
+                                ? `Atualizado ${doc.atualizado_em}`
+                                : "Nunca atualizado"}
+                            </span>
+                          </div>
+
+                          <div className="flex gap-3 mt-3">
+                            <button
+                              onClick={() => openInNewTab(doc.url)}
+                              disabled={!doc.url}
+                              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition ${
+                                doc.url
+                                  ? "bg-blue-600/90 text-white hover:bg-blue-700"
+                                  : "bg-zinc-400 text-white opacity-70"
+                              }`}
+                            >
+                              <Eye size={14} /> Ver
+                            </button>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+
+                    {/* DESKTOP – Tabela */}
+                    <div className="hidden sm:block">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-left border-b border-zinc-300 dark:border-zinc-700">
+                            <th className="py-3 px-2">Documento</th>
+                            <th className="py-3 px-2">Categoria</th>
+                            <th className="py-3 px-2">Status</th>
+                            <th className="py-3 px-2">Validade</th>
+                            <th className="py-3 px-2">Atualizado</th>
+                            <th className="py-3 px-2 text-center">Ação</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {docsFiltrados.map((doc) => (
+                            <motion.tr
+                              key={doc.id}
+                              whileHover={{ scale: 1.01 }}
+                              className="border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-[#243043] transition"
+                            >
+                              <td className="py-3 px-2 font-medium align-top">
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span>{doc.nome}</span>
+                                  </div>
+                                  <div className="text-[11px]">
+                                    {doc.url ? (
+                                      <button
+                                        onClick={() => openInNewTab(doc.url)}
+                                        className="inline-flex items-center gap-1 text-blue-400 hover:underline underline-offset-2 break-all"
+                                      >
+                                        <FileText size={11} />
+                                        Ver documento enviado
+                                      </button>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                                        <FileText size={11} />
+                                        Nenhum ficheiro enviado
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-2">
+                                {doc.categoria || "—"}
+                              </td>
+                              <td className="py-3 px-2">
+                                <StatusBadge status={doc.status} />
+                              </td>
+                              <td className="py-3 px-2">
+                                <div className="flex items-center gap-2">
+                                  <span>{doc.validade || "—"}</span>
+                                  <VencimentoBadge validade={doc.validade} />
+                                </div>
+                              </td>
+                              <td className="py-3 px-2">
+                                {doc.atualizado_em || "—"}
+                              </td>
+                              <td className="py-3 px-2">
+                                <div className="flex justify-center">
+                                  <button
+                                    title={
+                                      doc.url
+                                        ? "Ver (abre em nova aba)"
+                                        : "Sem ficheiro"
+                                    }
+                                    onClick={() => openInNewTab(doc.url)}
+                                    disabled={!doc.url}
+                                    className={`p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 ${
+                                      doc.url
+                                        ? ""
+                                        : "opacity-50 cursor-not-allowed"
+                                    }`}
+                                  >
+                                    <Eye size={18} className="text-blue-500" />
+                                  </button>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="mt-8 sm:mt-10 text-center text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-xl">
+                Os documentos são enviados pelos profissionais ou pela equipa
+                Acrobatas e analisados para garantir a conformidade legal e de
+                segurança. A empresa tem acesso apenas para consulta e download.
+              </div>
+            </>
           )}
-        </div>
-      )}
-
-      {/* Drawer (só quando não há navegação externa via onOpenDetails) */}
-      {!onOpenDetails && drawerProf && (
-        <QuickDrawer prof={drawerProf} onClose={() => setDrawerProf(null)} />
-      )}
-    </div>
-  );
-} // fim do componente ListPage
-
-// ============================
-// Popover com as outras obras
-// ============================
-interface ObrasPopoverProps {
-  obras: string[];
-  q: string;
-}
-function ObrasPopover({ obras, q }: ObrasPopoverProps) {
-  const [open, setOpen] = useState(false);
-  const more = Math.max(0, obras.length - 1);
-  if (more <= 0) return null;
-
-  return (
-    <div className="relative inline-flex">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="ml-1 inline-flex items-center text-xs px-1.5 py-0.5 rounded-full border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5"
-        aria-expanded={open}
-        title="Outras obras"
-      >
-        +{more} {more === 1 ? "obra" : "obras"}{" "}
-        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 6, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
-            transition={{ duration: 0.16 }}
-            className="absolute z-20 top-full left-0 mt-1 w-[260px] rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-lg p-2"
-            role="menu"
-          >
-            <div className="text-[11px] uppercase opacity-60 px-1">Todas as obras</div>
-            <ul className="mt-1 max-h-56 overflow-auto pr-1 space-y-1">
-              {obras.map((o, i) => (
-                <li key={o + i} className="px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/5 text-sm">
-                  {mark(o, q)}
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </main>
+      </div>
     </div>
   );
 }
-
-
-

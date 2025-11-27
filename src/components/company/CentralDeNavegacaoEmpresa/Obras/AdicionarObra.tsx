@@ -1,430 +1,762 @@
+import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Building2, Send, Loader2, CheckCircle2, MapPin } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import {
+  Building2,
+  Send,
+  Loader2,
+  MapPin,
+  Calendar,
+  Users,
+  FileText,
+} from "lucide-react";
 import { supabase } from "../../../../lib/supabase";
 import toast from "react-hot-toast";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../../context/AuthContext";
 
-// 🧠 Hook debounce
-function useDebounce(callback: (...args: any[]) => void, delay: number) {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  return (...args: any[]) => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => callback(...args), delay);
+type RuaSugestao = {
+  display_name: string;
+  lat: string;
+  lon: string;
+  address?: {
+    road?: string;
+    pedestrian?: string;
+    house_number?: string;
+    postcode?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    municipality?: string;
+    county?: string;
+    state?: string;
+    suburb?: string;
+    city_district?: string;
   };
-}
+};
 
 export default function AdicionarObra() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const location = useLocation();
-  const dadosPedido = location.state || {};
+  const dadosPedido = (location.state as any) || {};
+  const pedidoId: string | undefined = dadosPedido?.pedidoId;
 
   const [loading, setLoading] = useState(false);
-  const [sucesso, setSucesso] = useState<string | false>(false);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const [form, setForm] = useState({
     nomeObra: "",
     empresa: user?.email || "",
+    codigo_postal: "",
+    rua: "",
+    numero: "",
+    distrito: "",
+    concelho: "",
+    freguesia: "",
     local: "",
-    latitude: "",
-    longitude: "",
     dataInicio: "",
     previsaoTermino: "",
     profissionais: "",
     descricao: "",
   });
 
-  // ✅ Pré-preenche se vier de outro módulo (mantendo Nome da Obra livre)
+  // ====== estados para auto-complete / auto-preenchimento ======
+  const [cpLoading, setCpLoading] = useState(false);
+  const [ruaSugestoes, setRuaSugestoes] = useState<RuaSugestao[]>([]);
+  const [ruaLoading, setRuaLoading] = useState(false);
+  const ruaDebounce = useRef<number | null>(null);
+
   useEffect(() => {
     if (dadosPedido && Object.keys(dadosPedido).length > 0) {
-      setForm({
-        nomeObra: "",
+      setForm((prev) => ({
+        ...prev,
+        nomeObra: dadosPedido.nomeObra || "",
         empresa:
-          dadosPedido.empresa ||
-          dadosPedido.nome_empresa ||
-          user?.email ||
-          "",
-        local: dadosPedido.local || "",
-        latitude: dadosPedido.latitude || "",
-        longitude: dadosPedido.longitude || "",
+          dadosPedido.empresa || dadosPedido.nome_empresa || user?.email || "",
+        local: dadosPedido.local || prev.local,
         dataInicio: dadosPedido.dataInicio || dadosPedido.data_inicio || "",
         previsaoTermino:
           dadosPedido.previsaoTermino || dadosPedido.data_fim || "",
         profissionais:
-          dadosPedido.profissionais || dadosPedido.quantidade?.toString() || "",
+          dadosPedido.profissionais ||
+          (dadosPedido.quantidade ? String(dadosPedido.quantidade) : "") ||
+          "",
         descricao: dadosPedido.descricao || dadosPedido.observacoes || "",
-      });
+      }));
     }
   }, [dadosPedido, user]);
 
-  // Atualiza campos
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => setForm({ ...form, [e.target.name]: e.target.value });
+  const setField = (
+    name: keyof typeof form,
+    value: string | number | null | undefined
+  ) => setForm((f) => ({ ...f, [name]: (value ?? "") as any }));
 
-  // Busca sugestões via OpenStreetMap
-  const buscarSugestoes = useDebounce(async (valor: string) => {
-    if (valor.length < 3) {
-      setSuggestions([]);
+  const onInput =
+    (name: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setField(name, e.target.value);
+
+  // ===================== CÓDIGO-POSTAL COM AUTOPREENCHIMENTO =====================
+  const onCodigoPostal = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let v = e.target.value.toUpperCase().replace(/\s+/g, "");
+    v = v.replace(/[^0-9-]/g, "");
+    const digits = v.replace(/-/g, "");
+    if (/^\d{4}\d{0,3}$/.test(digits)) {
+      v =
+        digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4, 7)}` : digits;
+    }
+    setField("codigo_postal", v);
+
+    // quando estiver no formato 0000-000, tentamos completar concelho/distrito/freguesia
+    if (/^\d{4}-\d{3}$/.test(v)) {
+      preencherEnderecoPorCodigoPostal(v);
+    }
+  };
+
+  const preencherEnderecoPorCodigoPostal = async (cp: string) => {
+    try {
+      setCpLoading(true);
+
+      const url =
+        "https://nominatim.openstreetmap.org/search?format=json" +
+        "&limit=1&addressdetails=1&country=Portugal&postalcode=" +
+        encodeURIComponent(cp);
+
+      const r = await fetch(url, {
+        headers: {
+          "Accept-Language": "pt-PT",
+        },
+      });
+
+      if (!r.ok) {
+        setCpLoading(false);
+        return;
+      }
+
+      const j = (await r.json()) as RuaSugestao[];
+      const addr = j?.[0]?.address;
+      if (!addr) {
+        setCpLoading(false);
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        // só preenche se ainda estiver vazio (para não pisar coisas que o utilizador já escreveu)
+        concelho:
+          prev.concelho ||
+          addr.city ||
+          addr.town ||
+          addr.village ||
+          addr.municipality ||
+          "",
+        distrito: prev.distrito || addr.state || "",
+        freguesia:
+          prev.freguesia ||
+          addr.suburb ||
+          addr.city_district ||
+          addr.county ||
+          "",
+        local: prev.local || addr.city || addr.town || addr.village || "",
+      }));
+    } catch (err) {
+      console.error("Erro ao buscar dados do código-postal:", err);
+    } finally {
+      setCpLoading(false);
+    }
+  };
+
+  // ===================== AUTO-COMPLETE DA RUA =====================
+  // Quando o utilizador começa a digitar a rua (>=3 caracteres) disparamos uma pesquisa,
+  // limitada pelo código-postal (se tiver) e Portugal.
+  useEffect(() => {
+    if (!form.rua || form.rua.trim().length < 3) {
+      setRuaSugestoes([]);
       return;
     }
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          valor
-        )}&addressdetails=1&limit=5`
-      );
-      const data = await res.json();
-      setSuggestions(data);
-      setShowSuggestions(true);
-    } catch (err) {
-      console.error("Erro ao buscar sugestões:", err);
-    }
-  }, 800);
 
-  const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const valor = e.target.value;
-    setForm((prev) => ({ ...prev, local: valor }));
-    buscarSugestoes(valor);
+    // debounce para não spammar a API a cada keypress
+    if (ruaDebounce.current) {
+      window.clearTimeout(ruaDebounce.current);
+    }
+
+    ruaDebounce.current = window.setTimeout(() => {
+      buscarSugestoesRua(form.rua, form.codigo_postal);
+    }, 450);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.rua, form.codigo_postal]);
+
+  const buscarSugestoesRua = async (textoRua: string, cp: string) => {
+    try {
+      setRuaLoading(true);
+
+      const params = new URLSearchParams({
+        format: "json",
+        addressdetails: "1",
+        limit: "5",
+        country: "Portugal",
+        street: textoRua,
+      });
+
+      if (/^\d{4}-\d{3}$/.test(cp)) {
+        params.append("postalcode", cp);
+      }
+
+      const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
+
+      const r = await fetch(url, {
+        headers: { "Accept-Language": "pt-PT" },
+      });
+      if (!r.ok) {
+        setRuaSugestoes([]);
+        setRuaLoading(false);
+        return;
+      }
+
+      const j = (await r.json()) as RuaSugestao[];
+      setRuaSugestoes(j);
+    } catch (err) {
+      console.error("Erro ao buscar sugestões de rua:", err);
+      setRuaSugestoes([]);
+    } finally {
+      setRuaLoading(false);
+    }
   };
 
-  const handleSelectSuggestion = (sugestao: any) => {
-    const cidadePrincipal =
-      sugestao.display_name.split(",")[0]?.trim() || sugestao.display_name;
+  const escolherSugestaoRua = (s: RuaSugestao) => {
+    const addr = s.address || {};
+    const nomeRua =
+      addr.road || addr.pedestrian || form.rua || s.display_name || "";
+
+    setRuaSugestoes([]);
+
     setForm((prev) => ({
       ...prev,
-      local: cidadePrincipal,
-      latitude: sugestao.lat,
-      longitude: sugestao.lon,
+      rua: nomeRua,
+      // se a API devolveu nº da porta, já deixa no campo
+      numero: prev.numero || addr.house_number || "",
+      codigo_postal: prev.codigo_postal || addr.postcode || "",
+      concelho:
+        prev.concelho ||
+        addr.city ||
+        addr.town ||
+        addr.village ||
+        addr.municipality ||
+        "",
+      distrito: prev.distrito || addr.state || "",
+      freguesia:
+        prev.freguesia ||
+        addr.suburb ||
+        addr.city_district ||
+        addr.county ||
+        "",
+      local: prev.local || addr.city || addr.town || addr.village || "",
     }));
-    setSuggestions([]);
-    setShowSuggestions(false);
-    toast.success(`📍 Local selecionado: ${cidadePrincipal}`);
   };
 
-  // ✅ Envia obra ao Supabase
+  // ===================== GEOCODING FINAL (lat/lon) =====================
+  const geocode = async (address: string) => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(
+        address
+      )}`;
+      const r = await fetch(url, { headers: { "Accept-Language": "pt-PT" } });
+      if (!r.ok)
+        return { lat: null as number | null, lon: null as number | null };
+      const j = (await r.json()) as Array<{ lat: string; lon: string }>;
+      if (j?.[0]) {
+        return {
+          lat: Number(j[0].lat) || null,
+          lon: Number(j[0].lon) || null,
+        };
+      }
+    } catch {}
+    return { lat: null as number | null, lon: null as number | null };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (
       !form.nomeObra.trim() ||
       !form.empresa ||
-      !form.local ||
       !form.dataInicio ||
       !form.previsaoTermino ||
-      !form.profissionais
+      !form.profissionais ||
+      !form.codigo_postal ||
+      !form.numero
     ) {
-      toast.error("Preencha todos os campos obrigatórios, incluindo o nome da obra!");
+      toast.error(
+        "Campos obrigatórios: Nome, Empresa, Datas, Nº de Profissionais, Código-postal e Número."
+      );
       return;
     }
 
     try {
       setLoading(true);
-      console.log("🚀 Enviando obra para Supabase...");
 
-      // 1️⃣ Buscar empresa_id a partir da tabela pedidos_empresa_v2
-      const { data: empresas, error: empErr } = await supabase
-        .from("pedidos_empresa_v2")
-        .select("id_empresa")
-        .eq("nome_empresa", user.email);
-
+      const { data: empresaRPC, error: empErr } =
+        await supabase.rpc("minha_empresa_id");
       if (empErr) throw empErr;
-      if (!empresas || empresas.length === 0) {
-        toast.error("Empresa não encontrada para este usuário!");
+      const empresaId = (empresaRPC as string) || null;
+
+      if (!empresaId) {
+        toast.error("Empresa não encontrada para esta conta.");
         setLoading(false);
         return;
       }
 
-      const empresaId = empresas[0].id_empresa;
-      console.log("🏢 Empresa ID encontrada:", empresaId);
+      const enderecoCompleto = [
+        form.rua && `${form.rua} ${form.numero}`,
+        form.codigo_postal,
+        form.freguesia,
+        form.concelho,
+        form.distrito,
+        "Portugal",
+      ]
+        .filter(Boolean)
+        .join(", ");
 
-      // 2️⃣ Inserir nova obra
+      const { lat, lon } = await geocode(enderecoCompleto);
+
+      const enderecoResumido = [
+        form.rua && `${form.rua}${form.numero ? ", " + form.numero : ""}`,
+        form.codigo_postal,
+        form.concelho,
+        form.distrito || "Portugal",
+      ]
+        .filter(Boolean)
+        .join(" — ");
+
+      const payload: any = {
+        nome: form.nomeObra,
+        descricao: form.descricao || "",
+        endereco: enderecoResumido || form.local || "",
+        cidade: form.concelho || form.local || "",
+        pais: "Portugal",
+
+        local: form.local || null,
+        cep: form.codigo_postal || null,
+        rua: form.rua || null,
+        numero: form.numero || null,
+        distrito: form.distrito || null,
+        concelho: form.concelho || null,
+
+        coordenadas: lat !== null && lon !== null ? { lat, lon } : null,
+        latitude: lat,
+        longitude: lon,
+
+        data_inicio: form.dataInicio,
+        data_fim: form.previsaoTermino,
+        status: "A iniciar",
+        progresso_total: 0,
+        custo_total: 0,
+        horas_trabalhadas_total: 0,
+        criado_em: new Date().toISOString(),
+        empresa_id: empresaId,
+      };
+
       const { data, error } = await supabase
         .from("obras")
-        .insert([
-          {
-            nome: form.nomeObra,
-            descricao: form.descricao || "",
-            endereco: form.local || "",
-            cidade: form.local || "",
-            pais: "Portugal",
-            latitude: form.latitude ? parseFloat(form.latitude) : null,
-            longitude: form.longitude ? parseFloat(form.longitude) : null,
-            data_inicio: form.dataInicio,
-            data_fim: form.previsaoTermino,
-            status: "A iniciar",
-            progresso_total: 0,
-            custo_total: 0,
-            horas_trabalhadas_total: 0,
-            criado_em: new Date().toISOString(),
-            empresa_id: empresaId,
-          },
-        ])
-        .select();
+        .insert([payload])
+        .select("id");
 
       if (error) {
-        console.error("❌ Erro ao salvar obra:", error);
-        toast.error("Erro ao salvar obra!");
-      } else {
-        const novaObraId = data?.[0]?.id;
-        console.log("✅ Obra criada com sucesso:", novaObraId);
-        toast.success("🏗️ Obra criada com sucesso!");
-        setSucesso(novaObraId);
+        console.error("Erro ao salvar obra:", error);
+        toast.error("Erro ao salvar obra.");
+        setLoading(false);
+        return;
       }
-    } catch (e) {
-      console.error("Erro inesperado ao criar obra:", e);
+
+      const novaObraId = data?.[0]?.id as string | undefined;
+
+      if (pedidoId) {
+        const { error: convErr } = await supabase
+          .from("pedidos_empresa_v2")
+          .update({ convertido: true })
+          .eq("id", pedidoId);
+        if (convErr) console.error("Erro ao marcar convertido:", convErr);
+      }
+
+      toast.success("🏗️ Obra criada com sucesso!");
+
+      window.dispatchEvent(
+        new CustomEvent("setSection", { detail: "obras-ativas" })
+      );
+
+      if (novaObraId) {
+        navigate(`/empresa/obras/ativas?novaObra=${novaObraId}`, {
+          replace: true,
+        });
+      } else {
+        navigate(`/empresa/obras/ativas`, { replace: true });
+      }
+
+      return;
+    } catch (e: any) {
+      console.error("Erro ao criar obra:", e?.message || e);
       toast.error("Erro inesperado ao criar obra.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Resetar formulário
-  const resetForm = () => {
-    setForm({
-      nomeObra: "",
-      empresa: user?.email || "",
-      local: "",
-      latitude: "",
-      longitude: "",
-      dataInicio: "",
-      previsaoTermino: "",
-      profissionais: "",
-      descricao: "",
-    });
-    setSucesso(false);
-  };
+  // ====== CLASSES BASE PARA INPUTS / TEXTAREA (modo claro + escuro) ======
+  const inputBase =
+    "w-full rounded-xl border px-3 py-2.5 text-sm md:text-[15px] " +
+    "bg-white/90 border-slate-200 text-slate-900 placeholder:text-slate-400 " +
+    "focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500 " +
+    "dark:bg-slate-900/70 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 " +
+    "transition-colors";
 
-  // Ir para obras ativas
-  const irParaObrasAtivas = () => {
-    console.log("🔁 Indo para obras-ativas com destaque da nova obra...");
-    window.dispatchEvent(
-      new CustomEvent("setSection", { detail: "obras-ativas" })
-    );
+  const textareaBase =
+    "w-full rounded-2xl border px-3 py-3 text-sm md:text-[15px] " +
+    "bg-white/90 border-slate-200 text-slate-900 placeholder:text-slate-400 " +
+    "focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500 " +
+    "dark:bg-slate-900/70 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 " +
+    "transition-colors";
 
-    if (sucesso) {
-      navigate(`/empresa?novaObra=${sucesso}`, { replace: true });
-    } else {
-      navigate("/empresa", { replace: true });
-    }
-  };
-
-  // ✅ Tela de sucesso
-  if (sucesso) {
-    return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex flex-col items-center justify-center h-[80vh] text-center p-6"
-      >
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="bg-white dark:bg-[#0f172a] p-10 rounded-3xl shadow-2xl border border-gray-100 dark:border-zinc-700 max-w-md w-full"
-        >
-          <CheckCircle2 className="w-20 h-20 text-green-500 mx-auto mb-4" />
-          <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-3">
-            Obra cadastrada com sucesso!
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-8">
-            Você pode acompanhar todos os detalhes ou cadastrar uma nova.
-          </p>
-
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <button
-              onClick={irParaObrasAtivas}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg transition"
-            >
-              Ver Minhas Obras
-            </button>
-            <button
-              onClick={resetForm}
-              className="border border-gray-300 dark:border-zinc-600 bg-white dark:bg-[#162033] text-gray-800 dark:text-gray-200 px-6 py-2.5 rounded-lg"
-            >
-              Criar Nova Obra
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    );
-  }
-
-  // ✅ Formulário (apenas cores no modo claro ajustadas)
   return (
-    <div className="p-8 max-w-4xl mx-auto relative">
-      <div className="flex items-center gap-3 mb-8">
-        <Building2 className="w-7 h-7 text-blue-600 dark:text-blue-400" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
-            Adicionar Obra
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">
-            Preencha as informações abaixo para registrar uma nova obra.
-          </p>
-        </div>
-      </div>
-
-      <motion.form
-        onSubmit={handleSubmit}
-        initial={{ opacity: 0, y: 15 }}
+    <div className="p-4 md:p-8 max-w-5xl mx-auto relative pb-14">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="bg-white dark:bg-[#0f172a] border border-gray-200 dark:border-zinc-800 shadow-sm rounded-2xl p-6 space-y-6"
+        transition={{ duration: 0.3 }}
+        className="bg-white/80 dark:bg-slate-950/70 border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm md:shadow-md px-4 md:px-8 py-6 md:py-8 space-y-6 md:space-y-8"
       >
-        {/* CAMPOS */}
-        <div className="grid md:grid-cols-2 gap-5">
-          {/* Nome da Obra */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Nome da Obra
-            </label>
-            <input
-              type="text"
-              name="nomeObra"
-              value={form.nomeObra}
-              onChange={handleChange}
-              placeholder="Digite o nome da obra..."
-              required
-              className="w-full bg-white dark:bg-[#1e293b] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-            />
+        {/* ===================== HEADER ===================== */}
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+            <Building2 className="w-5 h-5" />
           </div>
 
-          {/* Empresa */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Empresa
-            </label>
-            <input
-              type="text"
-              name="empresa"
-              value={form.empresa}
-              readOnly
-              className="w-full bg-gray-100 dark:bg-[#1e293b] text-gray-700 dark:text-gray-400 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 cursor-not-allowed"
-            />
-          </div>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl md:text-2xl font-semibold text-slate-900 dark:text-slate-50">
+              Adicionar Obra
+            </h1>
 
-          {/* Localização */}
-          <div className="md:col-span-2 relative">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Localização / Cidade
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                name="local"
-                value={form.local}
-                onChange={handleLocalChange}
-                onFocus={() => setShowSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                placeholder="Ex: Lisboa, Portugal"
-                required
-                className="w-full bg-white dark:bg-[#1e293b] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-              />
-              <MapPin className="absolute right-3 top-3 text-gray-400 w-5 h-5" />
+            <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
+              Preencha a morada completa. A localização (lat/lon) é obtida
+              automaticamente ao salvar, para facilitar a gestão das equipas em
+              campo.
+            </p>
+          </div>
+        </div>
+
+        {/* ================= FORM ================= */}
+        <motion.form
+          onSubmit={handleSubmit}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="space-y-7 md:space-y-9"
+        >
+          {/* IDENTIFICAÇÃO */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
+                  Identificação
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Dados principais da obra e da empresa responsável.
+                </p>
+              </div>
             </div>
 
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute z-20 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-zinc-700 rounded-lg mt-1 w-full shadow-xl max-h-48 overflow-y-auto">
-                {suggestions.map((s, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => handleSelectSuggestion(s)}
-                    className="block w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-[#243147] transition"
-                  >
-                    {s.display_name}
-                  </button>
-                ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Nome da Obra
+                </label>
+                <input
+                  type="text"
+                  value={form.nomeObra}
+                  onChange={onInput("nomeObra")}
+                  placeholder="Ex: Remodelação Apartamento"
+                  required
+                  className={inputBase}
+                />
               </div>
-            )}
-          </div>
 
-          {/* Datas e Profissionais */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Data de Início
-            </label>
-            <input
-              type="date"
-              name="dataInicio"
-              value={form.dataInicio}
-              onChange={handleChange}
-              required
-              className="w-full bg-white dark:bg-[#1e293b] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Empresa
+                </label>
+                <input
+                  type="text"
+                  value={form.empresa}
+                  readOnly
+                  className={`${inputBase} bg-slate-50/90 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 cursor-not-allowed`}
+                />
+              </div>
+            </div>
+          </section>
+
+          <div className="h-px bg-slate-200/80 dark:bg-slate-800/80" />
+
+          {/* ENDEREÇO */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
+                  Endereço
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Morada completa para gerar a localização automática da obra.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+              <div className="col-span-2 md:col-span-2">
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Código-postal *
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.codigo_postal}
+                    onChange={onCodigoPostal}
+                    placeholder="Ex: 1200-123"
+                    required
+                    className={inputBase}
+                  />
+                  {cpLoading && (
+                    <Loader2 className="w-4 h-4 animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  )}
+                </div>
+              </div>
+
+              <div className="col-span-2 md:col-span-2">
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Nº da Porta *
+                </label>
+                <input
+                  type="text"
+                  value={form.numero}
+                  onChange={onInput("numero")}
+                  placeholder="Ex: 245"
+                  required
+                  className={inputBase}
+                />
+              </div>
+            </div>
+
+            <div className="relative">
+              <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                Rua
+              </label>
+              <input
+                type="text"
+                value={form.rua}
+                onChange={onInput("rua")}
+                placeholder="Ex: Rua da Prata"
+                className={inputBase}
+                autoComplete="off"
+              />
+
+              {/* Sugestões de rua */}
+              {ruaSugestoes.length > 0 && (
+                <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg text-sm dark:bg-slate-900 dark:border-slate-700">
+                  {ruaSugestoes.map((s, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => escolherSugestaoRua(s)}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-slate-800"
+                    >
+                      {s.display_name}
+                    </button>
+                  ))}
+                  {ruaLoading && (
+                    <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      A carregar sugestões…
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Concelho
+                </label>
+                <input
+                  type="text"
+                  value={form.concelho}
+                  onChange={onInput("concelho")}
+                  placeholder="Ex: Lisboa"
+                  className={inputBase}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Distrito
+                </label>
+                <input
+                  type="text"
+                  value={form.distrito}
+                  onChange={onInput("distrito")}
+                  placeholder="Ex: Lisboa"
+                  className={inputBase}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Freguesia
+                </label>
+                <input
+                  type="text"
+                  value={form.freguesia}
+                  onChange={onInput("freguesia")}
+                  placeholder="Ex: Santa Maria Maior"
+                  className={inputBase}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                Local (livre)
+              </label>
+              <input
+                type="text"
+                value={form.local}
+                onChange={onInput("local")}
+                placeholder="Ex: Almada, Setúbal"
+                className={inputBase}
+              />
+            </div>
+          </section>
+
+          <div className="h-px bg-slate-200/80 dark:bg-slate-800/80" />
+
+          {/* DATAS & EQUIPE */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
+                  Datas & Equipe
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Período previsto e tamanho da equipa alocada.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Data de Início
+                </label>
+                <input
+                  type="date"
+                  value={form.dataInicio}
+                  onChange={onInput("dataInicio")}
+                  required
+                  className={inputBase}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Previsão de Término
+                </label>
+                <input
+                  type="date"
+                  value={form.previsaoTermino}
+                  onChange={onInput("previsaoTermino")}
+                  required
+                  className={inputBase}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                  Nº de Profissionais
+                </label>
+                <div className="relative">
+                  <Users className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                  <input
+                    type="number"
+                    value={form.profissionais}
+                    onChange={onInput("profissionais")}
+                    min={1}
+                    required
+                    className={`${inputBase} pl-9`}
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="h-px bg-slate-200/80 dark:bg-slate-800/80" />
+
+          {/* DESCRIÇÃO */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
+                  Descrição / Observações
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Contexto da obra, detalhes importantes e notas internas.
+                </p>
+              </div>
+            </div>
+
+            <textarea
+              value={form.descricao}
+              onChange={onInput("descricao")}
+              rows={4}
+              placeholder="Descreva brevemente o tipo de obra, principais frentes de trabalho, horários, acessos, etc."
+              className={textareaBase}
             />
+          </section>
+
+          {/* BOTÃO */}
+          <div className="flex justify-end pt-2">
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              type="submit"
+              disabled={loading}
+              className="flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium
+                         bg-blue-600 text-white hover:bg-blue-700
+                         disabled:opacity-60 disabled:cursor-not-allowed
+                         shadow-sm dark:shadow-none transition-colors"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Salvando…
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Adicionar Obra
+                </>
+              )}
+            </motion.button>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Previsão de Término
-            </label>
-            <input
-              type="date"
-              name="previsaoTermino"
-              value={form.previsaoTermino}
-              onChange={handleChange}
-              required
-              className="w-full bg-white dark:bg-[#1e293b] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Nº de Profissionais
-            </label>
-            <input
-              type="number"
-              name="profissionais"
-              value={form.profissionais}
-              onChange={handleChange}
-              required
-              className="w-full bg-white dark:bg-[#1e293b] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-            />
-          </div>
-        </div>
-
-        {/* Descrição */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Descrição / Observações
-          </label>
-          <textarea
-            name="descricao"
-            value={form.descricao}
-            onChange={handleChange}
-            rows={4}
-            className="w-full bg-white dark:bg-[#1e293b] text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-            placeholder="Descreva brevemente o tipo de obra..."
-          />
-        </div>
-
-        {/* Botão */}
-        <div className="flex justify-end">
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            type="submit"
-            disabled={loading}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-500/25 disabled:opacity-70"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Salvando...
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" /> Adicionar Obra
-              </>
-            )}
-          </motion.button>
-        </div>
-      </motion.form>
+        </motion.form>
+      </motion.div>
     </div>
   );
 }

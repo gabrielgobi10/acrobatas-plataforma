@@ -11,10 +11,10 @@ import {
   Loader2,
   MailOpen,
   FileWarning,
-  Download,
+  Search,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 type VinculoStatus = "ativo" | "convocado" | "pendente";
 
@@ -22,6 +22,7 @@ type Profissional = {
   id: string;
   nome: string;
   area?: string | null;
+  funcao?: string | null;
   foto_url?: string | null;
   telefone?: string | null;
   email?: string | null;
@@ -42,6 +43,21 @@ type Vinculo = {
 };
 
 export default function Equipas({ obraId }: { obraId: string }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Tema (para bordas/cores do modal)
+  const [isDark, setIsDark] = useState(
+    document.documentElement.classList.contains("dark")
+  );
+  useEffect(() => {
+    const obs = new MutationObserver(() =>
+      setIsDark(document.documentElement.classList.contains("dark"))
+    );
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [equipe, setEquipe] = useState<Vinculo[]>([]);
@@ -49,7 +65,19 @@ export default function Equipas({ obraId }: { obraId: string }) {
   const [filtroFuncao, setFiltroFuncao] = useState("Todos");
   const [painelAberto, setPainelAberto] = useState(false);
   const [perfilAberto, setPerfilAberto] = useState<Profissional | null>(null);
-  const navigate = useNavigate();
+
+  // —— Modal Adicionar (mantido caso queira usar depois por outro fluxo)
+  const [abrirAdd, setAbrirAdd] = useState(false);
+  const [carregandoLista, setCarregandoLista] = useState(false);
+  const [profissionais, setProfissionais] = useState<Profissional[]>([]);
+  const [busca, setBusca] = useState("");
+  const [selecionado, setSelecionado] = useState<Profissional | null>(null);
+  const [formAdd, setFormAdd] = useState({
+    funcao: "",
+    status: "convocado" as VinculoStatus,
+    experiencia: "",
+  });
+  const [salvandoAdd, setSalvandoAdd] = useState(false);
 
   async function load() {
     if (!obraId) return;
@@ -66,6 +94,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
             id,
             nome,
             area,
+            funcao,
             foto_url,
             telefone,
             email
@@ -90,7 +119,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
             Math.floor(10000000000 + Math.random() * 90000000000)
           ),
           profissao: v.funcao || "Profissional de Construção",
-        },
+        } as Profissional,
       }));
 
       setEquipe(all.filter((v) => v.status !== "pendente"));
@@ -104,6 +133,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obraId]);
 
   async function handleStatusUpdate(id: string, novoStatus: VinculoStatus) {
@@ -124,16 +154,127 @@ export default function Equipas({ obraId }: { obraId: string }) {
 
   const equipaFiltrada = useMemo(() => {
     if (filtroFuncao === "Todos") return equipe;
-    return equipe.filter((e) => e.funcao === filtroFuncao);
+    return equipe.filter((e) => (e.funcao || "Sem função") === filtroFuncao);
   }, [filtroFuncao, equipe]);
 
   const candidaturasPendentes = candidaturas.length;
 
+  // ====== Adicionar: carregar profissionais com busca (para o modal mantido)
+  async function carregarProfissionaisLista(query: string) {
+    try {
+      setCarregandoLista(true);
+
+      let q = supabase
+        .from("profissionais")
+        .select("id, nome, area, funcao, foto_url, telefone, email")
+        .limit(50);
+
+      if (query?.trim()) {
+        q = q.ilike("nome", `%${query.trim()}%`);
+      }
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      const idsVinculados = new Set(
+        equipe.map((v) => v.profissional?.id).filter(Boolean) as string[]
+      );
+      const lista = (data || []).filter((p: any) => !idsVinculados.has(p.id));
+
+      setProfissionais(lista as Profissional[]);
+    } catch (e) {
+      console.error("Erro carregando profissionais:", e);
+      setProfissionais([]);
+    } finally {
+      setCarregandoLista(false);
+    }
+  }
+
+  useEffect(() => {
+    if (abrirAdd) carregarProfissionaisLista(busca);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirAdd]);
+
+  // debounce simples da busca
+  useEffect(() => {
+    if (!abrirAdd) return;
+    const t = setTimeout(() => carregarProfissionaisLista(busca), 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca]);
+
+  async function salvarVinculo() {
+    if (!selecionado) return;
+    try {
+      setSalvandoAdd(true);
+      const payload = {
+        obra_id: obraId,
+        profissional_id: selecionado.id,
+        status: formAdd.status,
+        funcao: formAdd.funcao || selecionado.funcao || selecionado.area || null,
+        experiencia: formAdd.experiencia || null,
+      };
+
+      const { error } = await supabase.from("profissionais_obras").insert([payload]);
+      if (error) throw error;
+
+      setAbrirAdd(false);
+      setSelecionado(null);
+      setFormAdd({ funcao: "", status: "convocado", experiencia: "" });
+      await load();
+    } catch (e) {
+      console.error("❌ Erro ao salvar vínculo:", e);
+    } finally {
+      setSalvandoAdd(false);
+    }
+  }
+
+  const cardBase = isDark ? "bg-[#151B24] border-[#1E2632]" : "bg-white border-gray-200";
+
   return (
     <div className="relative w-full">
+      {/* utilitários de responsividade e modal */}
+      <style>{`
+@media (max-width: 640px){
+  .box { border-radius: 14px !important; padding: 14px !important; }
+  .stats { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  .btn-mobile { width: 100% !important; font-size: 16px !important; padding: 12px !important; }
+
+  /* bottom-sheet mobile */
+  .modal-mobile{
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    border-top-left-radius: 18px !important;
+    border-top-right-radius: 18px !important;
+    overflow: hidden;
+    box-shadow: 0 -8px 30px rgba(0,0,0,.35);
+  }
+  .modal-header{ position: sticky; top:0; z-index:2; padding:14px 16px; }
+  .modal-body{ max-height: 72vh; overflow:auto; -webkit-overflow-scrolling:touch; padding: 12px 16px 16px 16px; }
+  @supports (height: 1dvh){ .modal-body{ max-height: 72dvh; } }
+  .modal-footer{ position: sticky; bottom:0; z-index:2; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)) 16px; }
+}
+@media (min-width: 641px){
+  .stats { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+  /* janela central no desktop */
+  .modal-desktop{
+    width: min(96vw, 900px);
+    border-radius: 16px;
+    overflow: hidden;
+    max-height: 90vh;
+  }
+  .modal-body{ max-height: calc(90vh - 120px); overflow:auto; }
+}
+
+/* evita “faixa vazia”: corpo é quem rola */
+.modal-body{ flex:1; min-height:0; overflow:auto; }
+      `}</style>
+
       <div className="flex flex-col xl:flex-row gap-6">
         <div className="flex-1 space-y-6 sm:space-y-8">
-          {/* 🔹 Cards resumo */}
+          {/* Resumo */}
           <div className="grid grid-cols-3 gap-3 sm:gap-4">
             <ResumoCard titulo="Total" valor={equipe.length} />
             <ResumoCard
@@ -146,28 +287,33 @@ export default function Equipas({ obraId }: { obraId: string }) {
             />
           </div>
 
-          {/* 🔹 Equipa principal */}
-          <div className="bg-white dark:bg-[#1b2332] rounded-xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm p-4 sm:p-6">
+          {/* Equipa principal */}
+          <div className={`rounded-xl sm:rounded-2xl border shadow-sm p-4 sm:p-6 ${cardBase}`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-              <h3 className="font-semibold flex items-center gap-2 text-zinc-900 dark:text-white text-sm sm:text-base">
+              <h3 className={`font-semibold flex items-center gap-2 text-sm sm:text-base ${isDark ? "text-white" : "text-zinc-900"}`}>
                 <Users className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
                 Equipa desta Obra
               </h3>
+
+              {/* Abre a Base de Profissionais com state para o Voltar */}
               <button
-                onClick={() => {
-                  const evt = new CustomEvent("setSection", {
-                    detail: "adicionar-profissional",
-                  });
-                  window.top?.dispatchEvent(evt);
-                }}
-                className="px-3 py-1.5 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm flex items-center gap-1.5 shadow-sm transition"
+                onClick={() =>
+                  navigate("/empresa/profissionais", {
+                    state: {
+                      fromObra: true,
+                      obraId,
+                      backTo: location.pathname, // volta exatamente de onde veio
+                    },
+                  })
+                }
+                className="px-3 py-1.5 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm flex items-center gap-1.5 shadow-sm transition btn-mobile sm:w-auto"
               >
                 <UserPlus className="w-4 h-4" />
                 Adicionar
               </button>
             </div>
 
-            {/* 🔹 Filtros */}
+            {/* Filtros */}
             <div className="flex flex-wrap items-center gap-2 mb-5">
               {["Todos", ...new Set(equipe.map((e) => e.funcao || "Sem função"))].map(
                 (f) => (
@@ -177,7 +323,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                     className={`px-3 py-1 rounded-full text-xs sm:text-sm border transition ${
                       filtroFuncao === f
                         ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white dark:bg-[#121926] border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 dark:hover:bg-blue-500/10"
+                        : `${isDark ? "bg-[#121926] border-zinc-700 text-zinc-300 hover:bg-blue-500/10" : "bg-white border-zinc-300 text-zinc-700 hover:bg-blue-50"}`
                     }`}
                   >
                     {f}
@@ -186,9 +332,9 @@ export default function Equipas({ obraId }: { obraId: string }) {
               )}
             </div>
 
-            {/* 🔹 Lista da equipa */}
+            {/* Lista */}
             {loading ? (
-              <div className="text-zinc-500 dark:text-zinc-400 text-sm">
+              <div className={`${isDark ? "text-zinc-400" : "text-zinc-500"} text-sm`}>
                 Carregando...
               </div>
             ) : equipaFiltrada.length ? (
@@ -201,7 +347,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                     animate={{ opacity: 1, y: 0 }}
                     whileHover={{ scale: 1.02 }}
                     onClick={() => setPerfilAberto(e.profissional || null)}
-                    className="cursor-pointer bg-gradient-to-br from-zinc-50 to-white dark:from-zinc-800 dark:to-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg sm:rounded-xl p-3 sm:p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-all duration-200"
+                    className={`cursor-pointer rounded-lg sm:rounded-xl p-3 sm:p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-all duration-200 border ${isDark ? "from-zinc-800 to-zinc-900 bg-gradient-to-br border-zinc-700" : "from-zinc-50 to-white bg-gradient-to-br border-zinc-200"}`}
                   >
                     <div className="flex items-center gap-3">
                       <img
@@ -215,7 +361,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                         className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-emerald-400/40"
                       />
                       <div className="min-w-0">
-                        <div className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-white truncate">
+                        <div className={`text-sm sm:text-base font-semibold truncate ${isDark ? "text-white" : "text-zinc-900"}`}>
                           {e.profissional?.nome || "Sem nome"}
                         </div>
                         <div className="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 truncate">
@@ -242,7 +388,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-zinc-500 dark:text-zinc-400">
+              <div className={`${isDark ? "text-zinc-400" : "text-zinc-500"} text-sm`}>
                 Nenhum profissional vinculado a esta obra.
               </div>
             )}
@@ -250,10 +396,10 @@ export default function Equipas({ obraId }: { obraId: string }) {
         </div>
       </div>
 
-      {/* 🔹 Botão flutuante de candidaturas */}
+      {/* Botão flutuante Candidaturas */}
       <button
         onClick={() => setPainelAberto(!painelAberto)}
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 sm:p-4 shadow-lg flex items-center gap-2 transition-all"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 sm:p-4 shadow-lg flex items-center gap-2 transition-all"
       >
         <MailOpen className="w-4 h-4 sm:w-5 sm:h-5" />
         <span className="font-medium text-xs sm:text-sm hidden sm:block">
@@ -270,26 +416,26 @@ export default function Equipas({ obraId }: { obraId: string }) {
         )}
       </button>
 
-      {/* 🔹 Painel lateral de candidaturas */}
+      {/* Painel lateral Candidaturas */}
       <AnimatePresence>
         {painelAberto && (
           <>
             <motion.div
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setPainelAberto(false)}
             />
             <motion.aside
-              className="fixed top-0 right-0 h-full w-full sm:w-[400px] bg-white dark:bg-[#121926] border-l border-zinc-300 dark:border-zinc-700 z-50 shadow-2xl p-4 sm:p-6 overflow-y-auto"
+              className={`fixed top-0 right-0 h-full w-full sm:w-[400px] border-l shadow-2xl p-4 sm:p-6 overflow-y-auto z-40 ${isDark ? "bg-[#121926] border-zinc-700" : "bg-white border-zinc-300"}`}
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", stiffness: 200, damping: 25 }}
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2 text-zinc-900 dark:text-white">
+                <h3 className={`font-semibold text-base sm:text-lg flex items-center gap-2 ${isDark ? "text-white" : "text-zinc-900"}`}>
                   <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
                   Candidaturas
                 </h3>
@@ -302,7 +448,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
               </div>
 
               {loading ? (
-                <div className="text-zinc-500 dark:text-zinc-400 text-sm">
+                <div className={`${isDark ? "text-zinc-400" : "text-zinc-500"} text-sm`}>
                   Carregando...
                 </div>
               ) : candidaturas.length ? (
@@ -315,7 +461,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                       animate={{ opacity: 1, y: 0 }}
                       whileHover={{ scale: 1.01 }}
                       onClick={() => setPerfilAberto(c.profissional || null)}
-                      className="bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-800 dark:to-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 sm:p-4 shadow-sm hover:shadow-md transition-all"
+                      className={`rounded-xl p-3 sm:p-4 shadow-sm hover:shadow-md transition-all border ${isDark ? "from-zinc-800 to-zinc-900 bg-gradient-to-br border-zinc-700" : "from-white to-zinc-50 bg-gradient-to-br border-zinc-300"}`}
                     >
                       <div className="flex items-center gap-3">
                         <img
@@ -329,7 +475,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                           className="w-10 h-10 rounded-full object-cover border-2 border-blue-400/40"
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-zinc-900 dark:text-white truncate">
+                          <div className={`text-sm font-medium truncate ${isDark ? "text-white" : "text-zinc-900"}`}>
                             {c.profissional?.nome}
                           </div>
                           <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
@@ -365,7 +511,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-zinc-500 dark:text-zinc-400">
+                <div className={`${isDark ? "text-zinc-400" : "text-zinc-500"} text-sm`}>
                   Nenhuma candidatura pendente.
                 </div>
               )}
@@ -374,7 +520,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
         )}
       </AnimatePresence>
 
-      {/* 🔹 Modal perfil profissional */}
+      {/* Modal de Perfil */}
       <AnimatePresence>
         {perfilAberto && (
           <motion.div
@@ -384,7 +530,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="bg-white dark:bg-[#1b2332] rounded-xl sm:rounded-2xl p-4 sm:p-6 w-full max-w-md border border-zinc-200 dark:border-zinc-700 shadow-2xl relative"
+              className={`rounded-xl sm:rounded-2xl p-4 sm:p-6 w-full max-w-md border shadow-2xl relative ${isDark ? "bg-[#1b2332] border-zinc-700" : "bg-white border-zinc-200"}`}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -407,7 +553,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                   alt={perfilAberto.nome}
                   className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-2 border-emerald-400/40 shadow-md"
                 />
-                <h2 className="text-base sm:text-lg font-semibold text-zinc-900 dark:text-white">
+                <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-zinc-900"}`}>
                   {perfilAberto.nome}
                 </h2>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
@@ -415,14 +561,14 @@ export default function Equipas({ obraId }: { obraId: string }) {
                 </p>
               </div>
 
-              <div className="mt-5 space-y-1 text-xs sm:text-sm text-zinc-700 dark:text-zinc-300">
+              <div className={`mt-5 space-y-1 text-xs sm:text-sm ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                 <p><strong>NIF:</strong> {perfilAberto.nif}</p>
                 <p><strong>Categoria:</strong> {perfilAberto.categoria}</p>
                 <p><strong>Sexo:</strong> {perfilAberto.sexo}</p>
                 <p><strong>Seg. Social:</strong> {perfilAberto.seguranca_social}</p>
               </div>
 
-              <div className="mt-5 rounded-xl border border-zinc-200 dark:border-zinc-700 p-3 sm:p-4 bg-zinc-50 dark:bg-zinc-800/50">
+              <div className={`mt-5 rounded-xl border p-3 sm:p-4 ${isDark ? "border-zinc-700 bg-zinc-800/50" : "border-zinc-200 bg-zinc-50"}`}>
                 {perfilAberto.documentacao_ok ? (
                   <div className="flex items-center gap-3 text-green-600 dark:text-green-400 text-xs sm:text-sm">
                     <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -450,6 +596,157 @@ export default function Equipas({ obraId }: { obraId: string }) {
                   className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-white text-xs sm:text-sm flex items-center gap-1.5 transition"
                 >
                   Fechar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL ADICIONAR – mantido caso queira usar por outro caminho */}
+      <AnimatePresence>
+        {abrirAdd && (
+          <motion.div
+            className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setAbrirAdd(false)}
+          >
+            <motion.div
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              /* >>> REMOVIDO w-full PARA NÃO ESTICAR NO DESKTOP <<< */
+              className={`modal-mobile sm:modal-desktop border ${cardBase} ${isDark ? "text-gray-200" : "text-gray-800"} flex flex-col p-0 max-h-[90vh]`}
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className={`modal-header ${cardBase} flex items-center justify-between`}>
+                <h4 className="text-base font-semibold">Adicionar à Equipe</h4>
+                <button
+                  aria-label="Fechar"
+                  onClick={() => setAbrirAdd(false)}
+                  className="p-2 rounded-md hover:bg-black/10"
+                >
+                  <X />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="modal-body">
+                {/* Busca */}
+                <div className={`border rounded-xl p-3 ${cardBase}`}>
+                  <div className="flex items-center gap-2">
+                    <Search className="w-4 h-4 opacity-60" />
+                    <input
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      placeholder="Buscar profissional por nome…"
+                      className="flex-1 bg-transparent outline-none text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Lista */}
+                <div className="mt-3">
+                  {carregandoLista ? (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="animate-spin text-gray-400" />
+                    </div>
+                  ) : profissionais.length === 0 ? (
+                    <div className="text-sm opacity-70">
+                      Nenhum profissional encontrado.
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-gray-700/20 dark:divide-gray-700 rounded-xl overflow-hidden border border-gray-200/40 dark:border-gray-700/50">
+                      {profissionais.map((p) => {
+                        const ativo = selecionado?.id === p.id;
+                        return (
+                          <li
+                            key={p.id}
+                            className={`p-3 sm:p-4 cursor-pointer flex items-center gap-3 ${ativo ? "bg-blue-500/10" : ""}`}
+                            onClick={() => setSelecionado(ativo ? null : p)}
+                          >
+                            <img
+                              src={
+                                p.foto_url ||
+                                `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                                  p.nome || "?"
+                                )}`
+                              }
+                              alt={p.nome}
+                              className="w-10 h-10 rounded-full object-cover border"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium truncate">{p.nome}</div>
+                              <div className="text-xs opacity-70 truncate">
+                                {p.funcao || p.area || "—"}
+                              </div>
+                            </div>
+                            {ativo && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-blue-600 text-white">
+                                Selecionado
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Form complementar */}
+                <div className="grid gap-3 sm:grid-cols-3 mt-4">
+                  <div className="sm:col-span-1">
+                    <label className="text-xs opacity-70">Status</label>
+                    <select
+                      value={formAdd.status}
+                      onChange={(e) => setFormAdd({ ...formAdd, status: e.target.value as VinculoStatus })}
+                      className="mt-1 w-full border rounded-lg px-3 py-2 bg-transparent"
+                    >
+                      <option value="convocado">Convocado</option>
+                      <option value="ativo">Ativo</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-1">
+                    <label className="text-xs opacity-70">Função</label>
+                    <input
+                      value={formAdd.funcao}
+                      onChange={(e) => setFormAdd({ ...formAdd, funcao: e.target.value })}
+                      placeholder="Ex.: Eletricista"
+                      className="mt-1 w-full border rounded-lg px-3 py-2 bg-transparent"
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <label className="text-xs opacity-70">Experiência</label>
+                    <input
+                      value={formAdd.experiencia}
+                      onChange={(e) => setFormAdd({ ...formAdd, experiencia: e.target.value })}
+                      placeholder="Ex.: 2–3 anos"
+                      className="mt-1 w-full border rounded-lg px-3 py-2 bg-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className={`modal-footer ${cardBase} flex justify-end gap-3`}>
+                <button
+                  onClick={() => setAbrirAdd(false)}
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={salvarVinculo}
+                  disabled={!selecionado || salvandoAdd}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 disabled:opacity-60"
+                >
+                  {salvandoAdd ? <Loader2 className="animate-spin w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                  Vincular
                 </button>
               </div>
             </motion.div>

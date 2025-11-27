@@ -1,3 +1,4 @@
+// src/components/admin/Admindashboard/UsuariosSection.tsx
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
@@ -8,22 +9,20 @@ import {
   SlidersHorizontal,
   Eye,
   Loader2,
-  MessageSquare,
   X,
   Star,
-  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
-import { useNavigate } from "react-router-dom";
 
 // ===================================================
-// 🔹 Função para verificar período
+// 🔹 Verifica período
 // ===================================================
 const verificaPeriodo = (dataCadastro: string, filtro: string) => {
   if (!filtro || filtro === "todos") return true;
   const agora = new Date();
   const data = new Date(dataCadastro);
-  const diff = (agora.getTime() - data.getTime()) / (1000 * 60 * 60 * 24); // dias
+  const diff = (agora.getTime() - data.getTime()) / (1000 * 60 * 60 * 24);
+
   if (filtro === "7dias") return diff <= 7;
   if (filtro === "30dias") return diff <= 30;
   if (filtro === "mes") return data.getMonth() === agora.getMonth();
@@ -31,26 +30,39 @@ const verificaPeriodo = (dataCadastro: string, filtro: string) => {
 };
 
 // ===================================================
-// 🔹 Renderizar estrelas de confiabilidade
+// 🔹 Renderizar estrelas
 // ===================================================
 const renderConfiabilidade = (valor: number | null) => {
-  if (valor === null || valor === undefined) return <span className="text-gray-400">—</span>;
+  if (!valor) {
+    return <span className="text-slate-400 dark:text-slate-500">—</span>;
+  }
+
   const estrelas = Math.round(valor);
   const cor =
-    valor >= 4.5 ? "text-green-500" : valor >= 3 ? "text-yellow-500" : "text-red-500";
+    valor >= 4.5
+      ? "text-emerald-500"
+      : valor >= 3
+      ? "text-amber-400"
+      : "text-red-500";
+
   return (
     <span className={`flex items-center gap-1 ${cor}`}>
       {[...Array(5)].map((_, i) => (
         <Star
           key={i}
-          className={`w-4 h-4 ${i < estrelas ? "fill-current" : "text-gray-300"}`}
+          className={`w-4 h-4 ${
+            i < estrelas ? "fill-current" : "text-slate-600/30"
+          }`}
         />
       ))}
     </span>
   );
 };
 
-export default function UsuariosSection() {
+// ===================================================
+// 🔹 COMPONENTE PRINCIPAL
+// ===================================================
+export default function UsuariosSection({ onSelectSection }: any) {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [tipoSelecionado, setTipoSelecionado] = useState("todos");
   const [busca, setBusca] = useState("");
@@ -58,19 +70,18 @@ export default function UsuariosSection() {
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroProfissao, setFiltroProfissao] = useState("");
   const [filtroConfiabilidade, setFiltroConfiabilidade] = useState("");
-  const [filtroPeriodo, setFiltroPeriodo] = useState("");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("todos");
   const [mostrarAlertas, setMostrarAlertas] = useState(false);
   const [filtroAberto, setFiltroAberto] = useState(false);
   const [profissoes, setProfissoes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [modalUsuario, setModalUsuario] = useState<any>(null);
-  const navigate = useNavigate();
 
   // ===================================================
-  // 🔹 BUSCAR USUÁRIOS DO SUPABASE
+  // 🔹 BUSCAR USUÁRIOS
   // ===================================================
   const carregarUsuarios = async () => {
     setLoading(true);
+
     const { data, error } = await supabase
       .from("usuarios")
       .select("*")
@@ -79,12 +90,9 @@ export default function UsuariosSection() {
     if (error) console.error("Erro ao buscar usuários:", error);
     else {
       setUsuarios(data || []);
+
       const listaProf = [
-        ...new Set(
-          (data || [])
-            .filter((u) => u.profissao)
-            .map((u) => u.profissao)
-        ),
+        ...new Set((data || []).filter((u) => u.profissao).map((u) => u.profissao)),
       ];
       setProfissoes(listaProf);
     }
@@ -97,23 +105,19 @@ export default function UsuariosSection() {
   }, []);
 
   // ===================================================
-  // 🔹 FILTRAR USUÁRIOS DINAMICAMENTE
+  // 🔹 FILTRO
   // ===================================================
   const usuariosFiltrados = usuarios.filter((u) => {
-    const tipoMatch =
-      tipoSelecionado === "todos" || u.tipo_usuario === tipoSelecionado;
+    const tipoMatch = tipoSelecionado === "todos" || u.tipo_usuario === tipoSelecionado;
     const buscaMatch =
       !busca ||
       u.nome?.toLowerCase().includes(busca.toLowerCase()) ||
       u.email?.toLowerCase().includes(busca.toLowerCase());
     const localMatch =
       !filtroLocal ||
-      (u.localidade &&
-        u.localidade.toLowerCase().includes(filtroLocal.toLowerCase()));
-    const statusMatch =
-      !filtroStatus || u.status === filtroStatus;
-    const profissaoMatch =
-      !filtroProfissao || u.profissao === filtroProfissao;
+      u.localidade?.toLowerCase().includes(filtroLocal.toLowerCase());
+    const statusMatch = !filtroStatus || u.status === filtroStatus;
+    const profissaoMatch = !filtroProfissao || u.profissao === filtroProfissao;
     const confiabMatch =
       !filtroConfiabilidade || u.confiavel_label === filtroConfiabilidade;
     const alertasMatch = !mostrarAlertas || u.alertas_ativos > 0;
@@ -132,353 +136,233 @@ export default function UsuariosSection() {
   });
 
   // ===================================================
-  // 🔹 CONTADORES (CARDS)
+  // 🔹 CARDS RESUMO
   // ===================================================
   const cards = [
     {
       key: "todos",
       title: "Total de Usuários",
-      color: "from-blue-600 to-blue-400",
+      color: "from-sky-500 to-blue-500",
       count: usuarios.length,
       icon: <Users className="w-6 h-6 text-white/90" />,
     },
     {
       key: "profissional",
       title: "Profissionais",
-      color: "from-sky-500 to-cyan-400",
+      color: "from-cyan-500 to-emerald-400",
       count: usuarios.filter((u) => u.tipo_usuario === "profissional").length,
       icon: <Briefcase className="w-6 h-6 text-white/90" />,
     },
     {
       key: "empresa",
       title: "Empresas",
-      color: "from-green-500 to-emerald-400",
+      color: "from-emerald-500 to-green-400",
       count: usuarios.filter((u) => u.tipo_usuario === "empresa").length,
       icon: <ShieldCheck className="w-6 h-6 text-white/90" />,
     },
     {
       key: "admin",
       title: "Administradores",
-      color: "from-purple-500 to-indigo-400",
+      color: "from-violet-500 to-indigo-400",
       count: usuarios.filter((u) => u.tipo_usuario === "admin").length,
       icon: <ShieldCheck className="w-6 h-6 text-white/90" />,
     },
   ];
 
   // ===================================================
-  // 🔹 INICIAR CONVERSA
-  // ===================================================
-  const iniciarConversa = async (usuario: any) => {
-    try {
-      const { data: novaSessao, error: erroSessao } = await supabase
-        .from("chat_sessoes")
-        .insert([
-          {
-            titulo: `Conversa com ${usuario.nome}`,
-            profissional_id:
-              usuario.tipo_usuario === "profissional" ? usuario.id : null,
-            empresa_id:
-              usuario.tipo_usuario === "empresa" ? usuario.id : null,
-            status: "ativo",
-          },
-        ])
-        .select()
-        .single();
-
-      if (erroSessao) throw erroSessao;
-
-      await supabase.from("chat_mensagens").insert([
-        {
-          sessao_id: novaSessao.id,
-          remetente_id: "admin",
-          conteudo: "💬 Olá! Esta conversa foi iniciada pelo suporte.",
-          tipo: "texto",
-        },
-      ]);
-
-      setModalUsuario(null);
-      navigate("/painel/suporte", { state: { abrirSessaoId: novaSessao.id } });
-    } catch (err) {
-      console.error("Erro ao criar conversa:", err);
-      alert("Erro ao enviar mensagem. Veja o console.");
-    }
-  };
-
-  // ===================================================
-  // 🔹 INTERFACE
+  // 🔹 UI
   // ===================================================
   return (
     <motion.div
-      initial={{ opacity: 0, y: 15 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="min-h-screen bg-gradient-to-b from-[#f7f9fc] to-[#f0f4fa] p-8 rounded-3xl"
+      transition={{ duration: 0.25 }}
+      className="space-y-6"
     >
-      {/* Cabeçalho */}
-      <div className="rounded-2xl p-6 bg-white bg-gray-100 border border-gray-100 border-gray-100 shadow-sm mb-8">
-        <h2 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
-          <Users className="w-6 h-6" /> Gestão de Usuários
+      {/* CABEÇALHO */}
+      <div className="rounded-2xl px-4 py-4 sm:px-6 sm:py-5 bg-white/80 dark:bg-slate-900/80 border border-slate-100 dark:border-slate-800 shadow-sm">
+        <h2 className="text-lg sm:text-2xl font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-50">
+          <Users className="w-6 h-6 text-sky-500" />
+          Gestão de Usuários
         </h2>
-        <p className="text-gray-500 text-gray-500 mt-1">
-          Visualize, filtre e gerencie os usuários cadastrados no sistema.
-        </p>
       </div>
 
-      {/* Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      {/* CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {cards.map((card) => (
-          <motion.div
+          <motion.button
             key={card.key}
             onClick={() => setTipoSelecionado(card.key)}
-            whileHover={{ scale: 1.03 }}
-            className={`p-6 rounded-2xl text-white shadow-lg bg-gradient-to-br ${card.color} cursor-pointer transition-all ${
-              tipoSelecionado === card.key ? "ring-4 ring-white/30" : ""
+            whileHover={{ scale: 1.02 }}
+            className={`text-left p-3 sm:p-4 rounded-2xl text-white shadow-md border border-white/10 bg-gradient-to-br ${card.color} transition-all cursor-pointer ${
+              tipoSelecionado === card.key ? "ring-2 ring-white/60" : "opacity-90 hover:opacity-100"
             }`}
           >
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-medium opacity-90 mb-1">
-                  {card.title}
-                </h3>
+                <h3 className="text-xs sm:text-sm font-medium opacity-90">{card.title}</h3>
                 <motion.p
                   key={card.count}
-                  initial={{ opacity: 0, y: 5 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="text-4xl font-bold"
+                  className="text-2xl sm:text-3xl font-semibold"
                 >
                   {card.count}
                 </motion.p>
               </div>
               {card.icon}
             </div>
-          </motion.div>
+          </motion.button>
         ))}
       </div>
 
-      {/* Filtros + Busca */}
-      <div className="bg-white bg-white rounded-2xl shadow border border-gray-100 border-gray-200 p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-semibold text-gray-700 text-lg">
+      {/* LISTA */}
+      <div className="rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5 space-y-4">
+
+        {/* TOPO LISTA */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm sm:text-base">
             Usuários Registrados
           </h3>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setFiltroAberto(!filtroAberto)}
-              className="flex items-center gap-2 bg-gray-50 bg-gray-50 hover:bg-gray-100 dark:bg-zinc-900 px-3 py-2 rounded-lg border border-gray-200 border-gray-200 text-sm text-gray-700 transition"
-            >
-              <SlidersHorizontal className="w-4 h-4" /> Filtros
-            </button>
-            <div className="flex items-center gap-2 bg-gray-50 bg-white px-3 py-2 rounded-lg border border-gray-200 border-gray-300">
-              <Search className="w-4 h-4 text-gray-500 text-gray-600" />
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+
+            {/* BUSCA */}
+            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 px-3 py-2 rounded-lg w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Buscar por nome ou e-mail..."
+                placeholder="Buscar..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                className="bg-transparent outline-none text-sm text-gray-700 placeholder-gray-400 w-52"
+                className="bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder-slate-400 flex-1"
               />
             </div>
+
+            {/* FILTROS */}
+            <button
+              onClick={() => setFiltroAberto(!filtroAberto)}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              Filtros
+            </button>
           </div>
         </div>
 
-        {/* Painel de filtros avançados */}
-        {filtroAberto && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gray-50 dark:bg-zinc-950 p-4 rounded-xl border mb-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4"
-          >
-            {/* Localidade */}
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400">Localidade</label>
-              <input
-                type="text"
-                placeholder="Ex: Lisboa"
-                value={filtroLocal}
-                onChange={(e) => setFiltroLocal(e.target.value)}
-                className="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-              />
-            </div>
-
-            {/* Tipo */}
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400">Tipo de Usuário</label>
-              <select
-                value={tipoSelecionado}
-                onChange={(e) => setTipoSelecionado(e.target.value)}
-                className="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 outline-none capitalize"
-              >
-                <option value="todos">Todos</option>
-                <option value="profissional">Profissional</option>
-                <option value="empresa">Empresa</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </div>
-
-            {/* Profissão (condicional) */}
-            {tipoSelecionado === "profissional" && (
-              <div>
-                <label className="text-xs text-gray-500 dark:text-gray-400">Profissão</label>
-                <select
-                  value={filtroProfissao}
-                  onChange={(e) => setFiltroProfissao(e.target.value)}
-                  className="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 outline-none capitalize"
-                >
-                  <option value="">Todas</option>
-                  {profissoes.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Confiabilidade */}
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400">Confiabilidade</label>
-              <select
-                value={filtroConfiabilidade}
-                onChange={(e) => setFiltroConfiabilidade(e.target.value)}
-                className="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-              >
-                <option value="">Todas</option>
-                <option value="Alta">Alta</option>
-                <option value="Média">Média</option>
-                <option value="Baixa">Baixa</option>
-              </select>
-            </div>
-
-            {/* Período */}
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400">Período de Cadastro</label>
-              <select
-                value={filtroPeriodo}
-                onChange={(e) => setFiltroPeriodo(e.target.value)}
-                className="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-              >
-                <option value="todos">Todos</option>
-                <option value="7dias">Últimos 7 dias</option>
-                <option value="30dias">Últimos 30 dias</option>
-                <option value="mes">Este mês</option>
-              </select>
-            </div>
-
-            {/* Status */}
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400">Status</label>
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-              >
-                <option value="">Todos</option>
-                <option value="ativo">Ativo</option>
-                <option value="pendente">Pendente</option>
-              </select>
-            </div>
-
-            {/* Checkbox de alertas */}
-            <div className="flex items-center gap-2 mt-6">
-              <input
-                type="checkbox"
-                checked={mostrarAlertas}
-                onChange={() => setMostrarAlertas(!mostrarAlertas)}
-              />
-              <label className="text-sm text-gray-600 text-gray-600">
-                Mostrar apenas com alertas ativos
-              </label>
-            </div>
-
-            {/* Botão limpar */}
-            <div className="flex items-end">
-              <button
-                onClick={() => {
-                  setFiltroLocal("");
-                  setFiltroStatus("");
-                  setBusca("");
-                  setTipoSelecionado("todos");
-                  setFiltroProfissao("");
-                  setFiltroConfiabilidade("");
-                  setFiltroPeriodo("");
-                  setMostrarAlertas(false);
-                }}
-                className="flex items-center justify-center gap-2 w-full bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg px-3 py-2 font-medium text-sm transition"
-              >
-                <X className="w-4 h-4" /> Limpar Filtros
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Lista de usuários */}
+        {/* LISTA DESKTOP */}
         {loading ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="animate-spin text-blue-500 w-6 h-6" />
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-sky-500" />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse">
-              <thead>
-                <tr className="text-left text-gray-600 text-gray-700 border-b">
-                  <th className="p-3 text-sm font-semibold">Nome</th>
-                  <th className="p-3 text-sm font-semibold">Tipo</th>
-                  <th className="p-3 text-sm font-semibold">Profissão</th>
-                  <th className="p-3 text-sm font-semibold">Localidade</th>
-                  <th className="p-3 text-sm font-semibold">Cadastrado em</th>
-                  <th className="p-3 text-sm font-semibold">Confiabilidade</th>
-                  <th className="p-3 text-sm font-semibold">Status</th>
-                  <th className="p-3 text-sm font-semibold text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usuariosFiltrados.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="border-b last:border-none hover:bg-gray-50 dark:bg-zinc-950 transition"
-                  >
-                    <td className="p-3 text-sm text-gray-800">{u.nome}</td>
-                    <td className="p-3 text-sm text-gray-700 capitalize">{u.tipo_usuario}</td>
-                    <td className="p-3 text-sm text-gray-700">{u.profissao || "—"}</td>
-                    <td className="p-3 text-sm text-gray-700">{u.localidade || "—"}</td>
-                    <td className="p-3 text-sm text-gray-500 dark:text-gray-400">
-                      {u.data_cadastro
-                        ? new Date(u.data_cadastro).toLocaleDateString("pt-PT")
-                        : "—"}
-                    </td>
-                    <td className="p-3 text-sm">{renderConfiabilidade(u.confiabilidade)}</td>
-                    <td className="p-3 text-sm">
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                    <th className="px-3 py-2">Nome</th>
+                    <th className="px-3 py-2">Tipo</th>
+                    <th className="px-3 py-2">Profissão</th>
+                    <th className="px-3 py-2">Localidade</th>
+                    <th className="px-3 py-2">Cadastrado em</th>
+                    <th className="px-3 py-2">Confiabilidade</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2 text-right">Ações</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {usuariosFiltrados.map((u) => (
+                    <tr
+                      key={u.id}
+                      className="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition"
+                    >
+                      <td className="px-3 py-2">{u.nome}</td>
+                      <td className="px-3 py-2 capitalize">{u.tipo_usuario}</td>
+                      <td className="px-3 py-2">{u.profissao || "—"}</td>
+                      <td className="px-3 py-2">{u.localidade || "—"}</td>
+                      <td className="px-3 py-2">
+                        {u.data_cadastro
+                          ? new Date(u.data_cadastro).toLocaleDateString("pt-PT")
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2">{renderConfiabilidade(u.confiabilidade)}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs ${
+                            u.status === "ativo"
+                              ? "bg-emerald-500/10 text-emerald-500"
+                              : "bg-amber-500/10 text-amber-500"
+                          }`}
+                        >
+                          {u.status}
+                        </span>
+                      </td>
+
+                      {/* 🔵 ABRE PERFIL */}
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => onSelectSection("perfil-usuario", u)}
+                          className="inline-flex items-center gap-1 text-sky-500 hover:text-sky-300 text-xs"
+                        >
+                          <Eye className="w-4 h-4" />
+                          Ver perfil
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* LISTA MOBILE */}
+            <div className="grid gap-3 md:hidden">
+              {usuariosFiltrados.map((u) => (
+                <div
+                  key={u.id}
+                  className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 p-3"
+                >
+                  <div className="flex justify-between">
+                    <div>
+                      <p className="font-semibold">{u.nome}</p>
+                      <p className="text-[11px] text-slate-500">{u.email}</p>
+                    </div>
+                    <span className="px-2 py-1 rounded-full text-[10px] bg-slate-900 text-white uppercase">
+                      {u.tipo_usuario}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 text-xs flex gap-2 text-slate-500">
+                    <span>{u.profissao || "—"}</span>•<span>{u.localidade || "—"}</span>
+                  </div>
+
+                  <div className="mt-2 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      {renderConfiabilidade(u.confiabilidade)}
+
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        className={`px-2 py-1 rounded-full text-[10px] ${
                           u.status === "ativo"
-                            ? "bg-green-100 text-green-600"
-                            : "bg-yellow-100 text-yellow-600"
+                            ? "bg-emerald-500/10 text-emerald-500"
+                            : "bg-amber-500/10 text-amber-500"
                         }`}
                       >
-                        {u.status || "—"}
+                        {u.status}
                       </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      <button
-                        onClick={() => setModalUsuario(u)}
-                        className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 float-right"
-                      >
-                        <Eye className="w-4 h-4" /> Ver Perfil
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
 
-            {usuariosFiltrados.length === 0 && (
-              <p className="text-center text-gray-400 text-sm py-8">
-                Nenhum usuário encontrado com os filtros aplicados.
-              </p>
-            )}
-          </div>
+                    <button
+                      onClick={() => onSelectSection("perfil-usuario", u)}
+                      className="text-sky-400 text-[11px]"
+                    >
+                      Ver perfil
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </motion.div>

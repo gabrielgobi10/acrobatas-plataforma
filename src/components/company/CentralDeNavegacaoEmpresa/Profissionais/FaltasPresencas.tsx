@@ -1,3 +1,4 @@
+// src/components/company/FaltasPresencas/PresencasPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../../lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
@@ -100,12 +101,25 @@ function cx(...arr: (string | false | null | undefined)[]) {
 }
 
 /* ======================
+   RPC helper — mesma lógica de Custos Mensais
+====================== */
+async function getMinhaEmpresaId(): Promise<string | null> {
+  const { data, error } = await supabase.rpc("minha_empresa_id");
+  if (error) {
+    console.error("[PresencasPage] minha_empresa_id ->", error.message || error);
+    return null;
+  }
+  return (data as string) ?? null;
+}
+
+/* ======================
    Página
 ====================== */
 export default function PresencasPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [obras, setObras] = useState<Obra[]>([]);
   const [obraId, setObraId] = useState<string>("");
 
@@ -150,17 +164,37 @@ export default function PresencasPage() {
     return hist.slice(start, start + histPageSize);
   }, [hist, histPage]);
 
+  const deveAtualizarHistoricoHoje = () =>
+    dataRef >= histStart && dataRef <= histEnd;
+
   /* =========================
-     Carregar obras e default
+     Buscar empresa
   ========================= */
   useEffect(() => {
+    (async () => {
+      try {
+        const id = await getMinhaEmpresaId();
+        setEmpresaId(id);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  /* =========================
+     Carregar obras da empresa
+  ========================= */
+  useEffect(() => {
+    if (!empresaId) return;
     (async () => {
       setLoading(true);
       try {
         const { data: o, error } = await supabase
           .from("obras")
           .select("id, nome")
+          .eq("empresa_id", empresaId)
           .order("nome", { ascending: true });
+
         if (error) throw error;
         setObras(o || []);
         if (o && o.length && !obraId) setObraId(o[0].id);
@@ -171,7 +205,7 @@ export default function PresencasPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [empresaId]);
 
   /* =========================
      Carregar vínculos
@@ -181,17 +215,19 @@ export default function PresencasPage() {
     (async () => {
       setLoading(true);
       try {
-       const { data, error } = await supabase
-  .from("profissionais_obras")
-  .select(`
-    id,
-    obra_id,
-    profissional_id,
-    status,
-    funcao,
-    profissional:profissionais (id, nome, area)
-  `)
-  .eq("obra_id", obraId);
+        const { data, error } = await supabase
+          .from("profissionais_obras")
+          .select(
+            `
+              id,
+              obra_id,
+              profissional_id,
+              status,
+              funcao,
+              profissional:profissionais (id, nome, area)
+            `
+          )
+          .eq("obra_id", obraId);
 
         if (error) throw error;
         setVinculos((data || []) as Vinculo[]);
@@ -260,182 +296,6 @@ export default function PresencasPage() {
   }, [vinculos, presencasMap]);
 
   /* ======================
-     CRUD do dia
-  ====================== */
-  async function handleMarcarPresenca(
-    profissional_id: string,
-    entrada: string,
-    saida: string,
-    observacoes: string = ""
-  ) {
-    if (!obraId) return;
-    const horas_trabalhadas = toHours(entrada, saida);
-    const payload = {
-      obra_id: obraId,
-      profissional_id,
-      data: dataRef,
-      entrada,
-      saida,
-      status: "presente" as AttendanceStatus,
-      motivo_falta: null,
-      observacoes: observacoes || null,
-      horas_trabalhadas,
-    };
-
-    setPresencasMap((prev) => ({
-      ...prev,
-      [profissional_id]: {
-        id: prev[profissional_id]?.id || `tmp_${profissional_id}`,
-        ...payload,
-      } as Presenca,
-    }));
-
-    setSaving(true);
-    const { data, error } = await supabase
-      .from("faltas_presencas")
-      .upsert(payload, {
-        onConflict: "obra_id,profissional_id,data",
-        ignoreDuplicates: false,
-      })
-      .select()
-      .single();
-    setSaving(false);
-
-    if (error) {
-      console.error(error);
-      setPresencasMap((prev) => {
-        const copy = { ...prev };
-        delete copy[profissional_id];
-        return copy;
-      });
-      return;
-    }
-    setPresencasMap((prev) => ({ ...prev, [profissional_id]: data as Presenca }));
-  }
-
-  async function handleMarcarFalta(
-    profissional_id: string,
-    motivo_falta: string = "Não informado",
-    observacoes: string = ""
-  ) {
-    if (!obraId) return;
-    const payload = {
-      obra_id: obraId,
-      profissional_id,
-      data: dataRef,
-      entrada: null,
-      saida: null,
-      status: "falta" as AttendanceStatus,
-      motivo_falta: motivo_falta || "Não informado",
-      observacoes: observacoes || null,
-      horas_trabalhadas: 0,
-    };
-
-    setPresencasMap((prev) => ({
-      ...prev,
-      [profissional_id]: {
-        id: prev[profissional_id]?.id || `tmp_${profissional_id}`,
-        ...payload,
-      } as Presenca,
-    }));
-
-    setSaving(true);
-    const { data, error } = await supabase
-      .from("faltas_presencas")
-      .upsert(payload, {
-        onConflict: "obra_id,profissional_id,data",
-        ignoreDuplicates: false,
-      })
-      .select()
-      .single();
-    setSaving(false);
-
-    if (error) {
-      console.error(error);
-      setPresencasMap((prev) => {
-        const copy = { ...prev };
-        delete copy[profissional_id];
-        return copy;
-      });
-      return;
-    }
-    setPresencasMap((prev) => ({ ...prev, [profissional_id]: data as Presenca }));
-  }
-
-  async function handleDeletarPresenca(profissional_id: string) {
-    const rec = presencasMap[profissional_id];
-    if (!rec?.id) return;
-    const backup = rec;
-    setPresencasMap((prev) => {
-      const copy = { ...prev };
-      delete copy[profissional_id];
-      return copy;
-    });
-
-    const { error } = await supabase.from("faltas_presencas").delete().eq("id", rec.id);
-    if (error) {
-      console.error(error);
-      setPresencasMap((prev) => ({ ...prev, [profissional_id]: backup }));
-    }
-  }
-async function marcarTodosFalta(motivo = "Não informado") {
-  if (!obraId) return;
-  setSaving(true);
-
-  try {
-    const motivoTrim = (motivo || "Não informado").trim();
-
-    // 1) monta payloads
-    const payloads = filteredVinculos.map((v) => ({
-      obra_id: obraId,
-      profissional_id: v.profissional_id,
-      data: dataRef,
-      entrada: null,
-      saida: null,
-      status: "falta" as AttendanceStatus,
-      motivo_falta: motivoTrim,
-      observacoes: null,
-      horas_trabalhadas: 0,
-    }));
-
-    // 2) estado otimista
-    const optimistic: Record<string, Presenca> = {};
-    payloads.forEach((p) => {
-      optimistic[p.profissional_id] = { id: `tmp_${p.profissional_id}`, ...p } as Presenca;
-    });
-    setPresencasMap((prev) => ({ ...prev, ...optimistic }));
-
-    // 3) upsert em lote
-    const { error } = await supabase
-      .from("faltas_presencas")
-      .upsert(payloads, {
-        onConflict: "obra_id,profissional_id,data",
-        ignoreDuplicates: false,
-      })
-      .select();
-
-    if (error) throw error;
-
-    // 4) refetch do dia/obra e merge
-    const { data } = await supabase
-      .from("faltas_presencas")
-      .select(
-        "id, obra_id, profissional_id, data, entrada, saida, status, motivo_falta, observacoes, horas_trabalhadas"
-      )
-      .eq("obra_id", obraId)
-      .eq("data", dataRef);
-
-    const map: Record<string, Presenca> = {};
-    (data || []).forEach((p) => (map[p.profissional_id] = p as Presenca));
-    setPresencasMap((prev) => ({ ...prev, ...map }));
-  } catch (e) {
-    console.error(e);
-  } finally {
-    setSaving(false);
-  }
-}
-
-  /* ======================
      Histórico
   ====================== */
   async function fetchHistorico() {
@@ -461,6 +321,286 @@ async function marcarTodosFalta(motivo = "Não informado") {
     }
   }
 
+  /* ======================
+     CRUD do dia
+  ====================== */
+  async function handleMarcarPresenca(
+    profissional_id: string,
+    entradaLocal: string,
+    saidaLocal: string,
+    observacoes: string = ""
+  ) {
+    if (!obraId) return;
+
+    // Normaliza entrada/saída: se vier vazio usa padrão
+    const entrada = (entradaLocal || horaEntradaPadrao || "").trim() || null;
+    const saida = (saidaLocal || horaSaidaPadrao || "").trim() || null;
+    const horas_trabalhadas =
+      entrada && saida ? toHours(entrada, saida) : 0;
+
+    const payload = {
+      obra_id: obraId,
+      profissional_id,
+      data: dataRef,
+      entrada,
+      saida,
+      status: "presente" as AttendanceStatus,
+      motivo_falta: null,
+      observacoes: observacoes || null,
+      horas_trabalhadas,
+    };
+
+    // Estado otimista
+    setPresencasMap((prev) => ({
+      ...prev,
+      [profissional_id]: {
+        id: prev[profissional_id]?.id || `tmp_${profissional_id}`,
+        ...payload,
+      } as Presenca,
+    }));
+
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("faltas_presencas")
+      .upsert(payload, {
+        onConflict: "obra_id,profissional_id,data",
+        ignoreDuplicates: false,
+      })
+      .select()
+      .single();
+    setSaving(false);
+
+    if (error) {
+      console.error(error);
+      // rollback
+      setPresencasMap((prev) => {
+        const copy = { ...prev };
+        delete copy[profissional_id];
+        return copy;
+      });
+      return;
+    }
+
+    setPresencasMap((prev) => ({
+      ...prev,
+      [profissional_id]: data as Presenca,
+    }));
+
+    if (deveAtualizarHistoricoHoje()) {
+      fetchHistorico();
+    }
+  }
+
+  async function handleMarcarFalta(
+    profissional_id: string,
+    motivo_falta: string = "Não informado",
+    observacoes: string = ""
+  ) {
+    if (!obraId) return;
+    const payload = {
+      obra_id: obraId,
+      profissional_id,
+      data: dataRef,
+      entrada: null,
+      saida: null,
+      status: "falta" as AttendanceStatus,
+      motivo_falta: (motivo_falta || "Não informado").trim(),
+      observacoes: observacoes || null,
+      horas_trabalhadas: 0,
+    };
+
+    // otimista
+    setPresencasMap((prev) => ({
+      ...prev,
+      [profissional_id]: {
+        id: prev[profissional_id]?.id || `tmp_${profissional_id}`,
+        ...payload,
+      } as Presenca,
+    }));
+
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("faltas_presencas")
+      .upsert(payload, {
+        onConflict: "obra_id,profissional_id,data",
+        ignoreDuplicates: false,
+      })
+      .select()
+      .single();
+    setSaving(false);
+
+    if (error) {
+      console.error(error);
+      setPresencasMap((prev) => {
+        const copy = { ...prev };
+        delete copy[profissional_id];
+        return copy;
+      });
+      return;
+    }
+
+    setPresencasMap((prev) => ({
+      ...prev,
+      [profissional_id]: data as Presenca,
+    }));
+
+    if (deveAtualizarHistoricoHoje()) {
+      fetchHistorico();
+    }
+  }
+
+  async function handleDeletarPresenca(profissional_id: string) {
+    const rec = presencasMap[profissional_id];
+    if (!rec?.id) return;
+    const backup = rec;
+
+    setPresencasMap((prev) => {
+      const copy = { ...prev };
+      delete copy[profissional_id];
+      return copy;
+    });
+
+    const { error } = await supabase
+      .from("faltas_presencas")
+      .delete()
+      .eq("id", rec.id);
+    if (error) {
+      console.error(error);
+      setPresencasMap((prev) => ({ ...prev, [profissional_id]: backup }));
+      return;
+    }
+
+    if (deveAtualizarHistoricoHoje()) {
+      fetchHistorico();
+    }
+  }
+
+  async function marcarTodosFalta(motivo = "Não informado") {
+    if (!obraId) return;
+    setSaving(true);
+
+    try {
+      const motivoTrim = (motivo || "Não informado").trim();
+
+      const payloads = filteredVinculos.map((v) => ({
+        obra_id: obraId,
+        profissional_id: v.profissional_id,
+        data: dataRef,
+        entrada: null,
+        saida: null,
+        status: "falta" as AttendanceStatus,
+        motivo_falta: motivoTrim,
+        observacoes: null,
+        horas_trabalhadas: 0,
+      }));
+
+      const optimistic: Record<string, Presenca> = {};
+      payloads.forEach((p) => {
+        optimistic[p.profissional_id] = {
+          id: `tmp_${p.profissional_id}`,
+          ...p,
+        } as Presenca;
+      });
+      setPresencasMap((prev) => ({ ...prev, ...optimistic }));
+
+      const { error } = await supabase
+        .from("faltas_presencas")
+        .upsert(payloads, {
+          onConflict: "obra_id,profissional_id,data",
+          ignoreDuplicates: false,
+        })
+        .select();
+
+      if (error) throw error;
+
+      const { data } = await supabase
+        .from("faltas_presencas")
+        .select(
+          "id, obra_id, profissional_id, data, entrada, saida, status, motivo_falta, observacoes, horas_trabalhadas"
+        )
+        .eq("obra_id", obraId)
+        .eq("data", dataRef);
+
+      const map: Record<string, Presenca> = {};
+      (data || []).forEach((p) => (map[p.profissional_id] = p as Presenca));
+      setPresencasMap((prev) => ({ ...prev, ...map }));
+
+      if (deveAtualizarHistoricoHoje()) {
+        fetchHistorico();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function marcarTodosPresentes() {
+    if (!obraId) return;
+    setSaving(true);
+
+    try {
+      const payloads = filteredVinculos.map((v) => {
+        const entrada = (horaEntradaPadrao || "").trim() || null;
+        const saida = (horaSaidaPadrao || "").trim() || null;
+        return {
+          obra_id: obraId,
+          profissional_id: v.profissional_id,
+          data: dataRef,
+          entrada,
+          saida,
+          status: "presente" as AttendanceStatus,
+          motivo_falta: null,
+          observacoes: null,
+          horas_trabalhadas: toHours(entrada ?? undefined, saida ?? undefined),
+        };
+      });
+
+      const optimistic: Record<string, Presenca> = {};
+      payloads.forEach((p) => {
+        optimistic[p.profissional_id] = {
+          id: `tmp_${p.profissional_id}`,
+          ...p,
+        } as Presenca;
+      });
+      setPresencasMap((prev) => ({ ...prev, ...optimistic }));
+
+      const { error } = await supabase
+        .from("faltas_presencas")
+        .upsert(payloads, {
+          onConflict: "obra_id,profissional_id,data",
+          ignoreDuplicates: false,
+        })
+        .select();
+
+      if (error) throw error;
+
+      const { data } = await supabase
+        .from("faltas_presencas")
+        .select(
+          "id, obra_id, profissional_id, data, entrada, saida, status, motivo_falta, observacoes, horas_trabalhadas"
+        )
+        .eq("obra_id", obraId)
+        .eq("data", dataRef);
+
+      const map: Record<string, Presenca> = {};
+      (data || []).forEach((p) => (map[p.profissional_id] = p as Presenca));
+
+      setPresencasMap((prev) => ({ ...prev, ...map }));
+
+      if (deveAtualizarHistoricoHoje()) {
+        fetchHistorico();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /* ======================
+     Histórico – edição
+  ====================== */
   async function salvarEdicaoHist() {
     if (!editingId) return;
     setSaving(true);
@@ -479,7 +619,9 @@ async function marcarTodosFalta(motivo = "Não informado") {
         .select()
         .single();
       if (error) throw error;
-      setHist((prev) => prev.map((h) => (h.id === editingId ? (data as Presenca) : h)));
+      setHist((prev) =>
+        prev.map((h) => (h.id === editingId ? (data as Presenca) : h))
+      );
       setEditingId(null);
       setEditValues({});
     } catch (e) {
@@ -501,7 +643,18 @@ async function marcarTodosFalta(motivo = "Não informado") {
 
   function exportarCSV() {
     const rows: string[][] = [
-      ["Obra", "Data", "Profissional", "Função", "Status", "Entrada", "Saída", "Horas", "Motivo Falta", "Observações"],
+      [
+        "Obra",
+        "Data",
+        "Profissional",
+        "Função",
+        "Status",
+        "Entrada",
+        "Saída",
+        "Horas",
+        "Motivo Falta",
+        "Observações",
+      ],
     ];
     hist.forEach((h) => {
       const obraNome = obras.find((o) => o.id === h.obra_id)?.nome || h.obra_id;
@@ -547,21 +700,21 @@ async function marcarTodosFalta(motivo = "Não informado") {
       <div
         className={cx(
           "rounded-xl border p-3 shadow-sm",
-          "bg-white border-zinc-200",
-          "dark:bg-zinc-900 dark:border-zinc-800"
+          "bg-white border-slate-200",
+          "dark:bg-slate-900 dark:border-slate-700"
         )}
       >
         {/* Cabeçalho */}
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex items-center gap-3 text-left">
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-zinc-100 dark:bg-zinc-800">
-              <Users className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
+            <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 dark:bg-slate-800">
+              <Users className="h-5 w-5 text-slate-600 dark:text-slate-200" />
             </div>
             <div>
-              <div className="font-medium text-zinc-900 dark:text-zinc-100">
+              <div className="font-medium text-slate-900 dark:text-slate-50">
                 {v.profissional?.nome}
               </div>
-              <div className="text-xs text-zinc-500">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
                 {v.profissional?.area || "—"}
               </div>
             </div>
@@ -576,7 +729,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
                 status === "falta" &&
                   "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800",
                 !status &&
-                  "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                  "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
               )}
             >
               {status ? (status === "presente" ? "Presente" : "Falta") : "—"}
@@ -584,7 +737,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
 
             {/* Detalhes */}
             <button
-              className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:border-zinc-700"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
               onClick={() =>
                 setOpenCards((prev) => ({ ...prev, [v.profissional_id]: !open }))
               }
@@ -592,7 +745,10 @@ async function marcarTodosFalta(motivo = "Não informado") {
               title="Detalhes"
             >
               <ChevronDown
-                className={cx("h-4 w-4 transition-transform", open ? "rotate-180" : "")}
+                className={cx(
+                  "h-4 w-4 text-slate-500 dark:text-slate-300 transition-transform",
+                  open ? "rotate-180" : ""
+                )}
               />
             </button>
           </div>
@@ -608,7 +764,9 @@ async function marcarTodosFalta(motivo = "Não informado") {
             Presença
           </button>
           <button
-            onClick={() => handleMarcarFalta(v.profissional_id, motivo || "Não informado", obs)}
+            onClick={() =>
+              handleMarcarFalta(v.profissional_id, motivo || "Não informado", obs)
+            }
             className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700 active:scale-[0.99]"
           >
             <UserX className="h-4 w-4" />
@@ -617,10 +775,10 @@ async function marcarTodosFalta(motivo = "Não informado") {
           {status && (
             <button
               onClick={() => handleDeletarPresenca(v.profissional_id)}
-              className="grid h-10 w-10 place-items-center rounded-lg border hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:border-zinc-700"
+              className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
               title="Remover"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-4 w-4 text-slate-500 dark:text-slate-300" />
             </button>
           )}
         </div>
@@ -637,32 +795,38 @@ async function marcarTodosFalta(motivo = "Não informado") {
             >
               <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                 <div className="md:col-span-2">
-                  <label className="text-xs text-zinc-500">Entrada</label>
+                  <label className="text-xs text-slate-500 dark:text-slate-400">
+                    Entrada
+                  </label>
                   <input
                     type="time"
                     value={entrada || ""}
                     onChange={(e) => setEntrada(e.target.value)}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                     disabled={status === "falta"}
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-xs text-zinc-500">Saída</label>
+                  <label className="text-xs text-slate-500 dark:text-slate-400">
+                    Saída
+                  </label>
                   <input
                     type="time"
                     value={saida || ""}
                     onChange={(e) => setSaida(e.target.value)}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                     disabled={status === "falta"}
                   />
                 </div>
 
                 <div className="md:col-span-4">
-                  <label className="text-xs text-zinc-500">Motivo Falta</label>
+                  <label className="text-xs text-slate-500 dark:text-slate-400">
+                    Motivo Falta
+                  </label>
                   <select
                     value={motivo}
                     onChange={(e) => setMotivo(e.target.value)}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                     disabled={status === "presente"}
                   >
                     <option value="">—</option>
@@ -674,17 +838,19 @@ async function marcarTodosFalta(motivo = "Não informado") {
                 </div>
 
                 <div className="md:col-span-4">
-                  <label className="text-xs text-zinc-500">Observações</label>
+                  <label className="text-xs text-slate-500 dark:text-slate-400">
+                    Observações
+                  </label>
                   <input
                     value={obs}
                     onChange={(e) => setObs(e.target.value)}
                     placeholder="Opcional"
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50 placeholder:text-slate-400"
                   />
                 </div>
 
                 <div className="md:col-span-12 flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <div className="text-xs text-zinc-500">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
                     {status === "presente" && (
                       <>
                         {entrada}–{saida} • {fmtHours(toHours(entrada, saida))}
@@ -694,7 +860,9 @@ async function marcarTodosFalta(motivo = "Não informado") {
                   {/* Desktop: botões aqui */}
                   <div className="hidden md:flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => handleMarcarPresenca(v.profissional_id, entrada, saida, obs)}
+                      onClick={() =>
+                        handleMarcarPresenca(v.profissional_id, entrada, saida, obs)
+                      }
                       className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
                     >
                       <UserCheck className="h-4 w-4" />
@@ -702,7 +870,11 @@ async function marcarTodosFalta(motivo = "Não informado") {
                     </button>
                     <button
                       onClick={() =>
-                        handleMarcarFalta(v.profissional_id, motivo || "Não informado", obs)
+                        handleMarcarFalta(
+                          v.profissional_id,
+                          motivo || "Não informado",
+                          obs
+                        )
                       }
                       className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700"
                     >
@@ -712,7 +884,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
                     {status && (
                       <button
                         onClick={() => handleDeletarPresenca(v.profissional_id)}
-                        className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                        className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
                         title="Remover marcação do dia"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -730,70 +902,6 @@ async function marcarTodosFalta(motivo = "Não informado") {
   }
 
   /* ======================
-     Ações em massa
-  ====================== */
-  async function marcarTodosPresentes() {
-  if (!obraId) return;
-  setSaving(true);
-
-  try {
-    // 1) monta payloads normalizando campos
-    const payloads = filteredVinculos.map((v) => {
-      const entrada = (horaEntradaPadrao || "").trim() || null;
-      const saida   = (horaSaidaPadrao || "").trim() || null;
-      return {
-        obra_id: obraId,
-        profissional_id: v.profissional_id,
-        data: dataRef,
-        entrada,
-        saida,
-        status: "presente" as AttendanceStatus,
-        motivo_falta: null,
-        observacoes: null,
-        horas_trabalhadas: toHours(entrada ?? undefined, saida ?? undefined),
-      };
-    });
-
-    // 2) otimista
-    const optimistic: Record<string, Presenca> = {};
-    payloads.forEach((p) => {
-      optimistic[p.profissional_id] = { id: `tmp_${p.profissional_id}`, ...p } as Presenca;
-    });
-    setPresencasMap((prev) => ({ ...prev, ...optimistic }));
-
-    // 3) upsert em lote
-    const { error } = await supabase
-      .from("faltas_presencas")
-      .upsert(payloads, {
-        onConflict: "obra_id,profissional_id,data",
-        ignoreDuplicates: false,
-      })
-      .select(); // <- importante para termos as linhas geradas/atualizadas
-
-    if (error) throw error;
-
-    // 4) refetch só do dia/obra e faz merge
-    const { data } = await supabase
-      .from("faltas_presencas")
-      .select(
-        "id, obra_id, profissional_id, data, entrada, saida, status, motivo_falta, observacoes, horas_trabalhadas"
-      )
-      .eq("obra_id", obraId)
-      .eq("data", dataRef);
-
-    const map: Record<string, Presenca> = {};
-    (data || []).forEach((p) => (map[p.profissional_id] = p as Presenca));
-
-    setPresencasMap((prev) => ({ ...prev, ...map }));
-  } catch (e) {
-    console.error(e);
-  } finally {
-    setSaving(false);
-  }
-}
-
-
-  /* ======================
      Render
   ====================== */
   return (
@@ -801,11 +909,12 @@ async function marcarTodosFalta(motivo = "Não informado") {
       {/* Header */}
       <div className="mb-3 md:mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+          <h1 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-50">
             Faltas & Presenças
           </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 md:block">
-            Marque presença/falta, registre entrada/saída e acompanhe o histórico por obra.
+          <p className="text-sm text-slate-600 dark:text-slate-400 md:block">
+            Marque presença/falta, registre entrada/saída e acompanhe o histórico por
+            obra.
           </p>
         </div>
         {saving && (
@@ -817,14 +926,16 @@ async function marcarTodosFalta(motivo = "Não informado") {
       </div>
 
       {/* Filtros principais — sticky no mobile */}
-      <div className="sticky top-0 z-20 mb-3 md:mb-6 rounded-xl border bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-zinc-900/80 dark:border-zinc-800 p-3 md:p-4">
+      <div className="sticky top-0 z-20 mb-3 md:mb-6 rounded-xl border bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-slate-900/90 dark:border-slate-700 p-3 md:p-4">
         <div className="grid grid-cols-1 gap-2 md:gap-3 md:grid-cols-12">
           <div className="md:col-span-5">
-            <label className="text-xs text-zinc-500">Obra</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400">
+              Obra
+            </label>
             <div className="mt-1 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-zinc-500" />
+              <Building2 className="h-4 w-4 text-slate-500 dark:text-slate-400" />
               <select
-                className="w-full rounded-lg border px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                className="w-full rounded-lg border px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                 value={obraId}
                 onChange={(e) => setObraId(e.target.value)}
               >
@@ -838,12 +949,14 @@ async function marcarTodosFalta(motivo = "Não informado") {
           </div>
 
           <div className="md:col-span-3">
-            <label className="text-xs text-zinc-500">Data</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400">
+              Data
+            </label>
             <div className="mt-1 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-zinc-500" />
+              <Calendar className="h-4 w-4 text-slate-500 dark:text-slate-400" />
               <input
                 type="date"
-                className="w-full rounded-lg border px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                className="w-full rounded-lg border px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                 value={dataRef}
                 onChange={(e) => setDataRef(e.target.value)}
               />
@@ -851,14 +964,16 @@ async function marcarTodosFalta(motivo = "Não informado") {
           </div>
 
           <div className="md:col-span-4">
-            <label className="text-xs text-zinc-500">Buscar</label>
-            <div className="mt-1 flex items-center gap-2 rounded-lg border px-2 focus-within:ring-2 focus-within:ring-zinc-400 dark:focus-within:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700">
-              <Search className="h-4 w-4 text-zinc-500" />
+            <label className="text-xs text-slate-500 dark:text-slate-400">
+              Buscar
+            </label>
+            <div className="mt-1 flex items-center gap-2 rounded-lg border px-2 focus-within:ring-2 focus-within:ring-slate-400 dark:focus-within:ring-slate-500 dark:bg-slate-900 dark:border-slate-700">
+              <Search className="h-4 w-4 text-slate-500 dark:text-slate-400" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Nome ou função"
-                className="w-full py-2 text-base md:text-sm outline-none bg-transparent text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                className="w-full py-2 text-base md:text-sm outline-none bg-transparent text-slate-900 dark:text-slate-50 placeholder:text-slate-400"
               />
             </div>
           </div>
@@ -867,23 +982,35 @@ async function marcarTodosFalta(motivo = "Não informado") {
         {/* Chips mobile + botão de ações */}
         <div className="mt-3 md:hidden">
           <div className="grid grid-cols-3 gap-2">
-            <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 bg-white dark:bg-zinc-900 dark:border-zinc-800">
-              <span className="text-xs text-zinc-600 dark:text-zinc-300">Presentes</span>
-              <span className="text-lg font-bold text-emerald-600">{resumo.presentes}</span>
+            <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 bg-white dark:bg-slate-900 dark:border-slate-700">
+              <span className="text-xs text-slate-600 dark:text-slate-300">
+                Presentes
+              </span>
+              <span className="text-lg font-bold text-emerald-600">
+                {resumo.presentes}
+              </span>
             </div>
-            <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 bg-white dark:bg-zinc-900 dark:border-zinc-800">
-              <span className="text-xs text-zinc-600 dark:text-zinc-300">Faltas</span>
-              <span className="text-lg font-bold text-rose-600">{resumo.faltas}</span>
+            <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 bg-white dark:bg-slate-900 dark:border-slate-700">
+              <span className="text-xs text-slate-600 dark:text-slate-300">
+                Faltas
+              </span>
+              <span className="text-lg font-bold text-rose-600">
+                {resumo.faltas}
+              </span>
             </div>
-            <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 bg-white dark:bg-zinc-900 dark:border-zinc-800">
-              <span className="text-xs text-zinc-600 dark:text-zinc-300">Horas</span>
-              <span className="text-lg font-bold">{fmtHours(resumo.horas)}</span>
+            <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 bg-white dark:bg-slate-900 dark:border-slate-700">
+              <span className="text-xs text-slate-600 dark:text-slate-300">
+                Horas
+              </span>
+              <span className="text-lg font-bold">
+                {fmtHours(resumo.horas)}
+              </span>
             </div>
           </div>
 
           <button
             onClick={() => setShowSheet(true)}
-            className="mt-2 w-full inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm bg-white dark:bg-zinc-900 dark:border-zinc-800"
+            className="mt-2 w-full inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
             title="Ações em massa"
           >
             <Settings2 className="h-4 w-4" />
@@ -891,58 +1018,68 @@ async function marcarTodosFalta(motivo = "Não informado") {
           </button>
         </div>
 
-        {/* Desktop: cartões de estatística (inalterado) */}
+        {/* Desktop: cartões de estatística */}
         <div className="hidden md:grid mb-6 grid-cols-1 gap-3 md:grid-cols-12">
-          <div className="rounded-xl border p-4 md:col-span-4 bg-white dark:bg-zinc-900 dark:border-zinc-800">
+          <div className="rounded-xl border p-4 md:col-span-4 bg-white dark:bg-slate-900 dark:border-slate-700">
             <div className="flex items-center justify-between">
-              <div className="font-semibold text-zinc-900 dark:text-zinc-100">Presentes</div>
+              <div className="font-semibold text-slate-900 dark:text-slate-50">
+                Presentes
+              </div>
               <UserCheck className="h-5 w-5 text-emerald-600" />
             </div>
             <div className="mt-2 text-3xl font-bold text-emerald-700 dark:text-emerald-400">
               {resumo.presentes}
             </div>
           </div>
-          <div className="rounded-xl border p-4 md:col-span-4 bg-white dark:bg-zinc-900 dark:border-zinc-800">
+          <div className="rounded-xl border p-4 md:col-span-4 bg-white dark:bg-slate-900 dark:border-slate-700">
             <div className="flex items-center justify-between">
-              <div className="font-semibold text-zinc-900 dark:text-zinc-100">Faltas</div>
+              <div className="font-semibold text-slate-900 dark:text-slate-50">
+                Faltas
+              </div>
               <UserX className="h-5 w-5 text-rose-600" />
             </div>
             <div className="mt-2 text-3xl font-bold text-rose-700 dark:text-rose-400">
               {resumo.faltas}
             </div>
           </div>
-          <div className="rounded-xl border p-4 md:col-span-4 bg-white dark:bg-zinc-900 dark:border-zinc-800">
+          <div className="rounded-xl border p-4 md:col-span-4 bg-white dark:bg-slate-900 dark:border-slate-700">
             <div className="flex items-center justify-between">
-              <div className="font-semibold text-zinc-900 dark:text-zinc-100">Horas do dia</div>
-              <Clock className="h-5 w-5 text-zinc-700 dark:text-zinc-300" />
+              <div className="font-semibold text-slate-900 dark:text-slate-50">
+                Horas do dia
+              </div>
+              <Clock className="h-5 w-5 text-slate-700 dark:text-slate-300" />
             </div>
-            <div className="mt-2 text-3xl font-bold text-zinc-900 dark:text-zinc-100">
+            <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-slate-50">
               {fmtHours(resumo.horas)}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Desktop: Ações em massa (inalterado) */}
-      <div className="hidden md:block mb-6 rounded-xl border p-4 bg-white dark:bg-zinc-900 dark:border-zinc-800">
+      {/* Desktop: Ações em massa */}
+      <div className="hidden md:block mb-6 rounded-xl border p-4 bg-white dark:bg-slate-900 dark:border-slate-700">
         <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div>
-              <label className="text-xs text-zinc-500">Entrada padrão</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400">
+                Entrada padrão
+              </label>
               <input
                 type="time"
                 value={horaEntradaPadrao}
                 onChange={(e) => setHoraEntradaPadrao(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                className="mt-1 w-full rounded-lg border px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
               />
             </div>
             <div>
-              <label className="text-xs text-zinc-500">Saída padrão</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400">
+                Saída padrão
+              </label>
               <input
                 type="time"
                 value={horaSaidaPadrao}
                 onChange={(e) => setHoraSaidaPadrao(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                className="mt-1 w-full rounded-lg border px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
               />
             </div>
             <div className="col-span-2 flex items-end gap-2">
@@ -963,7 +1100,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
             </div>
           </div>
 
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-[rgba(251,191,36,0.3)] dark:bg-amber-900/10 dark:text-amber-200">
             <div className="flex items-center gap-2 text-sm">
               <Info className="h-4 w-4" />
               Dica: ajuste os horários padrão antes de “Marcar todos”.
@@ -975,11 +1112,11 @@ async function marcarTodosFalta(motivo = "Não informado") {
       {/* Lista de profissionais */}
       <div className="mb-8">
         <div className="mb-2 flex items-center justify-between">
-          <div className="font-semibold text-zinc-700 dark:text-zinc-100">
+          <div className="font-semibold text-slate-700 dark:text-slate-50">
             Profissionais da obra ({filteredVinculos.length})
           </div>
           {loading && (
-            <span className="inline-flex items-center gap-2 text-sm text-zinc-500">
+            <span className="inline-flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" />
               Carregando...
             </span>
@@ -988,7 +1125,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
 
         <div className="space-y-3">
           {filteredVinculos.length === 0 && (
-            <div className="rounded-xl border p-6 text-center text-zinc-600 bg-white dark:bg-zinc-900 dark:border-zinc-800">
+            <div className="rounded-xl border p-6 text-center text-slate-600 bg-white dark:bg-slate-900 dark:border-slate-700">
               Nenhum profissional encontrado nesta obra.
             </div>
           )}
@@ -1011,10 +1148,12 @@ async function marcarTodosFalta(motivo = "Não informado") {
 
       {/* Histórico — header */}
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Histórico</h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+          Histórico
+        </h2>
         <button
           onClick={exportarCSV}
-          className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:border-zinc-700"
+          className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:border-slate-700"
         >
           <Download className="h-4 w-4" />
           Exportar CSV
@@ -1024,33 +1163,37 @@ async function marcarTodosFalta(motivo = "Não informado") {
       {/* Filtros do histórico */}
       <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-12">
         <div className="md:col-span-3">
-          <label className="text-xs text-zinc-500">De</label>
+          <label className="text-xs text-slate-500 dark:text-slate-400">
+            De
+          </label>
           <input
             type="date"
             value={histStart}
             onChange={(e) => setHistStart(e.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+            className="mt-1 w-full rounded-lg border px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
           />
         </div>
         <div className="md:col-span-3">
-          <label className="text-xs text-zinc-500">Até</label>
+          <label className="text-xs text-slate-500 dark:text-slate-400">
+            Até
+          </label>
           <input
             type="date"
             value={histEnd}
             onChange={(e) => setHistEnd(e.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+            className="mt-1 w-full rounded-lg border px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
           />
         </div>
         <div className="md:col-span-6 flex items-end">
           <button
             onClick={fetchHistorico}
-            className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 border border-transparent dark:border-slate-700"
           >
             <Filter className="h-4 w-4" />
             Aplicar Filtro
           </button>
           {histLoading && (
-            <span className="ml-3 inline-flex items-center gap-2 text-sm text-zinc-500">
+            <span className="ml-3 inline-flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" />
               Buscando histórico...
             </span>
@@ -1061,18 +1204,25 @@ async function marcarTodosFalta(motivo = "Não informado") {
       {/* Mobile: cards do histórico */}
       <div className="md:hidden space-y-2">
         {historicoPaginado.length === 0 ? (
-          <div className="rounded-xl border p-4 text-center text-zinc-600 dark:border-zinc-800">
+          <div className="rounded-xl border p-4 text-center text-slate-600 dark:border-slate-700 dark:text-slate-300">
             Nenhum registro no período.
           </div>
         ) : (
           historicoPaginado.map((h) => {
             const editing = editingId === h.id;
             return (
-              <div key={h.id} className="rounded-xl border p-3 bg-white dark:bg-zinc-900 dark:border-zinc-800">
+              <div
+                key={h.id}
+                className="rounded-xl border p-3 bg-white dark:bg-slate-900 dark:border-slate-700"
+              >
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium">{h.profissional?.nome}</div>
-                    <div className="text-xs text-zinc-500">{h.profissional?.area || "—"}</div>
+                    <div className="font-medium dark:text-slate-50">
+                      {h.profissional?.nome}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      {h.profissional?.area || "—"}
+                    </div>
                   </div>
                   <span
                     className={cx(
@@ -1088,46 +1238,67 @@ async function marcarTodosFalta(motivo = "Não informado") {
 
                 <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
                   <div>
-                    <div className="text-[11px] text-zinc-500">Data</div>
-                    <div className="font-medium">{h.data}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Data
+                    </div>
+                    <div className="font-medium dark:text-slate-50">
+                      {h.data}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-[11px] text-zinc-500">Entrada</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Entrada
+                    </div>
                     {editing ? (
                       <input
                         type="time"
                         defaultValue={h.entrada || ""}
                         onChange={(e) =>
-                          setEditValues((prev) => ({ ...prev, entrada: e.target.value || null }))
+                          setEditValues((prev) => ({
+                            ...prev,
+                            entrada: e.target.value || null,
+                          }))
                         }
-                        className="mt-0.5 w-full rounded border px-2 py-1 text-sm dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                        className="mt-0.5 w-full rounded border px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                         disabled={h.status === "falta"}
                       />
                     ) : (
-                      <div className="font-medium">{h.entrada || "—"}</div>
+                      <div className="font-medium dark:text-slate-50">
+                        {h.entrada || "—"}
+                      </div>
                     )}
                   </div>
                   <div>
-                    <div className="text-[11px] text-zinc-500">Saída</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Saída
+                    </div>
                     {editing ? (
                       <input
                         type="time"
                         defaultValue={h.saida || ""}
                         onChange={(e) =>
-                          setEditValues((prev) => ({ ...prev, saida: e.target.value || null }))
+                          setEditValues((prev) => ({
+                            ...prev,
+                            saida: e.target.value || null,
+                          }))
                         }
-                        className="mt-0.5 w-full rounded border px-2 py-1 text-sm dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                        className="mt-0.5 w-full rounded border px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                         disabled={h.status === "falta"}
                       />
                     ) : (
-                      <div className="font-medium">{h.saida || "—"}</div>
+                      <div className="font-medium dark:text-slate-50">
+                        {h.saida || "—"}
+                      </div>
                     )}
                   </div>
                 </div>
 
                 <div className="mt-2 flex items-center justify-between text-sm">
-                  <div className="text-zinc-600">
-                    Horas: {fmtHours(h.horas_trabalhadas ?? toHours(h.entrada, h.saida))}
+                  <div className="text-slate-600 dark:text-slate-300">
+                    Horas:{" "}
+                    {fmtHours(
+                      h.horas_trabalhadas ?? toHours(h.entrada, h.saida)
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {editing ? (
@@ -1144,7 +1315,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
                             setEditingId(null);
                             setEditValues({});
                           }}
-                          className="rounded-lg bg-zinc-200 px-2 py-1 text-xs font-medium dark:bg-zinc-700 dark:text-zinc-100"
+                          className="rounded-lg bg-slate-200 px-2 py-1 text-xs font-medium dark:bg-slate-900 dark:text-slate-50 dark:border dark:border-slate-700"
                           title="Cancelar"
                         >
                           <X className="h-4 w-4" />
@@ -1157,14 +1328,14 @@ async function marcarTodosFalta(motivo = "Não informado") {
                             setEditingId(h.id);
                             setEditValues({});
                           }}
-                          className="rounded-lg border px-2 py-1 text-xs dark:border-zinc-700"
+                          className="rounded-lg border px-2 py-1 text-xs dark:border-slate-700 dark:hover:bg-slate-800"
                           title="Editar"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => excluirHist(h.id)}
-                          className="rounded-lg border px-2 py-1 text-xs dark:border-zinc-700"
+                          className="rounded-lg border px-2 py-1 text-xs dark:border-slate-700 dark:hover:bg-rose-900/20"
                           title="Excluir"
                         >
                           <Trash2 className="h-4 w-4 text-rose-600" />
@@ -1174,14 +1345,16 @@ async function marcarTodosFalta(motivo = "Não informado") {
                   </div>
                 </div>
 
-                <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
+                <div className="mt-2 text-xs text-slate-600 dark:text-slate-300">
                   {h.status === "falta" ? (
                     <>
-                      <span className="font-medium">Motivo:</span> {h.motivo_falta || "—"}
+                      <span className="font-medium">Motivo:</span>{" "}
+                      {h.motivo_falta || "—"}
                     </>
                   ) : (
                     <>
-                      <span className="font-medium">Observações:</span> {h.observacoes || "—"}
+                      <span className="font-medium">Observações:</span>{" "}
+                      {h.observacoes || "—"}
                     </>
                   )}
                 </div>
@@ -1191,10 +1364,10 @@ async function marcarTodosFalta(motivo = "Não informado") {
         )}
       </div>
 
-      {/* Desktop: tabela com scroll-x (inalterado) */}
-      <div className="hidden md:block overflow-x-auto rounded-xl border bg-white dark:bg-zinc-900 dark:border-zinc-800">
+      {/* Desktop: tabela com scroll-x */}
+      <div className="hidden md:block overflow-x-auto rounded-xl border bg-white dark:bg-slate-900 dark:border-slate-700">
         <div className="min-w-[720px]">
-          <div className="grid grid-cols-12 border-b bg-zinc-50 px-4 py-2 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700">
+          <div className="grid grid-cols-12 border-b bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:border-slate-700">
             <div className="col-span-3">Profissional</div>
             <div className="col-span-2">Data</div>
             <div className="col-span-1">Status</div>
@@ -1205,7 +1378,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
           </div>
 
           {historicoPaginado.length === 0 ? (
-            <div className="px-4 py-6 text-center text-zinc-600 dark:text-zinc-300">
+            <div className="px-4 py-6 text-center text-slate-600 dark:text-slate-300">
               Nenhum registro no período.
             </div>
           ) : (
@@ -1214,17 +1387,19 @@ async function marcarTodosFalta(motivo = "Não informado") {
               return (
                 <div
                   key={h.id}
-                  className="grid grid-cols-12 items-center border-b px-4 py-2 text-sm dark:border-zinc-800"
+                  className="grid grid-cols-12 items-center border-b px-4 py-2 text-sm dark:border-slate-700"
                 >
                   <div className="col-span-3">
-                    <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                    <div className="font-medium text-slate-900 dark:text-slate-50">
                       {h.profissional?.nome}
                     </div>
-                    <div className="text-xs text-zinc-500">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
                       {h.profissional?.area || "—"}
                     </div>
                   </div>
-                  <div className="col-span-2 text-zinc-800 dark:text-zinc-200">{h.data}</div>
+                  <div className="col-span-2 text-slate-800 dark:text-slate-200">
+                    {h.data}
+                  </div>
                   <div className="col-span-1">
                     <span
                       className={cx(
@@ -1243,13 +1418,18 @@ async function marcarTodosFalta(motivo = "Não informado") {
                         type="time"
                         defaultValue={h.entrada || ""}
                         onChange={(e) =>
-                          setEditValues((prev) => ({ ...prev, entrada: e.target.value || null }))
+                          setEditValues((prev) => ({
+                            ...prev,
+                            entrada: e.target.value || null,
+                          }))
                         }
-                        className="w-full rounded-lg border px-2 py-1 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                        className="w-full rounded-lg border px-2 py-1 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                         disabled={h.status === "falta"}
                       />
                     ) : (
-                      <span className="text-zinc-800 dark:text-zinc-200">{h.entrada || "—"}</span>
+                      <span className="text-slate-800 dark:text-slate-200">
+                        {h.entrada || "—"}
+                      </span>
                     )}
                   </div>
                   <div className="col-span-2">
@@ -1258,17 +1438,24 @@ async function marcarTodosFalta(motivo = "Não informado") {
                         type="time"
                         defaultValue={h.saida || ""}
                         onChange={(e) =>
-                          setEditValues((prev) => ({ ...prev, saida: e.target.value || null }))
+                          setEditValues((prev) => ({
+                            ...prev,
+                            saida: e.target.value || null,
+                          }))
                         }
-                        className="w-full rounded-lg border px-2 py-1 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                        className="w-full rounded-lg border px-2 py-1 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                         disabled={h.status === "falta"}
                       />
                     ) : (
-                      <span className="text-zinc-800 dark:text-zinc-200">{h.saida || "—"}</span>
+                      <span className="text-slate-800 dark:text-slate-200">
+                        {h.saida || "—"}
+                      </span>
                     )}
                   </div>
-                  <div className="col-span-1 text-zinc-800 dark:text-zinc-200">
-                    {fmtHours(h.horas_trabalhadas ?? toHours(h.entrada, h.saida))}
+                  <div className="col-span-1 text-slate-800 dark:text-slate-200">
+                    {fmtHours(
+                      h.horas_trabalhadas ?? toHours(h.entrada, h.saida)
+                    )}
                   </div>
                   <div className="col-span-1 flex items-center justify-end gap-2">
                     {editing ? (
@@ -1285,7 +1472,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
                             setEditingId(null);
                             setEditValues({});
                           }}
-                          className="rounded-lg bg-zinc-200 px-2 py-1 text-xs font-medium hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 dark:text-zinc-100"
+                          className="rounded-lg bg-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-300 dark:bg-slate-900 dark:hover:bg-slate-800 dark:text-slate-50 dark:border dark:border-slate-700"
                           title="Cancelar"
                         >
                           <X className="h-4 w-4" />
@@ -1298,14 +1485,14 @@ async function marcarTodosFalta(motivo = "Não informado") {
                             setEditingId(h.id);
                             setEditValues({});
                           }}
-                          className="rounded-lg border px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:border-zinc-700"
+                          className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 dark:border-slate-700"
                           title="Editar"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => excluirHist(h.id)}
-                          className="rounded-lg border px-2 py-1 text-xs hover:bg-rose-50 dark:hover:bg-rose-900/20 dark:border-zinc-700"
+                          className="rounded-lg border px-2 py-1 text-xs hover:bg-rose-50 dark:hover:bg-rose-900/20 dark:border-slate-700"
                           title="Excluir"
                         >
                           <Trash2 className="h-4 w-4 text-rose-600" />
@@ -1314,7 +1501,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
                     )}
                   </div>
 
-                  <div className="col-span-12 pb-2 pl-2 pr-2 text-xs text-zinc-600 dark:text-zinc-300">
+                  <div className="col-span-12 pb-2 pl-2 pr-2 text-xs text-slate-600 dark:text-slate-300">
                     {h.status === "falta" ? (
                       <div className="flex items-center gap-1">
                         <span className="font-medium">Motivo:</span>
@@ -1327,7 +1514,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
                                 motivo_falta: e.target.value || null,
                               }))
                             }
-                            className="ml-1 rounded border px-2 py-0.5 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                            className="ml-1 rounded border px-2 py-0.5 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                           />
                         ) : (
                           h.motivo_falta || "—"
@@ -1345,7 +1532,7 @@ async function marcarTodosFalta(motivo = "Não informado") {
                                 observacoes: e.target.value || null,
                               }))
                             }
-                            className="ml-1 w-[50%] min-w-56 rounded border px-2 py-0.5 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                            className="ml-1 w-[50%] min-w-56 rounded border px-2 py-0.5 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                             placeholder="Opcional"
                           />
                         ) : (
@@ -1364,23 +1551,26 @@ async function marcarTodosFalta(motivo = "Não informado") {
       {/* Paginação histórico */}
       {hist.length > histPageSize && (
         <div className="mt-3 flex items-center justify-between">
-          <div className="text-sm text-zinc-600 dark:text-zinc-300">
-            Mostrando {Math.min(hist.length, histPage * histPageSize)} de {hist.length}
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            Mostrando {Math.min(hist.length, histPage * histPageSize)} de{" "}
+            {hist.length}
           </div>
           <div className="flex items-center gap-2">
             <button
               disabled={histPage === 1}
               onClick={() => setHistPage((p) => Math.max(1, p - 1))}
-              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50 dark:hover:bg-zinc-800 dark:border-zinc-700"
+              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800 dark:border-slate-700"
             >
               <ChevronLeft className="h-4 w-4" /> Anterior
             </button>
             <button
               disabled={histPage * histPageSize >= hist.length}
               onClick={() =>
-                setHistPage((p) => (p * histPageSize >= hist.length ? p : p + 1))
+                setHistPage((p) =>
+                  p * histPageSize >= hist.length ? p : p + 1
+                )
               }
-              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50 dark:hover:bg-zinc-800 dark:border-zinc-700"
+              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800 dark:border-slate-700"
             >
               Próxima <ChevronRight className="h-4 w-4" />
             </button>
@@ -1389,12 +1579,13 @@ async function marcarTodosFalta(motivo = "Não informado") {
       )}
 
       {/* Nota legal */}
-      <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+      <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-[rgba(251,191,36,0.3)] dark:bg-amber-900/10 dark:text-amber-200">
         <div className="flex items-start gap-2">
           <AlertTriangle className="mt-0.5 h-4 w-4" />
           <p>
-            Registos de presenças são sensíveis. Certifique-se de que os dados inseridos
-            refletem a realidade em obra e mantenha justificativas de faltas arquivadas.
+            Registos de presenças são sensíveis. Certifique-se de que os dados
+            inseridos refletem a realidade em obra e mantenha justificativas de
+            faltas arquivadas.
           </p>
         </div>
       </div>
@@ -1403,20 +1594,23 @@ async function marcarTodosFalta(motivo = "Não informado") {
       <AnimatePresence>
         {showSheet && (
           <motion.div
-            className="fixed inset-0 z-40 md:hidden"
+            className="fixed inset-0 z-[9999] md:hidden" // por cima de tudo (incluindo bottom nav)
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <div className="absolute inset-0 bg-black/40" onClick={() => setShowSheet(false)} />
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setShowSheet(false)}
+            />
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="absolute bottom-0 left-0 right-0 rounded-t-2xl border-t bg-white p-4 dark:bg-zinc-900 dark:border-zinc-800"
+              className="absolute bottom-0 left-0 right-0 rounded-t-2xl border-t bg-white p-4 dark:bg-slate-900 dark:border-slate-700"
             >
-              <div className="mx-auto h-1.5 w-10 rounded-full bg-zinc-300 dark:bg-zinc-700 mb-3" />
+              <div className="mx-auto h-1.5 w-10 rounded-full bg-slate-300 dark:bg-slate-700 mb-3" />
               <div className="flex items-center gap-2 mb-3">
                 <Settings2 className="h-5 w-5" />
                 <div className="font-semibold">Ações em massa</div>
@@ -1424,21 +1618,25 @@ async function marcarTodosFalta(motivo = "Não informado") {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-500">Entrada padrão</label>
+                  <label className="text-xs text-slate-500 dark:text-slate-400">
+                    Entrada padrão
+                  </label>
                   <input
                     type="time"
                     value={horaEntradaPadrao}
                     onChange={(e) => setHoraEntradaPadrao(e.target.value)}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-500">Saída padrão</label>
+                  <label className="text-xs text-slate-500 dark:text-slate-400">
+                    Saída padrão
+                  </label>
                   <input
                     type="time"
                     value={horaSaidaPadrao}
                     onChange={(e) => setHoraSaidaPadrao(e.target.value)}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base dark:bg-slate-900 dark:border-slate-700 dark:text-slate-50"
                   />
                 </div>
               </div>

@@ -2,8 +2,8 @@
 import { motion } from "framer-motion";
 import {
   BarChart3,
-  PieChart,
-  LineChart,
+  PieChart as PieIcon,
+  LineChart as LineIcon,
   FileText,
   Download,
   Calendar,
@@ -22,6 +22,22 @@ import {
   Line,
   Legend,
 } from "recharts";
+
+const CardTooltip = ({ label, payload }: any) => {
+  const item = payload?.[0];
+  if (!item) return null;
+  const value = item.value;
+  const key = item.name || item.dataKey;
+
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 shadow text-xs sm:text-sm">
+      <div className="text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="font-semibold text-slate-800 dark:text-slate-100">
+        {key}: {value}
+      </div>
+    </div>
+  );
+};
 
 export default function RelatoriosSection() {
   const metricas = [
@@ -84,50 +100,39 @@ export default function RelatoriosSection() {
     },
   ];
 
-  const CardTooltip = ({ label, payload }: any) => {
-    const item = payload?.[0];
-    if (!item) return null;
-    const value = item.value;
-    const key = item.name || item.dataKey;
-    return (
-      <div className="rounded-lg border border-gray-200 border-gray-200 bg-white bg-gray-100 px-3 py-2 shadow text-sm">
-        <div className="text-gray-500 text-gray-500">{label}</div>
-        <div className="font-semibold text-gray-800">
-          {key}: {value}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 15 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="min-h-screen bg-gradient-to-b from-[#f7f9fc] to-[#f0f4fa] p-8 rounded-3xl"
+      transition={{ duration: 0.25 }}
+      className="space-y-6"
     >
-      {/* Cabeçalho */}
-      <div className="rounded-2xl p-6 bg-white bg-white border border-gray-100 border-gray-100 shadow-sm mb-8">
-        <h2 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
-          <BarChart3 className="w-6 h-6" /> Relatórios e Estatísticas
+      {/* Cabeçalho compacto */}
+      <div className="rounded-2xl px-4 py-4 sm:px-6 sm:py-5 bg-white/80 dark:bg-slate-900/80 border border-slate-100 dark:border-slate-800 shadow-sm">
+        <h2 className="text-lg sm:text-2xl font-semibold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-sky-500" />
+          Relatórios e Estatísticas
         </h2>
-        <p className="text-gray-500 text-gray-600 mt-1">
-          Gere relatórios automáticos, acompanhe métricas e visualize o desempenho geral da plataforma.
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Gere relatórios automáticos, acompanhe métricas e visualize o
+          desempenho geral da plataforma.
         </p>
       </div>
 
-      {/* Métricas Principais */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+      {/* Métricas principais – compactas, sem fundo gigante */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {metricas.map((card, i) => (
           <motion.div
             key={i}
-            whileHover={{ scale: 1.03 }}
-            className={`p-5 rounded-2xl bg-gradient-to-br ${card.color} text-white shadow-lg cursor-pointer`}
+            whileHover={{ scale: 1.02 }}
+            className={`p-4 rounded-2xl bg-gradient-to-br ${card.color} text-white shadow-md border border-white/10`}
           >
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start gap-2">
               <div>
-                <p className="text-sm opacity-90">{card.title}</p>
-                <h2 className="text-3xl font-bold mt-1">{card.value}</h2>
+                <p className="text-xs sm:text-sm opacity-90">{card.title}</p>
+                <h2 className="text-2xl sm:text-3xl font-semibold mt-1 leading-tight">
+                  {card.value}
+                </h2>
               </div>
               {card.icon}
             </div>
@@ -135,14 +140,15 @@ export default function RelatoriosSection() {
         ))}
       </section>
 
-      {/* Gráficos */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-        {/* Gráfico 1 */}
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow border border-gray-100 border-gray-200">
-          <h3 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
-            <LineChart className="w-5 h-5 text-blue-500" /> Crescimento Mensal
+      {/* Gráficos – cards alinhados com o tema */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Gráfico 1 – Crescimento Mensal */}
+        <div className="bg-white/80 dark:bg-slate-900/80 rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+          <h3 className="font-semibold mb-3 text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <LineIcon className="w-4 h-4 sm:w-5 sm:h-5 text-sky-500" />{" "}
+            Crescimento Mensal
           </h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={230}>
             <AreaChart data={crescimentoData}>
               <defs>
                 <linearGradient id="gradCresc" x1="0" y1="0" x2="0" y2="1">
@@ -150,8 +156,8 @@ export default function RelatoriosSection() {
                   <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.1} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="mes" />
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis dataKey="mes" stroke="#6B7280" />
               <Tooltip content={<CardTooltip />} />
               <Area
                 type="monotone"
@@ -163,32 +169,46 @@ export default function RelatoriosSection() {
           </ResponsiveContainer>
         </div>
 
-        {/* Gráfico 2 */}
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow border border-gray-100 dark:border-zinc-700">
-          <h3 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
-            <PieChart className="w-5 h-5 text-green-500" /> Atividade Semanal
+        {/* Gráfico 2 – Atividade semanal */}
+        <div className="bg-white/80 dark:bg-slate-900/80 rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+          <h3 className="font-semibold mb-3 text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <PieIcon className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />{" "}
+            Atividade Semanal
           </h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={230}>
             <BarChart data={atividadeData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="dia" />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#E5E7EB"
+              />
+              <XAxis dataKey="dia" stroke="#6B7280" />
               <Tooltip content={<CardTooltip />} />
-              <Bar dataKey="usuarios" fill="#22C55E" radius={[6, 6, 0, 0]} />
+              <Bar
+                dataKey="usuarios"
+                fill="#22C55E"
+                radius={[6, 6, 0, 0]}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Gráfico 3 */}
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow border border-gray-100 dark:border-zinc-700">
-          <h3 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
-            <LineChart className="w-5 h-5 text-purple-500" /> Performance Geral
+        {/* Gráfico 3 – Performance geral */}
+        <div className="bg-white/80 dark:bg-slate-900/80 rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+          <h3 className="font-semibold mb-3 text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <LineIcon className="w-4 h-4 sm:w-5 sm:h-5 text-violet-500" />{" "}
+            Performance Geral
           </h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={230}>
             <LChart data={crescimentoData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="mes" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis dataKey="mes" stroke="#6B7280" />
               <Tooltip content={<CardTooltip />} />
-              <Legend verticalAlign="bottom" height={28} />
+              <Legend
+                verticalAlign="bottom"
+                height={24}
+                wrapperStyle={{ fontSize: 11 }}
+              />
               <Line
                 type="monotone"
                 dataKey="valor"
@@ -201,48 +221,53 @@ export default function RelatoriosSection() {
         </div>
       </section>
 
-      {/* Histórico de Relatórios */}
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow border border-gray-100 dark:border-zinc-700 p-6">
-        <h3 className="font-semibold text-gray-700 text-lg mb-4 flex items-center gap-2">
-          <FileText className="w-5 h-5 text-blue-500" /> Histórico de Relatórios
+      {/* Histórico de relatórios – tabela + cards mobile */}
+      <div className="bg-white/80 dark:bg-slate-900/80 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 sm:p-5">
+        <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm sm:text-base mb-4 flex items-center gap-2">
+          <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-sky-500" />
+          Histórico de Relatórios
         </h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse">
+
+        {/* Desktop: tabela */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="min-w-full border-collapse text-sm">
             <thead>
-              <tr className="text-left text-gray-600 text-gray-600 border-b">
-                <th className="p-3 text-sm font-semibold">Título</th>
-                <th className="p-3 text-sm font-semibold">Data</th>
-                <th className="p-3 text-sm font-semibold">Tipo</th>
-                <th className="p-3 text-sm font-semibold">Status</th>
-                <th className="p-3 text-sm font-semibold text-center">Ações</th>
+              <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                <th className="p-3 font-semibold">Título</th>
+                <th className="p-3 font-semibold">Data</th>
+                <th className="p-3 font-semibold">Tipo</th>
+                <th className="p-3 font-semibold">Status</th>
+                <th className="p-3 font-semibold text-center">Ações</th>
               </tr>
             </thead>
             <tbody>
               {historicoRelatorios.map((rel, i) => (
                 <tr
                   key={i}
-                  className="border-b last:border-none hover:bg-gray-50 bg-gray-50 transition"
+                  className="border-b border-slate-100 dark:border-slate-800 last:border-none hover:bg-slate-50 dark:hover:bg-slate-800/60 transition"
                 >
-                  <td className="p-3 text-sm text-gray-800 font-medium">
+                  <td className="p-3 text-slate-800 dark:text-slate-100 font-medium">
                     {rel.titulo}
                   </td>
-                  <td className="p-3 text-sm text-gray-700 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-400" /> {rel.data}
+                  <td className="p-3 text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-slate-400" /> {rel.data}
                   </td>
-                  <td className="p-3 text-sm text-gray-600 text-gray-700">{rel.tipo}</td>
-                  <td className="p-3 text-sm">
+                  <td className="p-3 text-slate-600 dark:text-slate-300">
+                    {rel.tipo}
+                  </td>
+                  <td className="p-3">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-medium ${
                         rel.status === "Concluído"
-                          ? "bg-green-100 text-green-600"
-                          : "bg-yellow-100 text-yellow-600"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300"
+                          : "bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300"
                       }`}
                     >
                       {rel.status}
                     </span>
                   </td>
-                  <td className="p-3 text-sm text-center">
-                    <button className="flex items-center justify-center gap-2 text-blue-600 hover:underline text-xs mx-auto">
+                  <td className="p-3 text-center">
+                    <button className="inline-flex items-center justify-center gap-2 text-sky-600 dark:text-sky-400 hover:underline text-xs">
                       <Download className="w-4 h-4" /> Baixar
                     </button>
                   </td>
@@ -250,6 +275,39 @@ export default function RelatoriosSection() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile: cards compactos */}
+        <div className="grid gap-3 md:hidden text-xs">
+          {historicoRelatorios.map((rel, i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/70 px-3 py-3"
+            >
+              <p className="font-semibold text-slate-900 dark:text-slate-50">
+                {rel.titulo}
+              </p>
+              <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+                <Calendar className="w-3 h-3 text-slate-400" />
+                {rel.data} • {rel.tipo}
+              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                    rel.status === "Concluído"
+                      ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300"
+                      : "bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300"
+                  }`}
+                >
+                  {rel.status}
+                </span>
+                <button className="inline-flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400">
+                  <Download className="w-3 h-3" />
+                  Baixar
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </motion.div>

@@ -1,4 +1,3 @@
-
 @import "leaflet/dist/leaflet.css";
 /* @import "@changey/react-leaflet-markercluster/dist/styles.min.css"; */
 
@@ -58,3 +57,72 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ==== KILL SWITCH: desliga todas as animações/transições (global) ==== */
+html.no-anim *,
+html.no-anim *::before,
+html.no-anim *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* evita qualquer “deslize” de scroll */
+html, body, * {
+  scroll-behavior: auto !important;
+}
+
+/* ====== Leaflet: desativar quaisquer animações internas ====== */
+.leaflet-fade-anim .leaflet-tile { transition: none !important; }
+.leaflet-zoom-animated { transition: none !important; }
+.leaflet-container {
+  animation: none !important;
+  transition: none !important;
+  background: transparent;
+}
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-popup,
+.leaflet-popup * {
+  transition: none !important;
+  animation: none !important;
+}
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+  transition: none !important;
+}
+
+/* Quando você usar <TileLayer className="no-fade" ... /> */
+.no-fade .leaflet-tile {
+  transition: none !important;
+  opacity: 1 !important;
+}
+
+/* Evita que o navegador tente animar zoom/fade por preferência do usuário */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ====== Ocultar totalmente a barra de rolagem do card (desktop e mobile) ====== */
+/* Use esta classe no container que rola: ex.: <div className="flex-1 min-h-0 overflow-y-auto pr-1 card-scroll"> */
+.card-scroll {
+  -webkit-overflow-scrolling: touch;  /* iOS/Android */
+  scrollbar-width: none !important;   /* Firefox   */
+  -ms-overflow-style: none !important;/* IE/Edge   */
+}
+.card-scroll::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+.card-scroll::-webkit-scrollbar-thumb {
+  background: transparent !important;
+}
+
+/* ====== Scrollbar estável sem “pulo” e sem calha à esquerda ====== */
+@supports (scrollbar-gutter: stable) {
+  @media (min-width: 768px) {
+    :root, html, body { scrollbar-gutter: stable; } /* reserva só no lado direito */
+  }
+}
+
+/* Não força a barra sempre visível; só quando precisar */
+html { overflow-y: auto; }

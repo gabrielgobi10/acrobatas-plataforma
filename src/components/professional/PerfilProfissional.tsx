@@ -1,382 +1,758 @@
+"use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import {
-  Edit3,
-  TrendingUp,
-  User,
-  MapPin,
-  Briefcase,
-  Star,
-  FileCheck,
-  CheckCircle2,
-  XCircle,
-  FileText,
-  Shield,
-  HeartPulse,
-  HardHat,
-  Award,
-  Download,
+  MapPin, Mail, Phone, Star, Clock4, Trophy, Camera, Sparkles, Edit3,
+  Link as LinkIcon, ExternalLink, Loader2, Trash2, ArrowLeft,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import Joyride, { STATUS } from "react-joyride";
-import EditModal from "./EditModal";
-import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { motion } from "framer-motion";
+import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
-export default function PerfilProfissional() {
-  const navigate = useNavigate();
+import SobreTab from "./perfil/SobreTab";
+import PortfolioTab from "./perfil/PortfolioTab";
+import ExperienciaTab from "./perfil/ExperienciaTab";
+import HistoricoTab from "./perfil/HistoricoTab";
+import DocumentosTab from "./perfil/DocumentosTab";
+import AvaliacoesTab from "./perfil/AvaliacoesTab";
+import AtividadeTab from "./perfil/AtividadeTab";
+import EditarPerfilModal from "./EditarPerfilModal";
+
+import type {
+  Perfil, PastaPortfolio, Experiencia, Documento, Avaliacao, HistoricoObra,
+} from "./perfil/types";
+
+type PerfilProfissionalProps = {
+  /** Quando aberto a partir do Admin */
+  adminView?: boolean;
+  /** Força o usuário alvo (usuario_id) quando no Admin */
+  forceUsuarioId?: string;
+};
+
+const BUCKET_NAME = "public";
+
+function mapDbToPerfil(row: any, userLike: { id?: string | null; email?: string | null } | null): Perfil {
+  return {
+    usuario_id: row.usuario_id ?? userLike?.id ?? null,
+    nome_completo: row.nome_completo ?? userLike?.email?.split("@")[0],
+    email: row.email ?? userLike?.email ?? "",
+    telefone: row.telefone ?? null,
+    whatsapp: row.whatsapp ?? null,
+    cidade_base: row.cidade_base ?? null,
+    nacionalidade: row.nacionalidade ?? null,
+    data_nascimento: row.data_nascimento ?? null,
+    nivel: row.nivel ?? "Profissional",
+    anos_experiencia: row.anos_experiencia ?? 1,
+    area_principal: row.area_principal ?? null,
+    funcao_obra: row.funcao_obra ?? null,
+    tipo_contrato: row.tipo_contrato ?? null,
+    valor_diario: row.valor_diario ?? null,
+    disponibilidade: row.disponibilidade ?? "Imediata",
+    raio_deslocacao: row.raio_deslocacao ?? "100 km",
+    pode_viajar: row.pode_viajar ?? false,
+    pode_alojamento: row.pode_alojamento ?? false,
+    idiomas: row.idiomas ?? [],
+    habilidades: row.habilidades ?? [],
+    observacoes: row.observacoes ?? null,
+    bio: row.bio ?? null,
+    perfil_completo: !!row.perfil_completo,
+    avatar_url: row.avatar_url ?? null,
+    banner_url: row.banner_url ?? null,
+    site: row.site ?? null,
+    linkedin: row.linkedin ?? null,
+    instagram: row.instagram ?? null,
+  } as Perfil;
+}
+
+function extractStoragePathFromPublicUrl(url?: string | null) {
+  if (!url) return null;
+  try {
+    const marker = `/object/public/${BUCKET_NAME}/`;
+    const idx = url.indexOf(marker);
+    if (idx === -1) return null;
+    return url.substring(idx + marker.length);
+  } catch {
+    return null;
+  }
+}
+
+export default function PerfilProfissional(props: PerfilProfissionalProps) {
+  const { adminView = false, forceUsuarioId } = props;
   const { user } = useAuth();
+  const navigate = useNavigate();
 
-  const [openEdit, setOpenEdit] = useState(false);
-  const [runTutorial, setRunTutorial] = useState(false);
-  const [perfil, setPerfil] = useState<any>(null);
-  const [perfilCompleto, setPerfilCompleto] = useState(false);
+  // 🔑 ID alvo para TODAS as queries deste componente
+  const alvoUsuarioId = adminView && forceUsuarioId ? forceUsuarioId : user?.id ?? null;
 
-  // Tutorial inicial
+  const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [portfolios, setPortfolios] = useState<PastaPortfolio[]>([]);
+  const [experiencias, setExperiencias] = useState<Experiencia[]>([]);
+  const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
+  const [historicoObras, setHistoricoObras] = useState<HistoricoObra[]>([]);
+  const [aba, setAba] = useState<
+    "sobre" | "portfolio" | "experiencia" | "historico" | "documentos" | "avaliacoes" | "atividade"
+  >("sobre");
+
+  const [savingBanner, setSavingBanner] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+
+  // ações por toque (mobile)
+  const [showBannerActions, setShowBannerActions] = useState(false);
+  const [showAvatarActions, setShowAvatarActions] = useState(false);
+  const isTouch = useMemo(
+    () => typeof window !== "undefined" && matchMedia?.("(hover: none)").matches,
+    []
+  );
+
+  const [openEditar, setOpenEditar] = useState(false);
+
+  const fileBannerRef = useRef<HTMLInputElement | null>(null);
+  const fileAvatarRef = useRef<HTMLInputElement | null>(null);
+
+  // --- NOVO: refs para tabs + centralizar ativa
+  const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const tabsRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const tabs = useMemo(
+    () =>
+      [
+        ["sobre", "Sobre"],
+        ["portfolio", "Portfólio"],
+        ["experiencia", "Experiência"],
+        ["historico", "Histórico de Obras"],
+        ["documentos", "Documentos"],
+        ["avaliacoes", "Avaliações"],
+        ["atividade", "Atividade"],
+      ] as const,
+    []
+  );
+
   useEffect(() => {
-    if (!localStorage.getItem("tutorial_editar_perfil")) {
-      setTimeout(() => setRunTutorial(true), 1000);
-    }
-  }, []);
+    const btn = tabsRefs.current[aba];
+    if (btn) btn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [aba]);
 
-  const handleJoyrideCallback = (data: any) => {
-    const { status } = data;
-    const finished = [STATUS.FINISHED, STATUS.SKIPPED];
-    if (finished.includes(status)) {
-      setRunTutorial(false);
-      localStorage.setItem("tutorial_editar_perfil", "true");
-    }
-  };
-
-  // Carregar perfil do Supabase
+  // =======================
+  // CARREGAMENTO DE DADOS
+  // =======================
   useEffect(() => {
-    const carregarPerfil = async () => {
-      if (!user?.id) return;
+    (async () => {
+      if (!alvoUsuarioId) return;
       const { data, error } = await supabase
         .from("profissionais_perfil")
         .select("*")
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", alvoUsuarioId)
+        .maybeSingle();
+
+      if (!error && data) {
+        setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+      } else {
+        setPerfil({
+          usuario_id: alvoUsuarioId,
+          nome_completo: user?.email?.split("@")[0] ?? "Profissional",
+          email: user?.email ?? "",
+          perfil_completo: false,
+          nivel: "Profissional",
+          anos_experiencia: 1,
+          disponibilidade: "Imediata",
+          raio_deslocacao: "100 km",
+          pode_viajar: false,
+          pode_alojamento: false,
+          idiomas: [],
+          habilidades: [],
+        } as any);
+      }
+    })();
+  }, [alvoUsuarioId, user?.email]);
+
+  useEffect(() => {
+    (async () => {
+      if (!alvoUsuarioId) return;
+      const { data } = await supabase
+        .from("profissionais_portfolio_pastas")
+        .select("id,titulo,obra_id,cliente,cidade,ano,capa_url,midias")
+        .eq("usuario_id", alvoUsuarioId);
+      setPortfolios((data as any[])?.map(p => ({ ...p, midias: p.midias ?? [] })) ?? []);
+    })();
+  }, [alvoUsuarioId]);
+
+  useEffect(() => {
+    (async () => {
+      if (!alvoUsuarioId) return;
+      const { data, error } = await supabase
+        .from("profissionais_experiencias")
+        .select("id,empresa,cargo,cidade,inicio,fim,descricao,tecnologias")
+        .eq("usuario_id", alvoUsuarioId)
+        .order("inicio", { ascending: false });
+      if (!error) setExperiencias((data as any[]) ?? []);
+    })();
+  }, [alvoUsuarioId]);
+
+  useEffect(() => {
+    (async () => {
+      if (!alvoUsuarioId) return;
+      const { data, error } = await supabase
+        .from("profissionais_documentos")
+        .select("id,titulo,tipo,status,validade,arquivo_url")
+        .eq("usuario_id", alvoUsuarioId);
+      if (!error) setDocumentos((data as any[]) ?? []);
+    })();
+  }, [alvoUsuarioId]);
+
+  useEffect(() => {
+    (async () => {
+      if (!alvoUsuarioId) return;
+      const { data, error } = await supabase
+        .from("profissionais_avaliacoes")
+        .select("id,avaliador,comentario,nota,data,obra")
+        .eq("usuario_id", alvoUsuarioId)
+        .order("data", { ascending: false });
+      if (!error) setAvaliacoes((data as any[]) ?? []);
+    })();
+  }, [alvoUsuarioId]);
+
+  useEffect(() => {
+    (async () => {
+      if (!alvoUsuarioId) return;
+      const { data, error } = await supabase
+        .from("profissionais_obras_historico")
+        .select("id,nome,cidade,ano,horas")
+        .eq("usuario_id", alvoUsuarioId)
+        .order("ano", { ascending: false });
+      if (!error) setHistoricoObras((data as any[]) ?? []);
+    })();
+  }, [alvoUsuarioId]);
+
+  const mediaAvaliacao = useMemo(() => {
+    if (!avaliacoes.length) return 0;
+    return avaliacoes.reduce((acc, a) => acc + (a.nota ?? 0), 0) / Math.max(1, avaliacoes.length);
+  }, [avaliacoes]);
+
+  const MAX_MB = 10;
+  const uploadToBucket = async (file: File, path: string) => {
+    if (file.size > MAX_MB * 1024 * 1024) throw new Error(`Arquivo muito grande (>${MAX_MB}MB).`);
+    const { data: up, error: upErr } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(path, file, { upsert: true, cacheControl: "3600" });
+    if (upErr) throw upErr;
+    const { data: publicUrl } = supabase.storage.from(BUCKET_NAME).getPublicUrl(up.path);
+    return publicUrl.publicUrl;
+  };
+
+  const handleBannerChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      if (!perfil?.usuario_id || !ev.target.files?.[0]) return;
+      setSavingBanner(true);
+      const file = ev.target.files[0];
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `perfis/${perfil.usuario_id}/banner_${Date.now()}.${ext}`;
+      const publicUrl = await uploadToBucket(file, path);
+
+      const { data, error } = await supabase
+        .from("profissionais_perfil")
+        .update({ banner_url: publicUrl, data_atualizacao: new Date().toISOString() })
+        .eq("usuario_id", perfil.usuario_id)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+    } catch (e) {
+      console.error("Erro ao trocar banner:", e);
+      alert("Não foi possível trocar a capa. Tente novamente.");
+    } finally {
+      setSavingBanner(false);
+      fileBannerRef.current && (fileBannerRef.current.value = "");
+    }
+  };
+
+  const handleDeleteBanner = async () => {
+    if (!perfil?.usuario_id || !perfil?.banner_url) return;
+    if (!confirm("Remover capa do perfil?")) return;
+
+    try {
+      setSavingBanner(true);
+      const { data, error } = await supabase
+        .from("profissionais_perfil")
+        .update({ banner_url: null, data_atualizacao: new Date().toISOString() })
+        .eq("usuario_id", perfil.usuario_id)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+
+      const path = extractStoragePathFromPublicUrl(perfil.banner_url);
+      if (path) await supabase.storage.from(BUCKET_NAME).remove([path]);
+
+      if (data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+    } catch (e) {
+      console.error("Erro ao apagar capa:", e);
+      alert("Não foi possível apagar a capa.");
+    } finally {
+      setSavingBanner(false);
+    }
+  };
+
+  const handleAvatarChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      if (!perfil?.usuario_id || !ev.target.files?.[0]) return;
+      setSavingAvatar(true);
+      const file = ev.target.files[0];
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `perfis/${perfil.usuario_id}/avatar_${Date.now()}.${ext}`;
+      const publicUrl = await uploadToBucket(file, path);
+
+      const { data, error } = await supabase
+        .from("profissionais_perfil")
+        .update({ avatar_url: publicUrl, data_atualizacao: new Date().toISOString() })
+        .eq("usuario_id", perfil.usuario_id)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      if (data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+    } catch (e) {
+      console.error("Erro ao trocar avatar:", e);
+      alert("Não foi possível trocar a foto. Tente novamente.");
+    } finally {
+      setSavingAvatar(false);
+      fileAvatarRef.current && (fileAvatarRef.current.value = "");
+    }
+  };
+
+  const handleDeleteAvatar = async () => {
+    if (!perfil?.usuario_id || !perfil?.avatar_url) return;
+    if (!confirm("Remover foto de perfil?")) return;
+
+    try {
+      setSavingAvatar(true);
+      const { data, error } = await supabase
+        .from("profissionais_perfil")
+        .update({ avatar_url: null, data_atualizacao: new Date().toISOString() })
+        .eq("usuario_id", perfil.usuario_id)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+
+      const path = extractStoragePathFromPublicUrl(perfil.avatar_url);
+      if (path) await supabase.storage.from(BUCKET_NAME).remove([path]);
+
+      if (data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+    } catch (e) {
+      console.error("Erro ao apagar avatar:", e);
+      alert("Não foi possível apagar a foto.");
+    } finally {
+      setSavingAvatar(false);
+    }
+  };
+
+  const handleSaveModal = async (data: any) => {
+    if (!perfil?.usuario_id) return;
+    const safeKeys = [
+      "nome_completo","email","telefone","cidade_base","nacionalidade","data_nascimento","nivel",
+      "anos_experiencia","area_principal","funcao_obra","disponibilidade","raio_deslocacao",
+      "pode_viajar","pode_alojamento","idiomas","habilidades","avatar_url","banner_url",
+      "site","linkedin","instagram","perfil_completo","tipo_contrato","valor_diario","whatsapp",
+      "observacoes","bio",
+    ] as const;
+
+    const normalizeBool = (v: any) =>
+      typeof v === "string" ? v.toLowerCase().startsWith("s") || v === "true" || v === "1" : !!v;
+    const normalizeMoney = (v: any) =>
+      v == null || v === "" ? null : String(v).replace(/[^\d,.-]/g, "").replace(",", ".");
+
+    const payload: any = { usuario_id: perfil.usuario_id };
+    for (const k of safeKeys) if (data[k] !== undefined) payload[k] = data[k];
+
+    if (payload.pode_viajar !== undefined) payload.pode_viajar = normalizeBool(payload.pode_viajar);
+    if (payload.pode_alojamento !== undefined)
+      payload.pode_alojamento = normalizeBool(payload.pode_alojamento);
+    if (payload.valor_diario !== undefined) payload.valor_diario = normalizeMoney(payload.valor_diario);
+
+    payload.perfil_completo = !!(
+      payload.nome_completo && payload.telefone && payload.area_principal && payload.cidade_base
+    );
+
+    try {
+      const { data: up, error } = await supabase
+        .from("profissionais_perfil")
+        .upsert({ ...payload, data_atualizacao: new Date().toISOString() }, { onConflict: "usuario_id" })
+        .select()
         .maybeSingle();
 
       if (error) {
-        console.error("❌ Erro ao carregar perfil:", error.message);
+        console.error("Erro ao salvar perfil:", error.message, error);
+        alert("Não foi possível salvar o perfil.\n\nDetalhe: " + (error.message ?? ""));
         return;
       }
+      if (up) setPerfil(mapDbToPerfil(up, { id: alvoUsuarioId, email: user?.email ?? null }));
+    } catch (e) {
+      console.error("Erro inesperado ao salvar perfil:", e);
+      alert("Erro inesperado ao salvar o perfil.");
+    }
+  };
 
-      if (data) {
-        setPerfil({
-          nome: data.nome_completo || "",
-          email: data.email || user.email,
-          telefone: data.telefone || "",
-          dataNasc: data.data_nascimento || "",
-          nacionalidade: data.nacionalidade || "",
-          idiomas: data.idiomas || [],
-          areaPrincipal: data.area_principal ? [data.area_principal] : [],
-          nivel: data.nivel || "Oficial 1",
-          anosExp: data.anos_experiencia
-            ? `${data.anos_experiencia} anos`
-            : "1 a 3 anos",
-          disponibilidade: data.disponibilidade || "Imediata",
-          funcaoObra: data.funcao_obra || "",
-          cidadeBase: data.cidade_base || "",
-          podeViajar: data.pode_viajar ? "Sim" : "Não",
-          podeAlojamento: data.pode_alojamento ? "Sim" : "Não",
-          raio: data.raio_deslocacao || "100 km",
-          habilidades: data.habilidades || [],
-          perfil_completo: data.perfil_completo || false,
-        });
-        setPerfilCompleto(data.perfil_completo);
-      } else {
-        setPerfil({
-          nome: user.email || "Usuário",
-          email: user.email || "",
-          perfil_completo: false,
-        });
-      }
-    };
-    carregarPerfil();
-  }, [user]);
+  const handleSaveBio = async (texto: string) => {
+    if (!perfil?.usuario_id) return;
+    try {
+      const { data, error } = await supabase
+        .from("profissionais_perfil")
+        .update({ bio: texto, data_atualizacao: new Date().toISOString() })
+        .eq("usuario_id", perfil.usuario_id)
+        .select()
+        .maybeSingle();
+      if (!error && data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+    } catch (e) {
+      console.error("Erro ao salvar bio:", e);
+    }
+  };
 
-  const valorHora = 7.0;
-  const diaria8h = 56.0;
-  const extra = 8.75;
-
-  if (!perfil)
+  if (!alvoUsuarioId) {
     return (
-      <div className="text-center text-slate-500 dark:text-slate-400 mt-20">
-        Carregando perfil...
+      <div className="flex items-center justify-center h-[60vh] text-slate-400">
+        ID do usuário não identificado.
       </div>
     );
+  }
+
+  if (!perfil) {
+    return <div className="flex items-center justify-center h-[60vh] text-slate-400">Carregando perfil…</div>;
+  }
+
+  const nome = perfil?.nome_completo || "Profissional";
+  const avatar =
+    perfil?.avatar_url ||
+    "https://images.unsplash.com/photo-1527980965255-d3b416303d12?q=80&w=256&auto=format&fit=crop";
+  const bannerFallback =
+    "https://images.unsplash.com/photo-1523419409543-4d7f2a0efcc3?q=80&w=1400&auto=format&fit=crop";
+  const hasBanner = !!perfil?.banner_url;
+  const banner = perfil?.banner_url || bannerFallback;
+
+  // visibilidade (hover desktop / toque mobile)
+  const bannerActionsBase =
+    "transition-opacity inline-flex items-center gap-2 rounded-full px-2.5 py-2 text-[13px] bg-white/70 text-slate-800 border border-black/5 backdrop-blur-sm shadow-sm hover:bg-white/90 dark:bg-slate-900/60 dark:text-slate-100 dark:border-white/10 dark:hover:bg-slate-900/80 disabled:opacity-60";
+  const bannerActionOpacity = isTouch ? (showBannerActions ? "opacity-100" : "opacity-0") : "opacity-0 md:group-hover:opacity-100";
+  const avatarActionOpacity = isTouch ? (showAvatarActions ? "opacity-100" : "opacity-0") : "opacity-0 group-hover:opacity-100";
 
   return (
-    <div className="mx-auto max-w-6xl px-3 md:px-6 py-6 md:py-12 text-slate-800 dark:text-slate-100 transition-all">
-      {/* JOYRIDE */}
-      <Joyride
-        run={runTutorial}
-        callback={handleJoyrideCallback}
-        continuous
-        showProgress
-        showSkipButton
-        styles={{
-          options: {
-            zIndex: 10000,
-            primaryColor: "#3b82f6",
-            backgroundColor: "#ffffff",
-            textColor: "#1e293b",
-            arrowColor: "#ffffff",
-          },
-        }}
-        steps={[
-          {
-            target: ".botao-editar-perfil",
-            content: "Clique aqui para editar e completar seu perfil.",
-            disableBeacon: true,
-          },
-        ]}
-      />
+    <div className="mx-auto max-w-6xl px-3 md:px-6 pb-24">
+      {/* ===== Header ===== */}
+      <div className="relative overflow-hidden rounded-2xl border dark:border-slate-800/50 border-gray-200 bg-white dark:bg-slate-900">
+        {/* Botão voltar (apenas Admin) */}
+        {adminView && (
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute left-3 top-3 z-20 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium bg-white/85 text-slate-800 ring-1 ring-black/10 hover:bg-white dark:bg-slate-800/80 dark:text-slate-100 dark:ring-white/15"
+            title="Voltar"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Voltar</span>
+          </button>
+        )}
 
-      {/* HEADER */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden 
-          bg-gradient-to-r from-gray-100 via-white to-gray-50 
-          dark:from-slate-800/90 dark:via-slate-900/95 dark:to-slate-950/90
-          backdrop-blur-md rounded-2xl md:rounded-3xl p-5 md:p-10
-          shadow-[0_4px_25px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.25)]
-          mb-6 md:mb-12 border border-slate-200 dark:border-slate-700/40"
-      >
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
-          <div className="flex items-center gap-3 md:gap-6">
-            <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-500 text-white flex items-center justify-center text-xl md:text-3xl font-bold shadow-[0_0_15px_rgba(59,130,246,0.5)] ring-4 ring-cyan-300/30">
-              {perfil.nome?.charAt(0)?.toUpperCase() || "U"}
+        {/* Capa */}
+        <div
+          className="group relative"
+          onClick={() => { if (isTouch) setShowBannerActions(v => !v); }}
+        >
+          {hasBanner ? (
+            <div className="h-44 sm:h-52 md:h-64 bg-cover bg-center" style={{ backgroundImage: `url(${banner})` }} aria-label="Capa do perfil" />
+          ) : (
+            <div className="h-44 sm:h-52 md:h-64 relative overflow-hidden" aria-label="Área da capa (vazia)">
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-800 dark:via-slate-900 dark:to-slate-900" />
+              <div className="absolute inset-0 [background:radial-gradient(transparent_1px,rgba(0,0,0,0)_1px)] [background-size:24px_24px] opacity-30 dark:opacity-20" />
+              <div className="absolute inset-0 ring-1 ring-inset ring-black/5 dark:ring-white/10" />
+            </div>
+          )}
+
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/10 dark:to-black/30" />
+
+          {/* Ações da capa */}
+          <div className="absolute right-3 top-3 flex gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); fileBannerRef.current?.click(); }}
+              disabled={savingBanner}
+              className={`${bannerActionsBase} ${bannerActionOpacity}`}
+              title="Trocar capa"
+              aria-label="Trocar capa"
+            >
+              {savingBanner ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              <span className="hidden sm:inline">Trocar capa</span>
+            </button>
+
+            {perfil.banner_url && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDeleteBanner(); }}
+                disabled={savingBanner}
+                className={`${bannerActionsBase} ${bannerActionOpacity}`}
+                title="Apagar capa"
+                aria-label="Apagar capa"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Apagar capa</span>
+              </button>
+            )}
+          </div>
+
+          <input ref={fileBannerRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
+        </div>
+
+        {/* Conteúdo principal */}
+        <div className="px-4 md:px-8 pb-5 pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-[auto,1fr,auto] gap-4 -mt-14 md:-mt-16 items-end">
+            {/* Avatar */}
+            <div className="flex justify-center md:block">
+              <div
+                className="relative group"
+                onClick={() => { if (isTouch) setShowAvatarActions(v => !v); }}
+              >
+                <img
+                  src={avatar}
+                  alt={nome}
+                  className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl border-4 border-white dark:border-slate-900 object-cover shadow-xl"
+                />
+
+                {/* Trocar */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); fileAvatarRef.current?.click(); }}
+                  disabled={savingAvatar}
+                  className={`absolute right-1.5 bottom-1.5 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/95 border border-gray-200 text-slate-700 hover:bg-white hover:shadow-sm dark:bg-slate-800/90 dark:text-slate-100 dark:border-slate-700 ${avatarActionOpacity}`}
+                  title="Alterar foto"
+                  aria-label="Alterar foto"
+                >
+                  {savingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                </button>
+
+                {/* Apagar */}
+                {perfil.avatar_url && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteAvatar(); }}
+                    disabled={savingAvatar}
+                    className={`absolute left-1.5 top-1.5 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/95 border border-gray-200 text-slate-700 hover:bg-white hover:shadow-sm dark:bg-slate-800/90 dark:text-slate-100 dark:border-slate-700 ${avatarActionOpacity}`}
+                    title="Apagar foto"
+                    aria-label="Apagar foto"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+
+                <input ref={fileAvatarRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              </div>
             </div>
 
-            <div>
-              <h1 className="text-xl md:text-3xl font-semibold tracking-tight">
-                {perfil.nome}
+            {/* Nome + meta */}
+            <div className="min-w-0 text-center md:text-left mt-2 md:mt-3">
+              <h1 className="text-xl sm:text-2xl md:text-[26px] font-semibold text-gray-900 dark:text-white leading-snug break-words whitespace-normal max-w-lg md:max-w-2xl mx-auto md:mx-0">
+                {nome}
               </h1>
-              <p className="text-slate-600 dark:text-slate-400 text-sm md:text-base">
-                {perfil.funcaoObra} • {perfil.cidadeBase}
+              <p className="mt-0.5 text-gray-600 dark:text-slate-300 text-sm md:text-[15px]">
+                {perfil.funcao_obra || perfil.area_principal || "Profissional"}
+                {perfil.cidade_base && (
+                  <span className="inline-flex items-center gap-1 ml-2 text-gray-500 dark:text-slate-400">
+                    <MapPin className="w-4 h-4" /> {perfil.cidade_base}
+                  </span>
+                )}
               </p>
 
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className="bg-violet-100 text-violet-700 border border-violet-300 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-500/30 px-3 py-0.5 rounded-full text-xs font-medium shadow-sm">
-                  {perfil.nivel}
-                </span>
-                <span className="bg-green-100 text-green-700 border border-green-300 dark:bg-green-900/40 dark:text-green-300 dark:border-green-400/30 px-3 py-0.5 rounded-full text-xs font-medium shadow-sm">
-                  {perfilCompleto ? "Perfil Completo" : "Em Progresso"}
-                </span>
+              <div className="mt-2 flex flex-wrap justify-center md:justify-start gap-2 text-xs sm:text-[13px]">
+                <Chip icon={<Trophy className="w-3.5 h-3.5" />} txt={perfil.nivel || "Profissional"} color="indigo" />
+                <Chip icon={<Clock4 className="w-3.5 h-3.5" />} txt={`${perfil.anos_experiencia ?? 1}+ anos`} color="emerald" />
+                <Chip icon={<Star className="w-3.5 h-3.5" />} txt={`${mediaAvaliacao.toFixed(1)} (${avaliacoes.length})`} color="amber" />
+                {perfil.perfil_completo && <Chip icon={<Sparkles className="w-3.5 h-3.5" />} txt="Perfil completo" color="sky" />}
               </div>
+            </div>
 
-              <div className="mt-2">
-                <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 mb-0.5">
-                  💶 €{valorHora.toFixed(2)}/h • 🕗 8h: €
-                  {diaria8h.toFixed(2)} • ⏱ Extra: €{extra.toFixed(2)}
-                </p>
-                <div className="w-48 md:w-72 bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 rounded-full transition-all duration-500"
-                    style={{ width: perfilCompleto ? "100%" : "65%" }}
-                  />
-                </div>
-                <p className="text-[11px] mt-1 text-slate-500 italic dark:text-slate-500">
-                  {perfilCompleto
-                    ? "✅ Seu perfil está completo!"
-                    : "Complete seu perfil para liberar tudo."}
-                </p>
-              </div>
+            {/* Ação */}
+            <div className="flex justify-center md:justify-end mt-1 md:mt-0">
+              <button
+                onClick={() => setOpenEditar(true)}
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium bg-sky-600 text-white hover:bg-sky-500 shadow-sm"
+              >
+                <Edit3 className="w-4 h-4" />
+                Editar perfil
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 md:flex md:gap-3">
-            <button
-              onClick={() => setOpenEdit(true)}
-              className="botao-editar-perfil flex items-center justify-center gap-2 px-5 py-2.5 md:px-6 md:py-3 
-                bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-600 
-                hover:shadow-[0_0_15px_rgba(56,189,248,0.5)] hover:scale-[1.02] 
-                text-white rounded-xl text-sm md:text-base font-medium shadow-md transition-all"
-            >
-              <Edit3 size={16} /> Editar
-            </button>
-            <button className="flex items-center justify-center gap-2 px-5 py-2.5 md:px-6 md:py-3 
-              bg-slate-100 text-blue-600 border border-slate-200 hover:bg-slate-200 
-              dark:bg-slate-800 dark:text-cyan-400 dark:border-slate-600 
-              rounded-xl text-sm md:text-base font-medium transition-all">
-              <TrendingUp size={16} /> Carreira
-            </button>
+          {/* Contatos / Links */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+            <div className="flex items-center gap-2 justify-center sm:justify-start text-gray-700 dark:text-slate-300">
+              <Mail className="w-4 h-4" />
+              <span className="truncate">{perfil.email || "-"}</span>
+            </div>
+            <div className="flex items-center gap-2 justify-center sm:justify-start text-gray-700 dark:text-slate-300">
+              <Phone className="w-4 h-4" />
+              <span className="truncate">{perfil.telefone || (perfil as any).whatsapp || "-"}</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+              {safeHttpUrl(perfil.site) && (
+                <a href={safeHttpUrl(perfil.site)!} target="_blank" rel="noopener noreferrer" className={btnLink}>
+                  <LinkIcon className="w-4 h-4" /> Site
+                </a>
+              )}
+              {safeHttpUrl(perfil.linkedin) && (
+                <a href={safeHttpUrl(perfil.linkedin)!} target="_blank" rel="noopener noreferrer" className={btnLink}>
+                  <ExternalLink className="w-4 h-4" /> LinkedIn
+                </a>
+              )}
+              {safeHttpUrl(perfil.instagram) && (
+                <a href={safeHttpUrl(perfil.instagram)!} target="_blank" rel="noopener noreferrer" className={btnLink}>
+                  <Camera className="w-4 h-4" /> Instagram
+                </a>
+              )}
+            </div>
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
-        <AnimatedCard title="Informações Profissionais" icon={<Briefcase />}>
-          <Grid label="Área Principal" value={perfil.areaPrincipal.join(", ")} />
-          <Grid label="Nível" value={perfil.nivel} />
-          <Grid label="Experiência" value={perfil.anosExp} />
-          <Grid label="Disponibilidade" value={perfil.disponibilidade} />
-          <Grid label="Função" value={perfil.funcaoObra} />
-        </AnimatedCard>
-
-        <AnimatedCard title="Informações Pessoais" icon={<User />}>
-          <Grid label="Nome" value={perfil.nome} />
-          <Grid label="Email" value={perfil.email} />
-          <Grid label="Telefone" value={perfil.telefone} />
-          <Grid label="Nascimento" value={perfil.dataNasc} />
-          <Grid label="Nacionalidade" value={perfil.nacionalidade} />
-          <Grid label="Idiomas" value={perfil.idiomas.join(", ")} />
-        </AnimatedCard>
-
-        <AnimatedCard title="Localização e Mobilidade" icon={<MapPin />}>
-          <Grid label="Cidade Base" value={perfil.cidadeBase} />
-          <Grid label="Pode Viajar?" value={perfil.podeViajar} />
-          <Grid label="Alojamento?" value={perfil.podeAlojamento} />
-          <Grid label="Raio" value={perfil.raio} />
-        </AnimatedCard>
-
-<AnimatedCard title="Habilidades" icon={<Star />}>
-  <div className="flex flex-wrap gap-2 mt-2">
-    {perfil.habilidades.map((skill: string) => (
-      <span
-        key={skill}
-        className="
-          px-3 py-1 text-xs font-medium rounded-full border transition-all
-          bg-blue-50 text-blue-700 border-blue-200
-          dark:bg-[#0f172a]/70 dark:text-cyan-100 dark:border-cyan-500/40
-          dark:hover:bg-[#1e293b]/80 dark:hover:border-cyan-400 dark:hover:text-white
-          shadow-[0_0_6px_rgba(56,189,248,0.25)] dark:shadow-[0_0_8px_rgba(56,189,248,0.35)]
-        "
-        style={{
-          backdropFilter: "blur(6px)",
-        }}
-      >
-        {skill}
-      </span>
-    ))}
-  </div>
-</AnimatedCard>
-
-
-
-
-        <AnimatedCard
-          title="Documentos e Certificações"
-          icon={<FileCheck />}
-          className="md:col-span-2"
+      {/* ===== Abas ===== */}
+      <div className="sticky top-0 z-30 mt-6 border-b dark:border-slate-800/60 border-gray-200
+                      bg-white/70 dark:bg-slate-900/60 backdrop-blur supports-[backdrop-filter]:bg-white/50">
+        <div
+          ref={tabsContainerRef}
+          className="
+            flex overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth gap-2 px-1
+            touch-pan-x overscroll-x-contain select-none
+          "
         >
-          <Doc label="Cartão de Cidadão" status="Aprovado" icon={<CheckCircle2 />} />
-          <Doc label="NIF" status="Aprovado" icon={<FileText />} />
-          <Doc label="Segurança Social" status="Aprovado" icon={<Shield />} />
-          <Doc label="Exame Médico" status="Pendente" icon={<HeartPulse />} />
-          <Doc label="Ficha EPI" status="Aprovado" icon={<HardHat />} />
-          <Doc label="Seguro de Trabalho" status="Rejeitado" icon={<XCircle />} />
-          <Doc label="Formação em Segurança" status="Pendente" icon={<Award />} />
-          <Doc label="Certificado Profissional" status="Aprovado" icon={<Briefcase />} />
-
-          <button
-            onClick={() => navigate("/documentos")}
-            className="mt-5 flex items-center justify-center gap-2 px-5 py-2.5 
-              bg-gradient-to-r from-cyan-500 to-blue-500 hover:shadow-[0_0_15px_rgba(56,189,248,0.5)] hover:scale-[1.02] 
-              text-white rounded-xl font-medium text-sm shadow-md transition-all w-full md:w-auto"
-          >
-            <FileCheck size={16} /> Anexar Documento
-          </button>
-        </AnimatedCard>
+          {tabs.map(([k, label]) => {
+            const active = aba === k;
+            return (
+              <button
+                key={k}
+                ref={(el) => (tabsRefs.current[k] = el)}
+                onClick={() => setAba(k as any)}
+                className={`
+                  snap-center whitespace-nowrap relative
+                  px-4 py-3 text-sm md:text-[15px] font-medium
+                  transition-colors
+                  ${
+                    active
+                      ? "text-sky-600 dark:text-sky-400"
+                      : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
+                  }
+                `}
+              >
+                {label}
+                <span
+                  className={`
+                    absolute left-0 right-0 -bottom-[1px] h-[2px] rounded-full transition-all
+                    ${active ? "bg-sky-600 dark:bg-sky-500" : "bg-transparent"}
+                  `}
+                />
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex justify-center mt-8 md:mt-12">
-        <button className="flex items-center justify-center gap-2 px-6 py-2.5 md:px-8 md:py-3 
-          bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-600 
-          hover:shadow-[0_0_15px_rgba(56,189,248,0.5)] hover:scale-[1.02] 
-          text-white rounded-xl font-medium text-sm md:text-base shadow-md transition-all">
-          <Download size={16} /> Baixar PDF do CV
-        </button>
+      {/* ===== Conteúdo ===== */}
+      <div className="mt-6">
+        <Suspense fallback={<div className="text-slate-400">Carregando…</div>}>
+          {aba === "sobre" && (
+            <SobreTab
+              perfil={{ ...(perfil ?? ({} as any)), experiencia: (perfil as any)?.experiencia ?? (perfil as any)?.anos_experiencia ?? 0 }}
+              onSaveBio={handleSaveBio}
+            />
+          )}
+
+          {/* 🔧 Portfólio: garante ownerId do profissional aberto (funciona no Admin e no painel do próprio) */}
+          {aba === "portfolio" && <PortfolioTab ownerId={alvoUsuarioId} />}
+
+          {aba === "experiencia" && <ExperienciaTab experiencias={experiencias} />}
+          {aba === "historico" && <HistoricoTab obras={historicoObras} />}
+          {aba === "documentos" && <DocumentosTab docs={documentos} />}
+          {aba === "avaliacoes" && <AvaliacoesTab avaliacoes={avaliacoes} />}
+          {aba === "atividade" && <AtividadeTab />}
+        </Suspense>
       </div>
 
-      {openEdit && (
-        <EditModal
-          perfil={perfil}
-          user={user}
-          onClose={() => setOpenEdit(false)}
-          onSave={(novo) => setPerfil(novo)}
-          onProfileCompleted={() => setPerfilCompleto(true)}
+      {openEditar && (
+        <EditarPerfilModal
+          open={openEditar as any}
+          isOpen={openEditar as any}
+          onClose={() => setOpenEditar(false)}
+          initialData={{
+            nome: perfil?.nome_completo ?? "",
+            email: perfil?.email ?? "",
+            telefone: perfil?.telefone ?? "",
+            whatsapp: (perfil as any)?.whatsapp ?? "",
+            data_nascimento: (perfil as any)?.data_nascimento ?? "",
+            nacionalidade: (perfil as any)?.nacionalidade ?? "",
+            idiomas: perfil?.idiomas ?? [],
+            area_principal: perfil?.area_principal ?? "",
+            nivel: (perfil?.nivel as any) ?? "Profissional",
+            anos_experiencia: perfil?.anos_experiencia ?? 0,
+            valor_diario: (perfil as any)?.valor_diario ?? "",
+            tipo_contrato: (perfil as any)?.tipo_contrato ?? "",
+            disponibilidade: (perfil?.disponibilidade as any) ?? "Imediata",
+            funcao: perfil?.funcao_obra ?? perfil?.area_principal ?? "",
+            cidade: perfil?.cidade_base ?? "",
+            pode_viajar: perfil?.pode_viajar ? "Sim" : "Não",
+            pode_alojamento: perfil?.pode_alojamento ? "Sim" : "Não",
+            raio: perfil?.raio_deslocacao ?? "",
+            habilidades: perfil?.habilidades ?? [],
+            observacoes: (perfil as any)?.observacoes ?? "",
+            foto_url: perfil?.avatar_url ?? "",
+            site: perfil?.site ?? "",
+            instagram: perfil?.instagram ?? "",
+            linkedin: perfil?.linkedin ?? "",
+          }}
+          onSave={async (data: any) => {
+            const mapped = {
+              nome_completo: data.nome ?? "",
+              email: data.email ?? "",
+              telefone: data.telefone ?? "",
+              whatsapp: data.whatsapp ?? "",
+              data_nascimento: data.data_nascimento ?? null,
+              nacionalidade: data.nacionalidade ?? null,
+              cidade_base: data.cidade ?? "",
+              avatar_url: data.foto_url ?? "",
+              nivel: data.nivel ?? "Profissional",
+              area_principal: data.area_principal ?? "",
+              funcao_obra: data.funcao ?? "",
+              anos_experiencia: data.anos_experiencia ?? 0,
+              valor_diario: data.valor_diario ?? null,
+              tipo_contrato: data.tipo_contrato ?? "",
+              disponibilidade: data.disponibilidade ?? "Imediata",
+              raio_deslocacao: data.raio ?? null,
+              pode_viajar: typeof data.pode_viajar === "string" ? data.pode_viajar.toLowerCase().startsWith("s") : !!data.pode_viajar,
+              pode_alojamento: typeof data.pode_alojamento === "string" ? data.pode_alojamento.toLowerCase().startsWith("s") : !!data.pode_alojamento,
+              idiomas: data.idiomas ?? [],
+              habilidades: data.habilidades ?? [],
+              observacoes: data.observacoes ?? null,
+              site: data.site ?? "",
+              instagram: data.instagram ?? "",
+              linkedin: data.linkedin ?? "",
+            };
+            await handleSaveModal(mapped);
+            setOpenEditar(false);
+          }}
         />
       )}
     </div>
   );
 }
 
-/* ==== Subcomponentes ==== */
-function AnimatedCard({ title, icon, children, className = "" }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 15 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className={`rounded-2xl p-5 md:p-7 border backdrop-blur-md 
-        bg-gradient-to-br from-gray-100 to-white border-slate-200 shadow-[0_4px_15px_rgba(0,0,0,0.05)] 
-        dark:from-slate-800/80 dark:to-slate-900/90 dark:border-slate-700/50 
-        dark:shadow-[0_4px_15px_rgba(0,0,0,0.25)] 
-        hover:shadow-[0_0_12px_rgba(56,189,248,0.15)] dark:hover:shadow-[0_0_15px_rgba(56,189,248,0.2)] transition-all ${className}`}
-    >
-      <div className="flex items-center gap-2 mb-3 md:mb-5">
-        {icon}
-        <h2 className="font-semibold text-base md:text-lg">{title}</h2>
-      </div>
-      <div className="space-y-1 text-sm">{children}</div>
-    </motion.div>
-  );
-}
-
-function Grid({ label, value }: any) {
-  return (
-    <p className="flex justify-between border-b border-dotted border-slate-300 dark:border-slate-600 pb-1 text-sm">
-      <span className="text-slate-600 dark:text-slate-400">{label}:</span>
-      <span className="text-slate-900 dark:text-slate-100 font-medium">
-        {value || "—"}
-      </span>
-    </p>
-  );
-}
-
-function Doc({ label, status, icon }: any) {
-  const colorMap = {
-    Aprovado:
-      "text-green-700 bg-green-100 border border-green-200 dark:text-green-400 dark:bg-green-500/10 dark:border-green-400/20",
-    Pendente:
-      "text-amber-700 bg-amber-100 border border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-400/20",
-    Rejeitado:
-      "text-red-700 bg-red-100 border border-red-200 dark:text-red-400 dark:bg-red-500/10 dark:border-red-400/20",
+function Chip({ icon, txt, color }: { icon: React.ReactNode; txt: string; color: "sky" | "emerald" | "amber" | "indigo"; }) {
+  const map: Record<string, string> = {
+    sky: "bg-sky-500/10 text-sky-700 border-sky-200 dark:text-sky-300 dark:border-sky-500/20",
+    emerald: "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-300 dark:border-emerald-500/20",
+    amber: "bg-amber-500/10 text-amber-700 border-amber-200 dark:text-amber-300 dark:border-amber-500/20",
+    indigo: "bg-indigo-500/10 text-indigo-700 border-indigo-200 dark:text-indigo-300 dark:border-indigo-500/20",
   };
-
-  const iconColorMap: any = {
-    "Cartão de Cidadão": "text-blue-500 dark:text-blue-400",
-    NIF: "text-indigo-500 dark:text-indigo-400",
-    "Segurança Social": "text-cyan-500 dark:text-cyan-400",
-    "Exame Médico": "text-rose-500 dark:text-rose-400",
-    "Ficha EPI": "text-yellow-500 dark:text-yellow-400",
-    "Seguro de Trabalho": "text-red-500 dark:text-red-400",
-    "Formação em Segurança": "text-amber-500 dark:text-amber-400",
-    "Certificado Profissional": "text-emerald-500 dark:text-emerald-400",
-  };
-
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 rounded-lg transition-all px-2">
-      <div className="flex items-center gap-2">
-        <div className={`${iconColorMap[label]} flex items-center drop-shadow-[0_0_6px_rgba(59,130,246,0.2)]`}>
-          {icon}
-        </div>
-        <p className="text-sm font-medium">{label}</p>
-      </div>
-      <span
-        className={`text-xs px-3 py-1 rounded-full font-medium ${colorMap[status]
-        }`}
-      >
-        {status}
-      </span>
-    </div>
-  );
+  return <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs border ${map[color]}`}>{icon}{txt}</span>;
 }
 
+const linkBase = "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium border transition";
+const light = "bg-white text-slate-700 border-gray-200 hover:bg-gray-50";
+const dark = "dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700";
+export const btnLink = `${linkBase} ${light} ${dark}`;
+
+function safeHttpUrl(u?: string | null) {
+  if (!u) return null;
+  try {
+    const url = new URL(u, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    if (url.protocol === "http:" || url.protocol === "https:") return url.toString();
+  } catch {}
+  return null;
+}

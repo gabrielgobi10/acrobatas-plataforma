@@ -1,119 +1,606 @@
-import { useState } from "react";
-import { X, Save } from "lucide-react";
-import { supabase } from "../../lib/supabase"; // 🔗 ajusta conforme teu projeto
+// src/components/professional/EditarPerfilModal.tsx
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  X, Save, User2, Mail, Phone, Calendar, Globe2, Languages,
+  Briefcase, BadgeCheck, Gauge, Banknote, FileText, Clock4, MapPin,
+  Plane, Home, Ruler, MessageSquareText, Sparkles,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-export default function EditarPerfilModal({ isOpen, onClose, user }: any) {
-  const [formData, setFormData] = useState({
-    nome: user?.nome || "",
-    email: user?.email || "",
-    telefone: user?.telefone || "",
-    data_nascimento: user?.data_nascimento || "",
-    nacionalidade: user?.nacionalidade || "",
-    idiomas: user?.idiomas || "",
-    area_principal: user?.area_principal || "",
-    nivel: user?.nivel || "",
-    experiencia: user?.experiencia || "",
-    valor_diario: user?.valor_diario || "",
-    tipo_contrato: user?.tipo_contrato || "",
-    disponibilidade: user?.disponibilidade || "",
-    cidade_base: user?.cidade_base || "",
-    pode_viajar: user?.pode_viajar || "Sim",
-    pode_alojamento: user?.pode_alojamento || "Sim",
-    raio_deslocacao: user?.raio_deslocacao || "",
-    habilidades: user?.habilidades || "",
-  });
+/* ================================
+   Props
+================================== */
+type Props = {
+  open?: boolean;
+  isOpen?: boolean;
+  onClose: () => void;
+  initialData: any;
+  onSave: (data: any) => void | Promise<void>;
+};
 
+/* ================================
+   Opções
+================================== */
+const SEG_AVAIL = ["Imediata", "1 semana", "15 dias", "Indisponível"];
+const SEG_BOOL = ["Sim", "Não"];
+const RAIO_OPTS = ["25 km", "50 km", "100 km", "200 km", "Todo o país"];
+const AREAS_SUG = ["Pedreiro","Pintor","Eletricista","Canalizador","Servente","Carpinteiro"];
+const FUNCOES_SUG = ["Oficial","Meio Oficial","Ajudante","Chefe de Equipa"];
+const HABS_SUG = ["Drywall","Azulejista","Reboco","Gesso","Pintura","Impermeabilização","Canalizações","Passagem de cabos"];
+const IDIOMAS_SUG = ["Português","Inglês","Espanhol","Francês","Hindi","Nepalês","Ucraniano","Russo","Árabe"];
+const NACIONALIDADES_SUG = ["Portugal","Brasil","Nepal","Índia","Ucrânia","Rússia","Marrocos","Angola","Cabo Verde","Guiné-Bissau","Moçambique","São Tomé e Príncipe","Espanha","França","Itália","Alemanha","Paquistão","Bangladesh"];
+const CONTRATOS_SUG = ["Recibos verdes","Contrato a termo","Contrato sem termo","Prestação de serviços","Trabalho temporário","Freelancer"];
+
+/* Campos obrigatórios */
+const REQUIRED: string[] = [
+  "nome","telefone","data_nascimento","nacionalidade","area_principal",
+  "anos_experiencia","tipo_contrato","disponibilidade","cidade","pode_viajar",
+];
+
+export default function EditarPerfilModal({
+  open, isOpen, onClose, initialData, onSave,
+}: Props) {
+  const visible = Boolean(open ?? isOpen);
+  const [tab, setTab] = useState<"basico" | "prof" | "mob" | "links">("basico");
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  if (!isOpen) return null;
+  /* Hidrata */
+  useEffect(() => {
+    setForm({
+      nome: initialData?.nome ?? "",
+      email: initialData?.email ?? "",
+      telefone: initialData?.telefone ?? "",
+      whatsapp: initialData?.whatsapp ?? "",
+      data_nascimento: initialData?.data_nascimento ?? "",
+      nacionalidade: initialData?.nacionalidade ?? "",
+      idiomas: initialData?.idiomas ?? [],
+      area_principal: initialData?.area_principal ?? "",
+      nivel: initialData?.nivel ?? "Profissional",
+      anos_experiencia: initialData?.anos_experiencia ?? 0,
+      valor_diario: initialData?.valor_diario ?? "",
+      tipo_contrato: initialData?.tipo_contrato ?? "",
+      disponibilidade: initialData?.disponibilidade ?? "Imediata",
+      funcao: initialData?.funcao ?? "",
+      cidade: initialData?.cidade ?? initialData?.cidade_base ?? "",
+      pode_viajar: initialData?.pode_viajar ?? "Sim",
+      pode_alojamento: initialData?.pode_alojamento ?? "Sim",
+      raio: initialData?.raio ?? initialData?.raio_deslocacao ?? "",
+      habilidades: initialData?.habilidades ?? [],
+      observacoes: initialData?.observacoes ?? "",
+      foto_url: initialData?.foto_url ?? "",
+      site: initialData?.site ?? "",
+      instagram: initialData?.instagram ?? "",
+      linkedin: initialData?.linkedin ?? "",
+    });
+    setErrors({});
+  }, [initialData]);
 
-  const handleChange = (e: any) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  /* Esc + travar scroll (iOS-safe) */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && visible && onClose();
+    if (visible) {
+      document.addEventListener("keydown", onKey);
+      // bloqueia fundo + corrige iOS
+      document.body.classList.add("aw-modal-open");
+    }
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.classList.remove("aw-modal-open");
+    };
+  }, [visible, onClose]);
+
+  const set = (k: string, v: any) => {
+    setForm((s: any) => ({ ...s, [k]: v }));
+    setErrors((prev) => {
+      const copy = { ...prev };
+      if (REQUIRED.includes(k) && v !== undefined && v !== null && `${v}`.trim() !== "") {
+        delete copy[k];
+      }
+      return copy;
+    });
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    const { error } = await supabase
-      .from("usuarios")
-      .update(formData)
-      .eq("uuid", user.uuid);
+  const completion = useMemo(() => {
+    const done = REQUIRED.filter((k) => {
+      const v = form?.[k];
+      return v !== undefined && v !== null && `${v}`.trim() !== "";
+    }).length;
+    return Math.round((done / REQUIRED.length) * 100);
+  }, [form]);
 
-    setSaving(false);
-    if (error) alert("Erro ao salvar alterações.");
-    else {
-      alert("Perfil atualizado com sucesso!");
-      onClose();
+  // normaliza moeda
+  const normalizeMoney = (v: any) => {
+    if (v === null || v === undefined) return "";
+    return String(v).replace(/[^\d,.-]/g, "").replace(",", ".");
+  };
+
+  const handleSubmit = async () => {
+    const newErrors: Record<string, string> = {};
+    REQUIRED.forEach((k) => {
+      const v = form?.[k];
+      if (v === undefined || v === null || `${v}`.trim() === "") {
+        newErrors[k] = "Campo obrigatório";
+      }
+    });
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSave({
+        ...form,
+        valor_diario: normalizeMoney(form.valor_diario),
+        idiomas: form.idiomas ?? [],
+        habilidades: form.habilidades ?? [],
+        whatsapp: form.whatsapp ?? "",
+        observacoes: form.observacoes ?? "",
+        site: undefined,
+        instagram: undefined,
+        linkedin: undefined,
+        cidade_base: form.cidade,
+        raio_deslocacao: form.raio,
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white bg-gray-100 dark:bg-slate-900 w-full max-w-4xl rounded-2xl shadow-lg overflow-y-auto max-h-[90vh] border border-slate-200 dark:border-slate-800">
-        {/* Cabeçalho */}
-        <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-800">
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-            Editar Perfil Profissional
-          </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">
-            <X size={22} />
-          </button>
-        </div>
+  /* Scroll suave para bloco da tab */
+  useEffect(() => {
+    const el = containerRef.current?.querySelector(`#sec-${tab}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [tab]);
 
-        {/* Corpo do formulário */}
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Object.entries({
-            nome: "Nome Completo*",
-            email: "Email*",
-            telefone: "Telefone*",
-            data_nascimento: "Data de Nascimento*",
-            nacionalidade: "Nacionalidade*",
-            idiomas: "Idiomas",
-            area_principal: "Área Principal*",
-            nivel: "Nível*",
-            experiencia: "Anos de Experiência*",
-            valor_diario: "Valor Diário (€)*",
-            tipo_contrato: "Tipo de Contrato*",
-            disponibilidade: "Disponibilidade*",
-            cidade_base: "Cidade Base*",
-            pode_viajar: "Pode Viajar?*",
-            pode_alojamento: "Pode Alojamento?*",
-            raio_deslocacao: "Raio de Deslocação (km)",
-            habilidades: "Habilidades",
-          }).map(([key, label]) => (
-            <div key={key} className="flex flex-col">
-              <label
-                htmlFor={key}
-                className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+  return (
+    <AnimatePresence>
+      {visible && (
+        <div className="fixed inset-0 z-[100]">
+          {/* Correções CSS globais leves (iOS) */}
+          <style>{`
+            .aw-modal-open {
+              position: fixed;
+              width: 100%;
+              overflow: hidden;
+              touch-action: none;
+            }
+            @supports(height: 100svh){
+              .aw-svh { height: 100svh; max-height: 100svh; }
+            }
+            /* Safari momentum scroll somente vertical dentro do modal */
+            .aw-modal-scroll {
+              -webkit-overflow-scrolling: touch;
+              overscroll-behavior: contain;
+              touch-action: pan-y;
+            }
+          `}</style>
+
+          <motion.div
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/55"
+          />
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 18 }}
+            transition={{ duration: 0.18 }}
+            className="
+              absolute inset-x-0 top-0 mx-auto
+              w-[min(100vw,1120px)]
+              sm:top-3 sm:w-[min(96vw,1120px)]
+            "
+          >
+            {/* Container do modal */}
+            <div
+              className="
+                bg-white dark:bg-slate-900 rounded-none sm:rounded-2xl
+                border border-slate-200 dark:border-slate-800
+                shadow-xl overflow-hidden
+                aw-svh sm:max-h-[92vh] flex flex-col
+              "
+              style={{ maxWidth: "1120px" }}
+            >
+              {/* Header fixo */}
+              <div className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+                <div className="px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
+                      Editar Perfil Profissional
+                    </h2>
+                    <span className="inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-700 border border-sky-200 dark:text-sky-300 dark:border-sky-500/20">
+                      <Sparkles className="w-3.5 h-3.5" /> {completion}%
+                    </span>
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    aria-label="Fechar"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="px-3 sm:px-4 pb-3 pt-0 flex flex-wrap gap-2">
+                  <Pill active={tab === "basico"} onClick={() => setTab("basico")} icon={<User2 className="w-3.5 h-3.5" />}>Básico</Pill>
+                  <Pill active={tab === "prof"} onClick={() => setTab("prof")} icon={<Briefcase className="w-3.5 h-3.5" />}>Profissional</Pill>
+                  <Pill active={tab === "mob"} onClick={() => setTab("mob")} icon={<MapPin className="w-3.5 h-3.5" />}>Mobilidade</Pill>
+                  <Pill active={tab === "links"} onClick={() => setTab("links")} icon={<MessageSquareText className="w-3.5 h-3.5" />}>Contatos & Notas</Pill>
+                </div>
+              </div>
+
+              {/* Corpo rolável (apenas Y) */}
+              <div
+                ref={containerRef}
+                className="
+                  aw-modal-scroll
+                  flex-1 overflow-y-auto overflow-x-hidden
+                  px-4 sm:px-5 md:px-6 py-5 sm:py-6 space-y-10
+                  scrollbar-thin scrollbar-thumb-slate-500 scrollbar-track-slate-900/20
+                  max-w-full
+                "
               >
-                {label}
-              </label>
-              <input
-                id={key}
-                name={key}
-                value={(formData as any)[key]}
-                onChange={handleChange}
-                className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-500 outline-none"
-              />
+                {/* Básico */}
+                <Section id="sec-basico" title="Informações básicas" icon={<User2 className="w-4 h-4" />}>
+                  <Grid>
+                    <Input icon={<User2 />} label="Nome Completo*" value={form.nome} onChange={(v: string) => set("nome", v)} error={errors.nome} />
+                    <Input icon={<Mail />} label="Email" value={form.email} onChange={(v: string) => set("email", v)} />
+                    <Input icon={<Phone />} label="Telefone*" value={form.telefone} onChange={(v: string) => set("telefone", v)} inputMode="tel" error={errors.telefone} />
+                    <Input icon={<Phone />} label="WhatsApp" value={form.whatsapp} onChange={(v: string) => set("whatsapp", v)} inputMode="tel" />
+                    <Input icon={<Calendar />} label="Data de Nascimento*" type="date" value={form.data_nascimento} onChange={(v: string) => set("data_nascimento", v)} error={errors.data_nascimento} />
+                    <Combo icon={<Globe2 />} label="Nacionalidade*" value={form.nacionalidade} onChange={(v: string) => set("nacionalidade", v)} suggestions={NACIONALIDADES_SUG} placeholder="Ex.: Portugal, Brasil…" error={errors.nacionalidade} />
+                    <ChipMultiSelect icon={<Languages />} label="Idiomas" values={form.idiomas || []} onChange={(vals: string[]) => set("idiomas", vals)} suggestions={IDIOMAS_SUG} helper="Clique para marcar; digite para procurar; Enter para adicionar." />
+                  </Grid>
+                </Section>
+
+                {/* Profissional */}
+                <Section id="sec-prof" title="Informações profissionais" icon={<Briefcase className="w-4 h-4" />}>
+                  <Grid>
+                    <Combo icon={<Briefcase />} label="Área Principal*" value={form.area_principal} onChange={(v: string) => set("area_principal", v)} suggestions={AREAS_SUG} placeholder="Ex.: Pedreiro" error={errors.area_principal} />
+                    <Input icon={<BadgeCheck />} label="Nível" value={form.nivel} onChange={(v: string) => set("nivel", v)} disabled />
+                    <NumberInput icon={<Gauge />} label="Anos de Experiência*" value={form.anos_experiencia} onChange={(v: number) => set("anos_experiencia", v)} min={0} max={50} error={errors.anos_experiencia} />
+                    <CurrencyInput icon={<Banknote />} label="Valor por hora (€)" value={form.valor_diario} onChange={(v: string) => set("valor_diario", v)} />
+                    <Combo icon={<FileText />} label="Tipo de Contrato*" value={form.tipo_contrato} onChange={(v: string) => set("tipo_contrato", v)} suggestions={CONTRATOS_SUG} placeholder="Ex.: Recibos verdes, contrato…" error={errors.tipo_contrato} />
+                    <Segmented icon={<Clock4 />} label="Disponibilidade*" value={form.disponibilidade} onChange={(v: string) => set("disponibilidade", v)} options={SEG_AVAIL} error={errors.disponibilidade} />
+                    <Combo icon={<Briefcase />} label="Função na Obra" value={form.funcao} onChange={(v: string) => set("funcao", v)} suggestions={FUNCOES_SUG} placeholder="Ex.: Oficial" />
+                    <ChipMultiSelect icon={<Sparkles />} label="Habilidades" values={form.habilidades || []} onChange={(vals: string[]) => set("habilidades", vals)} suggestions={HABS_SUG} helper="Selecione as principais habilidades." />
+                  </Grid>
+                </Section>
+
+                {/* Mobilidade */}
+                <Section id="sec-mob" title="Localização e mobilidade" icon={<MapPin className="w-4 h-4" />}>
+                  <Grid>
+                    <Input icon={<Home />} label="Cidade Base*" value={form.cidade} onChange={(v: string) => set("cidade", v)} error={errors.cidade} />
+                    <Segmented icon={<Plane />} label="Pode Viajar?*" value={form.pode_viajar} onChange={(v: string) => set("pode_viajar", v)} options={SEG_BOOL} error={errors.pode_viajar} />
+                    <Segmented icon={<Home />} label="Pode Alojamento?" value={form.pode_alojamento} onChange={(v: string) => set("pode_alojamento", v)} options={SEG_BOOL} />
+                    <Select icon={<Ruler />} label="Raio de Deslocação" value={form.raio} onChange={(v: string) => set("raio", v)} options={RAIO_OPTS} />
+                  </Grid>
+                </Section>
+
+                {/* Contatos & Notas */}
+                <Section id="sec-links" title="Contatos e observações" icon={<MessageSquareText className="w-4 h-4" />}>
+                  <Grid>
+                    <TextArea icon={<MessageSquareText />} label="Observações (opcional)" value={form.observacoes} onChange={(v: string) => set("observacoes", v)} placeholder="Ex.: Disponível para turnos noturnos, trabalha com própria ferramenta, etc." rows={4} />
+                  </Grid>
+                </Section>
+              </div>
+
+              {/* Footer fixo */}
+              <div className="sticky bottom-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-t border-slate-200 dark:border-slate-800 px-4 sm:px-5 md:px-6 py-3 sm:py-4 flex items-center justify-between gap-3">
+                <div className="hidden md:flex items-center gap-3 w-1/2">
+                  <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                    <div className="h-full bg-sky-500" style={{ width: `${completion}%` }} />
+                  </div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 min-w-[64px] text-right">{completion}%</span>
+                </div>
+                <div className="ml-auto flex items-center gap-3">
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={saving}
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                      saving ? "bg-sky-400/60 text-white cursor-not-allowed" : "bg-sky-600 text-white hover:bg-sky-500"
+                    }`}
+                  >
+                    <Save className="w-4 h-4" />
+                    {saving ? "Salvando…" : "Salvar Alterações"}
+                  </button>
+                </div>
+              </div>
             </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* ================================
+   Primitives reutilizáveis
+================================== */
+function Pill({ active, onClick, children, icon }: any) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition
+        ${active
+          ? "bg-sky-500/10 text-sky-700 border-sky-200 dark:text-sky-300 dark:border-sky-500/20"
+          : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+        }`}
+    >
+      {icon} {children}
+    </button>
+  );
+}
+
+function Section({ id, title, icon, children }: any) {
+  return (
+    <section id={id} className="scroll-mt-28">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          {icon}
+        </span>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+          {title}
+        </h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Grid({ children }: { children: React.ReactNode }) {
+  return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>;
+}
+
+function Input({ label, value, onChange, type = "text", placeholder, disabled = false, icon, inputMode, error }: any) {
+  return (
+    <div className="flex flex-col">
+      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>
+        <input
+          type={type}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          inputMode={inputMode}
+          className={`w-full rounded-lg pl-10 pr-3 py-2.5 border text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white
+          placeholder:text-slate-400 dark:placeholder:text-slate-500
+          ${disabled ? "opacity-70 cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-sky-500"}
+          ${error ? "border-rose-500 focus:ring-rose-500" : "border-slate-300 dark:border-slate-700"}`}
+        />
+      </div>
+      {error && <span className="mt-1 text-[11px] text-rose-500 font-medium">{error}</span>}
+    </div>
+  );
+}
+
+function TextArea({ label, value, onChange, placeholder, rows = 3, icon }: any) {
+  return (
+    <div className="flex flex-col md:col-span-2">
+      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-3 text-slate-400">{icon}</span>
+        <textarea
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={rows}
+          className="w-full rounded-lg pl-10 pr-3 py-2.5 border text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 border-slate-300 dark:border-slate-700"
+        />
+      </div>
+    </div>
+  );
+}
+
+function Select({ label, value, onChange, options, icon, error }: any) {
+  return (
+    <div className="flex flex-col">
+      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>
+        <select
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          className={`w-full rounded-lg pl-10 pr-3 py-2.5 border text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2
+          ${error ? "border-rose-500 focus:ring-rose-500" : "border-slate-300 dark:border-slate-700 focus:ring-sky-500"}`}
+        >
+          <option value="">Selecionar…</option>
+          {options.map((o: string) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      </div>
+      {error && <span className="mt-1 text-[11px] text-rose-500 font-medium">{error}</span>}
+    </div>
+  );
+}
+
+function Segmented({ label, value, onChange, options, icon, error }: any) {
+  return (
+    <div className="flex flex-col">
+      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+      <div className={`flex flex-wrap gap-2 rounded-lg ${error ? "ring-1 ring-rose-500/80 p-1" : ""}`}>
+        {options.map((opt: string) => (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            type="button"
+            className={`px-3 py-1.5 rounded-lg text-sm border transition
+              ${value === opt
+                ? "bg-sky-600 text-white border-sky-600"
+                : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"}`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+      {error && <span className="mt-1 text-[11px] text-rose-500 font-medium">{error}</span>}
+    </div>
+  );
+}
+
+function NumberInput({ label, value, onChange, min = 0, max = 100, icon, error }: any) {
+  return (
+    <div className="flex flex-col">
+      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={value ?? 0}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className={`w-full rounded-lg pl-10 pr-3 py-2.5 border text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 ${
+            error ? "border-rose-500 focus:ring-rose-500" : "border-slate-300 dark:border-slate-700 focus:ring-sky-500"
+          }`}
+        />
+      </div>
+      {error && <span className="mt-1 text-[11px] text-rose-500 font-medium">{error}</span>}
+    </div>
+  );
+}
+
+function CurrencyInput({ label, value, onChange, icon }: any) {
+  const format = (v: string) => v.replace(/[^\d,.-]/g, "").replace(",", ".");
+  return (
+    <div className="flex flex-col">
+      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>
+        <span className="absolute left-10 top-1/2 -translate-y-1/2 text-slate-400">€</span>
+        <input
+          value={value ?? ""}
+          onChange={(e) => onChange(format(e.target.value))}
+          className="w-full rounded-lg pl-14 pr-3 py-2.5 border text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 border-slate-300 dark:border-slate-700"
+          placeholder="Ex.: 8,50"
+          inputMode="decimal"
+        />
+      </div>
+    </div>
+  );
+}
+
+function Combo({ label, value, onChange, suggestions = [], placeholder, icon, error }: any) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState(value || "");
+  useEffect(() => setQ(value || ""), [value]);
+  const filtered = suggestions.filter((s: string) => s.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="flex flex-col relative">
+      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); onChange(e.target.value); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          placeholder={placeholder}
+          className={`w-full rounded-lg pl-10 pr-3 py-2.5 border text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 ${
+            error ? "border-rose-500 focus:ring-rose-500" : "border-slate-300 dark:border-slate-700 focus:ring-sky-500"
+          }`}
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow max-h-52 overflow-y-auto">
+          {filtered.slice(0, 12).map((s: string) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(s); setQ(s); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              {s}
+            </button>
           ))}
         </div>
+      )}
+      {error && <span className="mt-1 text-[11px] text-rose-500 font-medium">{error}</span>}
+    </div>
+  );
+}
 
-        {/* Rodapé */}
-        <div className="flex justify-end gap-4 p-6 border-t border-slate-200 dark:border-slate-800">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-5 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 text-white font-medium shadow hover:opacity-90 transition"
-          >
-            <Save size={16} className="inline mr-2" />
-            {saving ? "Salvando..." : "Salvar Alterações"}
-          </button>
+/** Multi-seletor com UX melhorada */
+function ChipMultiSelect({ label, values, onChange, suggestions = [], helper, icon }: any) {
+  const [query, setQuery] = useState("");
+  const normalized = (query || "").toLowerCase().trim();
+  const filtered = suggestions.filter((s: string) => s.toLowerCase().includes(normalized) && !values.includes(s));
+
+  const add = (v: string) => {
+    const clean = v.trim();
+    if (!clean) return;
+    if (!values.includes(clean)) onChange([...values, clean]);
+    setQuery("");
+  };
+  const remove = (v: string) => onChange(values.filter((x: string) => x !== v));
+  const toggle = (v: string) => (values.includes(v) ? remove(v) : add(v));
+
+  return (
+    <div className="flex flex-col md:col-span-2">
+      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+
+      <div className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+        {/* barra de busca */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-800">
+          <span className="text-slate-400">{icon}</span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && add(query)}
+            placeholder="Digite para procurar… (Enter para adicionar)"
+            className="flex-1 bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
+          />
+          {helper && <span className="hidden md:block text-[11px] text-slate-400">{helper}</span>}
+        </div>
+
+        {/* sugestões rápidas */}
+        <div className="p-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {(normalized ? filtered : suggestions).slice(0, 12).map((s: string) => {
+              const selected = values.includes(s);
+              return (
+                <button
+                  key={s}
+                  onClick={() => toggle(s)}
+                  type="button"
+                  className={`w-full text-left px-3 py-1.5 rounded-lg text-xs border transition
+                    ${selected ? "bg-sky-600 text-white border-sky-600" : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"}`}
+                >
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* chips selecionados */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {values.map((v: string) => (
+              <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border bg-sky-500/10 text-sky-700 border-sky-200 dark:text-sky-300 dark:border-sky-500/20">
+                {v}
+                <button onClick={() => remove(v)} className="ml-1 opacity-70 hover:opacity-100">×</button>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     </div>

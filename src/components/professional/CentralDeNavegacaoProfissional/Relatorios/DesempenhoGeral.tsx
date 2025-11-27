@@ -26,8 +26,8 @@ type Desempenho = {
   total_obras: number;
   total_horas: number;
   total_presencas: number;
-  avaliacao_media: number;
-  indice_acrobatas: number;
+  avaliacao_media: number | null;
+  indice_acrobatas: number | null;
 };
 
 type Evolucao = { mes: string; horas: number; avaliacao: number };
@@ -59,8 +59,8 @@ export default function DesempenhoGeral() {
         .eq("profissional_id", user.id)
         .order("mes", { ascending: true });
 
-      setDados(desempenho);
-      setEvolucao(evol || []);
+      setDados(desempenho as Desempenho | null);
+      setEvolucao((evol as Evolucao[]) || []);
       setLoading(false);
     }
 
@@ -89,16 +89,32 @@ export default function DesempenhoGeral() {
       {/* 🔹 Cards resumo */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4 mb-8 sm:mb-10">
         <Card titulo="Obras" valor={dados?.total_obras ?? "0"} icone={<Building2 />} />
-        <Card titulo="Horas" valor={dados ? `${dados.total_horas}h` : "—"} icone={<Clock4 />} />
-        <Card titulo="Presenças" valor={dados?.total_presencas ?? "0"} icone={<CheckCircle2 />} />
+        <Card
+          titulo="Horas"
+          valor={dados ? `${dados.total_horas}h` : "—"}
+          icone={<Clock4 />}
+        />
+        <Card
+          titulo="Presenças"
+          valor={dados?.total_presencas ?? "0"}
+          icone={<CheckCircle2 />}
+        />
         <Card
           titulo="Avaliação"
-          valor={dados?.avaliacao_media ? dados.avaliacao_media.toFixed(1) : "—"}
+          valor={
+            dados && dados.avaliacao_media !== null && dados.avaliacao_media !== undefined
+              ? dados.avaliacao_media.toFixed(1)
+              : "—"
+          }
           icone={<Star />}
         />
         <Card
           titulo="Índice"
-          valor={dados ? `${dados.indice_acrobatas ?? 0}%` : "—"}
+          valor={
+            dados && dados.indice_acrobatas !== null && dados.indice_acrobatas !== undefined
+              ? `${dados.indice_acrobatas}%`
+              : "—"
+          }
           icone={<Award />}
         />
       </div>
@@ -151,13 +167,15 @@ export default function DesempenhoGeral() {
             Ranking Acrobatas
           </p>
           <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm">
-            {dados
-              ? "Você está entre os 15% melhores profissionais do mês."
+            {dados && dados.indice_acrobatas !== null && dados.indice_acrobatas > 0
+              ? "Você está entre os melhores profissionais do mês."
               : "Seu ranking será exibido assim que houver registros de desempenho."}
           </p>
         </div>
         <div className="text-2xl sm:text-3xl font-bold text-blue-500 dark:text-blue-400">
-          {dados ? `🏆 ${dados.indice_acrobatas}%` : "—"}
+          {dados && dados.indice_acrobatas !== null && dados.indice_acrobatas > 0
+            ? `🏆 ${dados.indice_acrobatas}%`
+            : "—"}
         </div>
       </div>
 

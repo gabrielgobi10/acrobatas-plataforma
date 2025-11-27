@@ -10,23 +10,18 @@ import {
   Loader2,
   Upload,
   X,
-
   Search,
-  Image as ImageIcon,
   User,
-  Users,
-  ChevronRight,
-  ChevronLeft,
-  MapPin,
   BarChart3,
   Clock4,
+  ClipboardList,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Toaster, toast } from "sonner";
 
-// ============================
-// Tipos
-// ============================
+/* ============================
+   Tipos
+============================ */
 type Lider = { id: string; nome: string; funcao?: string | null };
 type Presente = { id: string; nome: string };
 type FotoJson = { url: string; nome: string };
@@ -34,7 +29,7 @@ type FotoJson = { url: string; nome: string };
 type Relatorio = {
   id: string;
   obra_id: string;
-  data: string | null; // garantir robustez
+  data: string | null;
   data_relatorio?: string | null;
   responsavel_id: string | null;
   condicoes_climaticas: string | null;
@@ -63,15 +58,14 @@ const HORAS_BASE = 8;
 const HORAS_FACTOR_MIN = 0.5;
 const HORAS_FACTOR_MAX = 1.5;
 const MAX_DAILY_INCREMENT = 10;
-const BUCKET_NAME = "relatorios_fotos"; // bucket recomendado
-
+const BUCKET_NAME = "relatorios_fotos";
 const HOJE = new Date().toISOString().split("T")[0];
 
-// ============================
-// Componente
-// ============================
+/* ============================
+   Componente
+============================ */
 export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
-  // Tema
+  // Tema atual (para ajustar classes dinâmicas)
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains("dark")
   );
@@ -91,13 +85,13 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
   const [abrirModalNovo, setAbrirModalNovo] = useState(false);
   const [abrirModalDetalhe, setAbrirModalDetalhe] = useState<Relatorio | null>(null);
 
-  // Filtros/Busca lista
+  // Filtros/Busca
   const [busca, setBusca] = useState("");
   const [filtroClima, setFiltroClima] = useState("Todos");
   const [filtroResp, setFiltroResp] = useState("Todos");
   const [ordemData, setOrdemData] = useState<"desc" | "asc">("desc");
 
-  // Formulário de novo relatório
+  // Formulário
   const [form, setForm] = useState({
     data: HOJE,
     condicoes_climaticas: "",
@@ -114,9 +108,9 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
   });
   const [salvando, setSalvando] = useState(false);
 
-  // ============================
-  // Cargas iniciais
-  // ============================
+  /* ============================
+     Carga
+  ============================ */
   useEffect(() => {
     (async () => {
       setCarregando(true);
@@ -133,7 +127,6 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       .eq("obra_id", obraId)
       .order("data", { ascending: ordemData === "asc" });
     if (error) console.error(error);
-    // garantir coerência data/data_relatorio
     const normalizados = (data || []).map((r: any) => ({
       ...r,
       data: r.data || r.data_relatorio || HOJE,
@@ -143,7 +136,6 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     setRelatorios(normalizados as Relatorio[]);
   }
 
-  // Busca líderes via profissionais_obras.funcao, com fallback em profissionais.funcao
   async function carregarLideres() {
     let leaders: Lider[] = [];
     const { data: viaObra } = await supabase
@@ -182,7 +174,6 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     setLideres(leaders);
   }
 
-  // Profissionais presentes (todos vinculados à obra)
   async function carregarPresentes() {
     const { data, error } = await supabase
       .from("profissionais_obras")
@@ -197,9 +188,9 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     setPresentes(list);
   }
 
-  // ============================
-  // Util / Cálculos
-  // ============================
+  /* ============================
+     Utils
+  ============================ */
   function horasNumber(): number {
     if (form.horasPreset === "custom") {
       const val = Number(form.horasCustom);
@@ -227,8 +218,7 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       return null;
     }
   }
--
-  // Upload de fotos (preview + remoção)
+
   function onSelectFotos(files: FileList | null) {
     if (!files) return;
     const arr = Array.from(files);
@@ -236,32 +226,31 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       objectUrl: URL.createObjectURL(f),
       nome: f.name,
     }));
-    setForm((f) => ({
-      ...f,
-      fotosArquivos: [...f.fotosArquivos, ...arr],
-      fotosPreview: [...f.fotosPreview, ...previews],
+    setForm((old) => ({
+      ...old,
+      fotosArquivos: [...old.fotosArquivos, ...arr],
+      fotosPreview: [...old.fotosPreview, ...previews],
     }));
   }
 
   function removerFotoTemp(idx: number) {
-    setForm((f) => {
-      const previews = [...f.fotosPreview];
+    setForm((old) => {
+      const previews = [...old.fotosPreview];
       URL.revokeObjectURL(previews[idx].objectUrl);
       previews.splice(idx, 1);
-      const arquivos = [...f.fotosArquivos];
+      const arquivos = [...old.fotosArquivos];
       arquivos.splice(idx, 1);
-      return { ...f, fotosArquivos: arquivos, fotosPreview: previews };
+      return { ...old, fotosArquivos: arquivos, fotosPreview: previews };
     });
   }
 
-  // ============================
-  // Salvar (versão corrigida + linda)
-  // ============================
+  /* ============================
+     Salvar
+  ============================ */
   async function salvarRelatorio() {
     try {
       setSalvando(true);
 
-      // 1️⃣ Pega progresso atual da obra
       const { data: ob, error: errObra } = await supabase
         .from("obras")
         .select("progresso, empresa_id")
@@ -273,18 +262,16 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       const empresaId = ob?.empresa_id;
       if (!empresaId) throw new Error("empresa_id ausente na obra.");
 
-      // 2️⃣ Calcula incremento do dia
       const incremento = incrementoPrevisto();
       const novoTotal = Math.min(100, Math.round((progressoAtual + incremento) * 100) / 100);
 
-      // 3️⃣ Monta payload compatível com a tua tabela
       const payload = {
         obra_id: obraId,
-        empresa_id: empresaId,                   // ✅
-        data: HOJE,                               // ✅ garante listagem
-        data_relatorio: HOJE,                     // ✅ para histórico
-        condicoes_climaticas: form.condicoes_climaticas || null, // ✅ nome unificado
-        clima: form.condicoes_climaticas || null, // (se ainda existir a coluna `clima`)
+        empresa_id: empresaId,
+        data: HOJE,
+        data_relatorio: HOJE,
+        condicoes_climaticas: form.condicoes_climaticas || null,
+        clima: form.condicoes_climaticas || null,
         responsavel_id: form.responsavel_id || null,
         nivel_avanco: form.nivel_avanco,
         progresso_diario: incremento,
@@ -297,7 +284,7 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
         atividades: JSON.stringify([]),
         custos: JSON.stringify([]),
         ocorrencias: JSON.stringify([]),
-        fotos: null as any, // será atualizado após upload
+        fotos: null as any,
       };
 
       const { data: inserted, error: errInsert } = await supabase
@@ -309,8 +296,7 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
 
       const relatorioId = inserted?.id as string;
 
-      // 4️⃣ upload das fotos (se houver)
-      let fotosJson: FotoJson[] | null = null;
+      // Upload de fotos (opcional)
       if (form.fotosArquivos.length) {
         const urls: FotoJson[] = [];
         for (const file of form.fotosArquivos) {
@@ -323,22 +309,11 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
             }
           }
         }
-        fotosJson = urls;
-        // se a coluna for jsonb, salva como objeto; se for text, envia string JSON
-        await supabase
-          .from("relatorios_obras")
-          .update({ fotos: fotosJson })
-          .eq("id", relatorioId);
+        await supabase.from("relatorios_obras").update({ fotos: urls }).eq("id", relatorioId);
       }
 
-      // 5️⃣ atualiza progresso da obra
-      const { error: errUpd } = await supabase
-        .from("obras")
-        .update({ progresso: novoTotal })
-        .eq("id", obraId);
-      if (errUpd) throw errUpd;
+      await supabase.from("obras").update({ progresso: novoTotal }).eq("id", obraId);
 
-      // 6️⃣ limpar form e recarregar
       limparForm();
       setAbrirModalNovo(false);
       await carregarRelatorios();
@@ -352,7 +327,6 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
   }
 
   function limparForm() {
-    // limpar URLs temporárias
     form.fotosPreview.forEach((p) => URL.revokeObjectURL(p.objectUrl));
     setForm({
       data: HOJE,
@@ -370,9 +344,9 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     });
   }
 
-  // ============================
-  // Lista filtrada + ordenação
-  // ============================
+  /* ============================
+     Lista filtrada
+  ============================ */
   const listaFiltrada = useMemo(() => {
     let lista = relatorios.filter((r) => {
       const buscaOk =
@@ -397,12 +371,22 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     return lista;
   }, [relatorios, busca, filtroClima, filtroResp, ordemData]);
 
-  // ============================
-  // UI helpers
-  // ============================
+  /* ============================
+     UI helpers
+  ============================ */
   const cardBase = isDark
-    ? "bg-[#151B24] border-[#1E2632]"
+    ? "bg-[#10161f] border-[#203044]"
     : "bg-white border-gray-200";
+
+  const inputBase =
+    "w-full border rounded-lg px-3 py-2 mt-1 text-sm outline-none transition focus:ring-2 focus:ring-blue-500/30";
+  const lightInput =
+    "bg-white text-gray-900 border-gray-300 placeholder:text-gray-400";
+  const darkInput =
+    "bg-[#0f141b] text-gray-100 border-[#1f2a37] placeholder:text-gray-400";
+
+  const textareaBase = `${inputBase} min-h-[120px]`;
+  const selectBase = `${inputBase}`;
 
   function IconeClima(tipo?: string | null) {
     switch (tipo) {
@@ -419,82 +403,111 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     }
   }
 
-  // ============================
-  // Render
-  // ============================
+  /* ============================
+     Render
+  ============================ */
   return (
-    <div className="w-full p-6">
+    <div className="w-full p-6 mobile-wrap">
       <Toaster position="top-right" richColors />
 
-{/* Header */}
-<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-  <div className="flex items-center gap-2">
-    <CalendarDays className="text-blue-500 w-5 h-5" />
-    <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-800"}`}>
-      Relatórios do Dia
-    </h2>
-  </div>
-  <button
-    onClick={() => setAbrirModalNovo(true)}
-    className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex justify-center items-center gap-2 text-sm font-medium transition"
-  >
-    <Plus size={16} />
-    Novo Relatório
-  </button>
-</div>
+      {/* Utilitários responsivos para mobile */}
+      <style>{`
+@media (max-width: 640px) {
+  .mobile-wrap { padding: 12px !important; }
+  .mobile-card { padding: 14px !important; border-radius: 14px !important; }
+  .mobile-grid { display: grid; grid-template-columns: 1fr !important; gap: 12px !important; }
+  .mobile-input { padding: 10px 12px !important; font-size: 16px !important; }
+  .mobile-btn { padding: 12px !important; font-size: 16px !important; }
 
-{/* Filtros */}
-<div className={`border rounded-xl p-4 ${cardBase}`}>
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-    {/* Campo de busca */}
-    <div className="flex items-center gap-2">
-      <Search size={16} className="opacity-60 shrink-0" />
-      <input
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        className="flex-1 bg-transparent border rounded-md px-3 py-2 text-sm"
-        placeholder="Buscar atividades ou observações…"
-      />
-    </div>
+  .modal-mobile{
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    border-top-left-radius: 18px !important;
+    border-top-right-radius: 18px !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    overflow: hidden;
+    box-shadow: 0 -8px 30px rgba(0,0,0,.35);
+  }
+  .modal-header{
+    position: sticky; top: 0; z-index: 2;
+    padding: 14px 16px;
+    backdrop-filter: saturate(180%) blur(6px);
+  }
+  .modal-footer{
+    position: sticky; bottom: 0; z-index: 2;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)) 16px;
+    backdrop-filter: saturate(180%) blur(6px);
+  }
+}
+      `}</style>
 
-    {/* Filtro por clima */}
-    <select
-      value={filtroClima}
-      onChange={(e) => setFiltroClima(e.target.value)}
-      className="w-full bg-transparent border rounded-md px-3 py-2 text-sm"
-    >
-      <option>Todos</option>
-      <option>Sol</option>
-      <option>Nublado</option>
-      <option>Chuva</option>
-      <option>Vento</option>
-    </select>
+      {/* Header da página */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="text-blue-600 w-5 h-5" />
+          <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+            Relatórios do dia
+          </h2>
+        </div>
+        <button
+          onClick={() => setAbrirModalNovo(true)}
+          className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex justify-center items-center gap-2 text-sm font-medium transition mobile-btn"
+        >
+          <Plus size={16} />
+          Novo relatório
+        </button>
+      </div>
 
-    {/* Filtro por responsável */}
-    <select
-      value={filtroResp}
-      onChange={(e) => setFiltroResp(e.target.value)}
-      className="w-full bg-transparent border rounded-md px-3 py-2 text-sm"
-    >
-      <option>Todos</option>
-      {Array.from(
-        new Set(relatorios.map((r) => r.responsavel?.nome).filter(Boolean) as string[])
-      ).map((nome) => (
-        <option key={nome}>{nome}</option>
-      ))}
-    </select>
+      {/* Filtros */}
+      <div className={`border rounded-xl p-4 mobile-card ${cardBase}`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mobile-grid">
+          <div className="flex items-center gap-2">
+            <Search size={16} className="opacity-60 shrink-0" />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className={`flex-1 ${inputBase} ${isDark ? darkInput : lightInput} mobile-input`}
+              placeholder="Buscar atividades ou observações…"
+            />
+          </div>
 
-    {/* Filtro por data */}
-    <select
-      value={ordemData}
-      onChange={(e) => setOrdemData(e.target.value as "asc" | "desc")}
-      className="w-full bg-transparent border rounded-md px-3 py-2 text-sm"
-    >
-      <option value="desc">Mais recentes primeiro</option>
-      <option value="asc">Mais antigos primeiro</option>
-    </select>
-  </div>
-</div>
+          <select
+            value={filtroClima}
+            onChange={(e) => setFiltroClima(e.target.value)}
+            className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
+          >
+            <option>Todos</option>
+            <option>Sol</option>
+            <option>Nublado</option>
+            <option>Chuva</option>
+            <option>Vento</option>
+          </select>
+
+          <select
+            value={filtroResp}
+            onChange={(e) => setFiltroResp(e.target.value)}
+            className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
+          >
+            <option>Todos</option>
+            {Array.from(
+              new Set(relatorios.map((r) => r.responsavel?.nome).filter(Boolean) as string[])
+            ).map((nome) => (
+              <option key={nome}>{nome}</option>
+            ))}
+          </select>
+
+          <select
+            value={ordemData}
+            onChange={(e) => setOrdemData(e.target.value as "asc" | "desc")}
+            className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
+          >
+            <option value="desc">Mais recentes primeiro</option>
+            <option value="asc">Mais antigos primeiro</option>
+          </select>
+        </div>
+      </div>
 
       {/* Lista */}
       {carregando ? (
@@ -502,7 +515,7 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
           <Loader2 className="animate-spin text-gray-400" size={28} />
         </div>
       ) : listaFiltrada.length === 0 ? (
-        <div className={`border rounded-xl p-6 text-center text-gray-400 ${cardBase}`}>
+        <div className={`border rounded-xl p-6 text-center text-gray-500 mobile-card ${cardBase}`}>
           Nenhum relatório registrado.
         </div>
       ) : (
@@ -514,18 +527,18 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className={`border rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between ${cardBase} ${isDark ? "text-gray-200" : "text-gray-800"}`}
+                className={`border rounded-xl p-5 flex flex-col mobile-card md:flex-row md:items-center md:justify-between ${cardBase} ${isDark ? "text-gray-200" : "text-gray-900"}`}
               >
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2 text-blue-400 font-semibold">
+                  <div className="flex items-center gap-2 text-blue-500 font-medium">
                     <CalendarDays size={16} />
                     {r.data ? new Date(r.data).toLocaleDateString("pt-PT") : "—"}
                   </div>
-                  <div className="flex items-center gap-3 text-sm mt-1">
+                  <div className="flex items-center gap-3 text-sm mt-1 flex-wrap">
                     {IconeClima(r.condicoes_climaticas)}
                     <span className="flex items-center gap-1">
                       <BarChart3 size={14} />
-                      +{r.progresso_diario || 0}% (Total: {r.progresso_total ?? 0}%)
+                      +{r.progresso_diario || 0}% (total {r.progresso_total ?? 0}%)
                     </span>
                     {r.horas_trabalhadas_total != null && (
                       <span className="flex items-center gap-1">
@@ -534,18 +547,18 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                     )}
                   </div>
                   {r.atividades_realizadas && (
-                    <p className="mt-2 text-sm max-w-3xl">
+                    <p className="mt-2 text-sm/6 max-w-3xl opacity-90">
                       {r.atividades_realizadas}
                     </p>
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-2 mt-4 md:mt-0">
-                  <span className="text-sm flex items-center gap-2">
+                  <span className="text-sm flex items-center gap-2 opacity-90">
                     <User size={14} />
                     {r.responsavel?.nome || "Sem responsável"}
                   </span>
                   <button
-                    className="text-blue-400 text-sm hover:underline"
+                    className="text-blue-500 text-sm hover:underline"
                     onClick={() => setAbrirModalDetalhe(r)}
                   >
                     Ver detalhes
@@ -557,58 +570,72 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
         </div>
       )}
 
-      {/* MODAL NOVO */}
+      {/* MODAL: Novo relatório */}
       <AnimatePresence>
         {abrirModalNovo && (
           <motion.div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-[1px] flex sm:items-center items-end justify-center z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={() => { limparForm(); setAbrirModalNovo(false); }}
           >
             <motion.div
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              className={`border rounded-xl p-6 w-full max-w-4xl ${cardBase} ${isDark ? "text-gray-200" : "text-gray-800"}`}
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
+              className={`modal-mobile sm:rounded-2xl sm:w-[720px] sm:max-h-[88vh] w-full border ${cardBase} overflow-hidden`}
             >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold">Novo Relatório do Dia</h3>
+              {/* Header */}
+              <div className={`modal-header ${cardBase} flex items-center justify-between`}>
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-blue-600" />
+                  <div className="leading-tight">
+                    <h3 className="text-[15px] font-semibold">
+                      Novo relatório do dia
+                    </h3>
+                    <p className="text-xs opacity-70">
+                      Preencha as informações da jornada de trabalho.
+                    </p>
+                  </div>
+                </div>
                 <button
-                  onClick={() => {
-                    limparForm();
-                    setAbrirModalNovo(false);
-                  }}
+                  aria-label="Fechar"
+                  onClick={() => { limparForm(); setAbrirModalNovo(false); }}
                   className="p-2 rounded-md hover:bg-black/10"
                 >
                   <X />
                 </button>
               </div>
 
-              <div className="space-y-6">
+              {/* Body */}
+              <div className="modal-body sm:max-h-[calc(88vh-112px)] overflow-auto px-4 sm:px-6 pb-4">
                 {/* Dados gerais */}
-                <div>
-                  <h4 className="text-sm font-semibold opacity-80 mb-2">📅 Dados gerais</h4>
+                <section className="space-y-3 pb-4">
+                  <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80">
+                    Dados gerais
+                  </h4>
                   <div className="grid gap-4 md:grid-cols-3">
                     <div>
-                      <label className="text-sm opacity-70">Data</label>
+                      <label className="text-xs opacity-70">Data</label>
                       <input
                         type="date"
                         value={form.data}
                         min={HOJE}
                         max={HOJE}
                         disabled
-                        className="w-full border rounded-lg p-2 mt-1 bg-gray-100 dark:bg-gray-800"
+                        className={`${inputBase} ${isDark ? darkInput : lightInput} mobile-input`}
                       />
                     </div>
                     <div>
-                      <label className="text-sm opacity-70">Clima</label>
+                      <label className="text-xs opacity-70">Clima</label>
                       <select
                         value={form.condicoes_climaticas}
-                        onChange={(e) =>
-                          setForm({ ...form, condicoes_climaticas: e.target.value })
-                        }
-                        className="w-full border rounded-lg p-2 mt-1 bg-transparent"
+                        onChange={(e) => setForm({ ...form, condicoes_climaticas: e.target.value })}
+                        className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
                       >
                         <option value="">Selecione</option>
                         <option>Sol</option>
@@ -618,13 +645,11 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                       </select>
                     </div>
                     <div>
-                      <label className="text-sm opacity-70">Responsável</label>
+                      <label className="text-xs opacity-70">Responsável</label>
                       <select
                         value={form.responsavel_id}
-                        onChange={(e) =>
-                          setForm({ ...form, responsavel_id: e.target.value })
-                        }
-                        className="w-full border rounded-lg p-2 mt-1 bg-transparent"
+                        onChange={(e) => setForm({ ...form, responsavel_id: e.target.value })}
+                        className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
                       >
                         <option value="">Selecione</option>
                         {lideres.map((l) => (
@@ -635,86 +660,87 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                       </select>
                     </div>
                   </div>
-                </div>
+                </section>
 
-                {/* Produção do dia */}
-                <div>
-                  <h4 className="text-sm font-semibold opacity-80 mb-2">🧱 Produção do dia</h4>
+                <hr className={`${isDark ? "border-white/10" : "border-gray-200"} my-3`} />
 
-                  {/* Nível de avanço */}
-                  <div className="mb-3">
-                    <label className="text-sm opacity-70 block mb-1">Nível de avanço</label>
-                    <div className="flex flex-wrap gap-2">
-                      {(Object.keys(NIVEL_MAP) as (keyof typeof NIVEL_MAP)[]).map((k) => {
-                        const active = form.nivel_avanco === k;
-                        return (
-                          <button
-                            key={k}
-                            type="button"
-                            onClick={() => setForm({ ...form, nivel_avanco: k })}
-                            className={`px-3 py-1.5 rounded-full border text-sm transition ${
-                              active ? "bg-blue-600 text-white" : "bg-transparent"
-                            }`}
-                          >
-                            {NIVEL_MAP[k].emoji} {NIVEL_MAP[k].label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                {/* Produção + Atividades */}
+                <section className="grid gap-6 md:grid-cols-2 pb-2">
+                  {/* Coluna esquerda */}
+                  <div className="space-y-4">
+                    <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80">
+                      Produção do dia
+                    </h4>
 
-                  {/* Horas trabalhadas */}
-                  <div className="mb-3">
-                    <label className="text-sm opacity-70 block mb-1">
-                      Horas trabalhadas (total da equipa)
-                    </label>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {HORAS_PRESETS.map((h) => (
-                        <button
-                          key={h}
-                          type="button"
-                          onClick={() =>
-                            setForm({ ...form, horasPreset: h, horasCustom: "" })
-                          }
-                          className={`px-3 py-1.5 rounded-full border text-sm transition ${
-                            form.horasPreset === h ? "bg-blue-600 text-white" : "bg-transparent"
-                          }`}
-                        >
-                          {h}h
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setForm({ ...form, horasPreset: "custom" })}
-                        className={`px-3 py-1.5 rounded-full border text-sm transition ${
-                          form.horasPreset === "custom" ? "bg-blue-600 text-white" : "bg-transparent"
-                        }`}
-                      >
-                        Personalizado
-                      </button>
-                      {form.horasPreset === "custom" && (
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.5}
-                          placeholder="Horas…"
-                          value={form.horasCustom}
-                          onChange={(e) => setForm({ ...form, horasCustom: e.target.value })}
-                          className="ml-2 w-28 border rounded-lg p-2 bg-transparent"
-                        />
-                      )}
-                    </div>
-                    {/* Preview do cálculo */}
-                    <div className="mt-2 text-xs opacity-70">
-                      Incremento previsto hoje:{" "}
-                      <strong>+{incrementoPrevisto()}%</strong>
-                    </div>
-                  </div>
-
-                  {/* Profissionais presentes + Atividades */}
-                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Nível */}
                     <div>
-                      <label className="text-sm opacity-70">Profissionais presentes</label>
+                      <label className="text-xs opacity-70 block mb-1">Nível de avanço</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(Object.keys(NIVEL_MAP) as (keyof typeof NIVEL_MAP)[]).map((k) => {
+                          const active = form.nivel_avanco === k;
+                          return (
+                            <button
+                              key={k}
+                              type="button"
+                              onClick={() => setForm({ ...form, nivel_avanco: k })}
+                              className={`px-3 py-1.5 rounded-full border text-sm transition mobile-btn
+                                ${active ? "bg-blue-600 text-white border-blue-600" : (isDark ? "border-[#1f2a37] text-gray-100" : "border-gray-300 text-gray-800")}
+                              `}
+                            >
+                              {NIVEL_MAP[k].emoji} {NIVEL_MAP[k].label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Horas */}
+                    <div>
+                      <label className="text-xs opacity-70 block mb-1">
+                        Horas trabalhadas (total da equipa)
+                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {HORAS_PRESETS.map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setForm({ ...form, horasPreset: h, horasCustom: "" })}
+                            className={`px-3 py-1.5 rounded-full border text-sm transition mobile-btn
+                              ${form.horasPreset === h ? "bg-blue-600 text-white border-blue-600" : (isDark ? "border-[#1f2a37] text-gray-100" : "border-gray-300 text-gray-800")}
+                            `}
+                          >
+                            {h}h
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, horasPreset: "custom" })}
+                          className={`px-3 py-1.5 rounded-full border text-sm transition mobile-btn
+                            ${form.horasPreset === "custom" ? "bg-blue-600 text-white border-blue-600" : (isDark ? "border-[#1f2a37] text-gray-100" : "border-gray-300 text-gray-800")}
+                          `}
+                        >
+                          Personalizado
+                        </button>
+                        {form.horasPreset === "custom" && (
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.5}
+                            placeholder="Horas…"
+                            value={form.horasCustom}
+                            onChange={(e) => setForm({ ...form, horasCustom: e.target.value })}
+                            className={`w-28 ${inputBase} ${isDark ? darkInput : lightInput} ml-1`}
+                          />
+                        )}
+                      </div>
+                      <div className="mt-2 text-xs opacity-70">
+                        Incremento previsto hoje: <strong>+{incrementoPrevisto()}%</strong>
+                      </div>
+                    </div>
+
+                    {/* Profissionais */}
+                    <div>
+                      <label className="text-xs opacity-70">Profissionais presentes</label>
                       <div className="flex flex-wrap gap-2 mt-2">
                         {presentes.map((p) => {
                           const ativo = form.profissionais_presentes.includes(p.id);
@@ -727,9 +753,9 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                                 const novo = ativo ? sel.filter((id) => id !== p.id) : [...sel, p.id];
                                 setForm({ ...form, profissionais_presentes: novo });
                               }}
-                              className={`px-3 py-1 rounded-full text-sm border transition ${
-                                ativo ? "bg-blue-600 text-white" : "bg-transparent"
-                              }`}
+                              className={`px-3 py-1 rounded-full text-sm border transition mobile-btn
+                                ${ativo ? "bg-blue-600 text-white border-blue-600" : (isDark ? "border-[#1f2a37] text-gray-100" : "border-gray-300 text-gray-800")}
+                              `}
                             >
                               {p.nome}
                             </button>
@@ -737,50 +763,59 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                         })}
                       </div>
                     </div>
-                    <div>
-                      <label className="text-sm opacity-70">Atividades realizadas</label>
-                      <textarea
-                        value={form.atividades_realizadas}
-                        onChange={(e) =>
-                          setForm({ ...form, atividades_realizadas: e.target.value })
-                        }
-                        className="w-full border rounded-lg p-2 mt-1 bg-transparent"
-                        rows={3}
-                        placeholder="Ex.: Concretagem da laje do piso 2, assentamento de blocos…"
-                      />
-                    </div>
                   </div>
-                </div>
+
+                  {/* Coluna direita: atividades */}
+                  <div>
+                    <label className="text-xs opacity-70">Atividades realizadas</label>
+                    <textarea
+                      value={form.atividades_realizadas}
+                      onChange={(e) =>
+                        setForm({ ...form, atividades_realizadas: e.target.value })
+                      }
+                      className={`${textareaBase} ${isDark ? darkInput : lightInput} mobile-input`}
+                      rows={12}
+                      placeholder="Ex.: Concretagem da laje do piso 2, assentamento de blocos…"
+                    />
+                  </div>
+                </section>
+
+                <hr className={`${isDark ? "border-white/10" : "border-gray-200"} my-3`} />
 
                 {/* Observações & Incidentes */}
-                <div>
-                  <h4 className="text-sm font-semibold opacity-80 mb-2">💬 Observações & Incidentes</h4>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="text-sm opacity-70">Observações</label>
-                      <textarea
-                        value={form.observacoes}
-                        onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-                        className="w-full border rounded-lg p-2 mt-1 bg-transparent"
-                        rows={2}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm opacity-70">Incidentes</label>
-                      <textarea
-                        value={form.incidentes}
-                        onChange={(e) => setForm({ ...form, incidentes: e.target.value })}
-                        className="w-full border rounded-lg p-2 mt-1 bg-transparent"
-                        rows={2}
-                        placeholder="Se houve acidente, atraso, falta de material, etc."
-                      />
-                    </div>
+                <section className="grid gap-4 md:grid-cols-2 pb-2">
+                  <div>
+                    <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80 mb-2">
+                      Observações
+                    </h4>
+                    <textarea
+                      value={form.observacoes}
+                      onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+                      className={`${textareaBase} ${isDark ? darkInput : lightInput} mobile-input`}
+                      rows={6}
+                    />
                   </div>
-                </div>
+                  <div>
+                    <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80 mb-2">
+                      Incidentes
+                    </h4>
+                    <textarea
+                      value={form.incidentes}
+                      onChange={(e) => setForm({ ...form, incidentes: e.target.value })}
+                      className={`${textareaBase} ${isDark ? darkInput : lightInput} mobile-input`}
+                      rows={6}
+                      placeholder="Se houve acidente, atraso, falta de material, etc."
+                    />
+                  </div>
+                </section>
+
+                <hr className={`${isDark ? "border-white/10" : "border-gray-200"} my-3`} />
 
                 {/* Fotos */}
-                <div>
-                  <h4 className="text-sm font-semibold opacity-80 mb-2">📸 Registo fotográfico</h4>
+                <section className="pb-1">
+                  <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80 mb-2">
+                    Registo fotográfico
+                  </h4>
                   <input
                     type="file"
                     accept="image/*"
@@ -795,12 +830,13 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                           <img
                             src={f.objectUrl}
                             alt={f.nome}
-                            className="w-24 h-24 object-cover rounded-lg border"
+                            className={`w-24 h-24 object-cover rounded-lg border ${isDark ? "border-[#1f2a37]" : "border-gray-300"}`}
                           />
                           <button
                             type="button"
                             onClick={() => removerFotoTemp(idx)}
                             className="absolute -top-2 -right-2 bg-black/70 text-white rounded-full px-2 text-xs"
+                            aria-label="Remover foto"
                           >
                             ✕
                           </button>
@@ -808,28 +844,27 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                       ))}
                     </div>
                   )}
-                </div>
+                </section>
               </div>
 
-              {/* Ações */}
-              <div className="flex justify-end gap-3 mt-6">
+              {/* Footer */}
+              <div className={`modal-footer ${cardBase} flex justify-end gap-3`}>
                 <button
-                  onClick={() => {
-                    limparForm();
-                    setAbrirModalNovo(false);
-                  }}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg"
+                  onClick={() => { limparForm(); setAbrirModalNovo(false); }}
+                  className="px-4 py-2 rounded-lg text-sm font-medium border transition hover:bg-black/10
+                             border-transparent bg-gray-600 hover:bg-gray-500 text-white"
                   disabled={salvando}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={salvarRelatorio}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2"
+                  className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2
+                             bg-blue-600 hover:bg-blue-700 text-white"
                   disabled={salvando}
                 >
                   {salvando ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />}
-                  Salvar
+                  Salvar relatório
                 </button>
               </div>
             </motion.div>
@@ -837,29 +872,36 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
         )}
       </AnimatePresence>
 
-      {/* MODAL DETALHES */}
+      {/* MODAL: Detalhes */}
       <AnimatePresence>
         {abrirModalDetalhe && (
           <motion.div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-[1px] flex sm:items-center items-end justify-center z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={() => setAbrirModalDetalhe(null)}
           >
             <motion.div
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              className={`border rounded-xl p-6 w-full max-w-3xl ${cardBase} ${isDark ? "text-gray-200" : "text-gray-800"}`}
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
+              className={`modal-mobile sm:rounded-2xl sm:w-[680px] sm:max-h-[86vh] w-full border ${cardBase} overflow-hidden`}
             >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <CalendarDays size={18} />
-                  {abrirModalDetalhe?.data
-                    ? new Date(abrirModalDetalhe.data).toLocaleDateString("pt-PT")
-                    : "—"}
-                </h3>
+              <div className={`modal-header ${cardBase} flex items-center justify-between`}>
+                <div className="flex items-center gap-2">
+                  <CalendarDays size={18} className="text-blue-600" />
+                  <h3 className="text-[15px] font-semibold">
+                    {abrirModalDetalhe?.data
+                      ? new Date(abrirModalDetalhe.data).toLocaleDateString("pt-PT")
+                      : "Detalhes do relatório"}
+                  </h3>
+                </div>
                 <button
+                  aria-label="Fechar"
                   onClick={() => setAbrirModalDetalhe(null)}
                   className="p-2 rounded-md hover:bg-black/10"
                 >
@@ -867,77 +909,84 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                 </button>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="text-sm opacity-80">Clima</div>
-                <div className="text-sm flex items-center gap-2">
-                  {IconeClima(abrirModalDetalhe?.condicoes_climaticas)}
-                  {abrirModalDetalhe?.condicoes_climaticas || "—"}
+              <div className="modal-body sm:max-h-[calc(86vh-108px)] overflow-auto px-4 sm:px-6 pb-4">
+                <div className="grid gap-3 md:grid-cols-2 text-sm">
+                  <div className="opacity-70">Clima</div>
+                  <div className="flex items-center gap-2">
+                    {IconeClima(abrirModalDetalhe?.condicoes_climaticas)}
+                    {abrirModalDetalhe?.condicoes_climaticas || "—"}
+                  </div>
+
+                  <div className="opacity-70">Responsável</div>
+                  <div>{abrirModalDetalhe?.responsavel?.nome || "—"}</div>
+
+                  <div className="opacity-70">Avanço</div>
+                  <div>
+                    +{abrirModalDetalhe?.progresso_diario || 0}% (total{" "}
+                    {abrirModalDetalhe?.progresso_total ?? 0}%)
+                  </div>
+
+                  <div className="opacity-70">Horas trabalhadas</div>
+                  <div>{abrirModalDetalhe?.horas_trabalhadas_total ?? 0}h</div>
                 </div>
 
-                <div className="text-sm opacity-80">Responsável</div>
-                <div className="text-sm">
-                  {abrirModalDetalhe?.responsavel?.nome || "—"}
-                </div>
-
-                <div className="text-sm opacity-80">Avanço</div>
-                <div className="text-sm">
-                  +{abrirModalDetalhe?.progresso_diario || 0}% (Total{" "}
-                  {abrirModalDetalhe?.progresso_total ?? 0}%)
-                </div>
-
-                <div className="text-sm opacity-80">Horas trabalhadas</div>
-                <div className="text-sm">
-                  {abrirModalDetalhe?.horas_trabalhadas_total ?? 0}h
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="text-sm opacity-80 mb-1">Atividades</div>
-                <div className="text-sm whitespace-pre-line">
-                  {abrirModalDetalhe?.atividades_realizadas || "—"}
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div>
-                  <div className="text-sm opacity-80 mb-1">Observações</div>
+                <div className="mt-4">
+                  <div className="opacity-70 mb-1 text-sm">Atividades</div>
                   <div className="text-sm whitespace-pre-line">
-                    {abrirModalDetalhe?.observacoes || "—"}
+                    {abrirModalDetalhe?.atividades_realizadas || "—"}
                   </div>
                 </div>
-                <div>
-                  <div className="text-sm opacity-80 mb-1">Incidentes</div>
-                  <div className="text-sm whitespace-pre-line">
-                    {abrirModalDetalhe?.incidentes || "—"}
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <div className="opacity-70 mb-1 text-sm">Observações</div>
+                    <div className="text-sm whitespace-pre-line">
+                      {abrirModalDetalhe?.observacoes || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="opacity-70 mb-1 text-sm">Incidentes</div>
+                    <div className="text-sm whitespace-pre-line">
+                      {abrirModalDetalhe?.incidentes || "—"}
+                    </div>
                   </div>
                 </div>
+
+                {(abrirModalDetalhe?.fotos || []).length > 0 && (
+                  <div className="mt-5">
+                    <div className="text-sm font-medium opacity-80 mb-2">
+                      Fotos do dia
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      {(abrirModalDetalhe?.fotos || []).map((f, idx) => (
+                        <a
+                          key={idx}
+                          href={f.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block"
+                          title={f.nome}
+                        >
+                          <img
+                            src={f.url}
+                            alt={f.nome}
+                            className={`w-24 h-24 rounded-lg object-cover border ${isDark ? "border-[#1f2a37]" : "border-gray-300"}`}
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {(abrirModalDetalhe?.fotos || []).length > 0 && (
-                <div className="mt-5">
-                  <div className="text-sm font-semibold opacity-80 mb-2">
-                    Fotos do dia
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    {(abrirModalDetalhe?.fotos || []).map((f, idx) => (
-                      <a
-                        key={idx}
-                        href={f.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block"
-                        title={f.nome}
-                      >
-                        <img
-                          src={f.url}
-                          alt={f.nome}
-                          className="w-24 h-24 rounded-lg object-cover border"
-                        />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className={`modal-footer ${cardBase} flex justify-end`}>
+                <button
+                  onClick={() => setAbrirModalDetalhe(null)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg mobile-btn text-sm font-medium"
+                >
+                  Fechar
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

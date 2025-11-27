@@ -1,369 +1,1002 @@
-// src/components/company/CentralDeNavegacaoEmpresa/Documentos/Profissionais/DetailsPage.tsx
-import React, { useEffect, useMemo, useState } from "react";
+// src/components/company/DocumentosProfissionaisEmpresa.tsx
+"use client";
+
 import {
-  ArrowLeft,
-  Calendar,
-  Download,
-  Shield,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { motion } from "framer-motion";
+import {
   FileText,
-  BadgeCheck,
-  AlertTriangle,
-  Clock,
-  Building2,
   CheckCircle2,
-  ExternalLink,
+  AlertTriangle,
+  XCircle,
+  Eye,
+  Search,
+  Calendar,
+  Clock4,
+  RefreshCcw,
+  ChevronDown,
+  SortAsc,
+  SortDesc,
+  Shield,
+  User as UserIcon,
+  Users,
+  CircleDot,
+  Circle,
 } from "lucide-react";
+
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { cn, fmt, statusClasses } from "./utils";
 
-/* ---------------------- Helpers / categorias ---------------------- */
-type CategoriaKey =
-  | "Identificação"
-  | "Segurança"
-  | "Certificação"
-  | "Fiscal"
-  | "Saúde"
-  | "Outros";
-
-const CATEG_ICON: Record<CategoriaKey, React.ReactNode> = {
-  Identificação: <FileText className="h-4 w-4" />,
-  Segurança: <Shield className="h-4 w-4" />,
-  Certificação: <BadgeCheck className="h-4 w-4" />,
-  Fiscal: <Building2 className="h-4 w-4" />,
-  Saúde: <FileText className="h-4 w-4" />,
-  Outros: <FileText className="h-4 w-4" />,
-};
-
-function categoriaFromTipo(tipo?: string): CategoriaKey {
-  const t = (tipo || "").toLowerCase();
-  if (t.includes("ident")) return "Identificação";
-  if (t.includes("segur")) return "Segurança";
-  if (t.includes("certif")) return "Certificação";
-  if (t.includes("fiscal") || t.includes("nif")) return "Fiscal";
-  if (t.includes("saúde") || t.includes("medic")) return "Saúde";
-  return "Outros";
-}
-
-/* ------------------------------ Tipos ----------------------------- */
-type DetailsPageProps = {
-  profId: string;
-  onBack?: () => void;
-};
+/* ======================
+   Tipos
+====================== */
+type Status = "Válido" | "Pendente" | "Vencido" | "Reprovado";
+type SortKey = "nome" | "categoria" | "validade" | "atualizado_em" | "status";
+type Responsabilidade = "profissional" | "acrobatas" | "ambos";
 
 type Documento = {
   id: string;
-  nome?: string | null;
-  tipo?: string | null;
-  emissor?: string | null;
-  numero?: string | null;
-  validade?: string | null; // yyyy-mm-dd
-  observacao?: string | null;
-  status: "válido" | "pendente" | "vencido";
-  arquivo_url?: string | null;
+  profissional_id: string;
+  tipo_id: string;
+  nome: string;
+  categoria: string | null;
+  validade?: string | null; // dd/mm/yyyy
+  status: Status;
+  atualizado_em?: string | null; // dd/mm/yyyy
+  url?: string | null;
+  obrigatorio?: boolean | null;
+  responsabilidade: Responsabilidade;
+  prof_pode_enviar?: boolean | null;
+  bloqueado?: boolean | null;
+  comentario_admin?: string | null;
 };
 
-type Profissional = {
+type ProfissionalResumo = {
   id: string;
   nome: string;
-  profissao?: string | null;
-  senioridade?: string | null;
-  funcao?: string | null;
-  obras?: string[];
-  documentos?: Documento[];
+  ativoEmObra: boolean;
+  totalDocs: number;
+  pendentes: number;
+  vencidos: number;
+  validos: number;
 };
 
-/* ---------------------------- Component --------------------------- */
-export default function DetailsPage({ profId, onBack }: DetailsPageProps) {
-  const [prof, setProf] = useState<Profissional | null>(null);
-  const [tab, setTab] = useState<"todos" | "válido" | "pendente" | "vencido">("todos");
-  const [loading, setLoading] = useState(true);
+/* ======================
+   Helpers de data
+====================== */
+function parsePTDate(d?: string | null): Date | null {
+  if (!d) return null;
+  const [dd, mm, yyyy] = d.split("/").map((v) => parseInt(v, 10));
+  if (!dd || !mm || !yyyy) return null;
+  return new Date(yyyy, mm - 1, dd, 12);
+}
 
-  useEffect(() => {
-    async function fetchProfissional() {
-      setLoading(true);
+function daysUntil(dateStr?: string | null): number | null {
+  const dt = parsePTDate(dateStr);
+  if (!dt) return null;
+  const t0 = new Date();
+  const ms = dt.setHours(0, 0, 0, 0) - t0.setHours(0, 0, 0, 0);
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+}
 
-      // 1) Dados do profissional (view resiliente)
-      const { data: rows, error } = await supabase
-        .from("profissionais_view")
-        .select("*")
-        .eq("profissional_id", profId);
-
-      if (error) {
-        console.error("[DetailsPage] profissionais_view ->", error);
-        setProf(null);
-        setLoading(false);
-        return;
-      }
-
-      const p: any = rows && rows.length > 0 ? rows[0] : null;
-
-      // 2) Documentos do profissional
-      const { data: docsRaw, error: eDocs } = await supabase
-        .from("documentos_profissionais")
-        .select("id,nome,tipo,emissor,numero,validade,observacao,status,arquivo_url")
-        .eq("profissional_id", profId);
-
-      if (eDocs) console.warn("[DetailsPage] documentos_profissionais ->", eDocs);
-
-      setProf({
-        id: p?.profissional_id || p?.id || profId,
-        nome: p?.nome_profissional || p?.nome || "Sem nome",
-        profissao: p?.profissao || p?.funcao || "—",
-        senioridade: p?.senioridade || null,
-        funcao: p?.profissao || p?.funcao || "—",
-        obras: p?.nome_obra ? [p.nome_obra] : [],
-        documentos: (docsRaw || []) as Documento[],
-      });
-
-      setLoading(false);
-    }
-
-    if (profId) fetchProfissional();
-  }, [profId]);
-
-  const counters = useMemo(() => {
-    const arr = prof?.documentos ?? [];
-    return {
-      total: arr.length,
-      válido: arr.filter((d) => d.status === "válido").length,
-      pendente: arr.filter((d) => d.status === "pendente").length,
-      vencido: arr.filter((d) => d.status === "vencido").length,
-    };
-  }, [prof]);
-
-  const grouped = useMemo(() => {
-    const arr = prof?.documentos ?? [];
-    const filtered = tab === "todos" ? arr : arr.filter((d) => d.status === tab);
-    const byCat = new Map<CategoriaKey, Documento[]>();
-    for (const d of filtered) {
-      const c = categoriaFromTipo(d.tipo || d.nome || "");
-      if (!byCat.has(c)) byCat.set(c, []);
-      byCat.get(c)!.push(d);
-    }
-    return byCat;
-  }, [prof, tab]);
-
-  if (loading) {
-    return (
-      <div className="max-w-[1100px] mx-auto px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
-        Carregando dados do profissional…
-      </div>
-    );
-  }
-
-  if (!prof) {
-    return (
-      <div className="max-w-[1100px] mx-auto px-4 py-10">
-        <div className="rounded-lg border border-gray-200 dark:border-zinc-800 p-6 text-sm text-gray-600 dark:text-gray-400">
-          Profissional não encontrado.
-        </div>
-      </div>
-    );
-  }
-
-  const initials =
-    prof.nome
-      ?.split(" ")
-      .slice(0, 2)
-      .map((s) => s[0])
-      .join("")
-      .toUpperCase() || "P";
+/* ======================
+   UI helpers
+====================== */
+function StatusBadge({ status }: { status: Status }) {
+  const cls =
+    status === "Válido"
+      ? "bg-green-100 text-green-700 dark:bg-green-700/30 dark:text-green-400"
+      : status === "Pendente"
+      ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-700/30 dark:text-yellow-400"
+      : status === "Reprovado"
+      ? "bg-rose-100 text-rose-700 dark:bg-rose-700/30 dark:text-rose-300"
+      : "bg-red-100 text-red-700 dark:bg-red-700/30 dark:text-red-400";
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6">
-      {/* Header Card */}
-      <div className="rounded-2xl border bg-white shadow-sm border-gray-200 dark:bg-white/5 dark:border-zinc-800">
-        <div className="p-4 sm:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4 min-w-0">
-              <div className="h-12 w-12 rounded-xl bg-blue-600 text-white grid place-content-center font-semibold">
-                {initials}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="font-semibold leading-6 truncate text-gray-900 dark:text-gray-100">
-                    {prof.nome}
-                  </h1>
-                  {prof.senioridade && (
-                    <span className="text-[11px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-300">
-                      {prof.senioridade}
-                    </span>
-                  )}
-                </div>
-                <div className="text-sm mt-0.5 flex items-center gap-3 flex-wrap text-gray-600 dark:text-gray-300">
-                  <span className="inline-flex items-center gap-1">
-                    <Shield className="h-3.5 w-3.5 opacity-60" />
-                    {prof.profissao || "—"}
-                  </span>
-                </div>
-              </div>
-            </div>
+    <span className={`px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold rounded-full ${cls}`}>
+      {status}
+    </span>
+  );
+}
 
-            <div className="flex gap-2">
-              <button
-                onClick={onBack}
-                className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-zinc-700 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Voltar
-              </button>
-            </div>
-          </div>
+function VencimentoBadge({ validade }: { validade?: string | null }) {
+  const d = daysUntil(validade);
+  if (d === null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
+        <Calendar size={14} /> Sem validade
+      </span>
+    );
+  }
+  if (d < 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-red-600">
+        <Calendar size={14} /> Vencido há {Math.abs(d)}d
+      </span>
+    );
+  }
+  const near = d <= 15;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs ${
+        near ? "text-yellow-600" : "text-zinc-600 dark:text-zinc-300"
+      }`}
+    >
+      <Calendar size={14} /> Vence em {d}d
+    </span>
+  );
+}
 
-          {/* KPIs */}
-          <div className="mt-4 grid gap-2 sm:grid-cols-4">
-            <StatBox title="Documentos" value={counters.total} icon={<FileText className="h-4 w-4 opacity-70" />} />
-            <StatBox title="Válidos" value={counters["válido"]} tone="ok" icon={<CheckCircle2 className="h-4 w-4" />} />
-            <StatBox title="Pendentes" value={counters.pendente} tone="warn" icon={<AlertTriangle className="h-4 w-4" />} />
-            <StatBox title="Vencidos" value={counters.vencido} tone="danger" icon={<Clock className="h-4 w-4" />} />
-          </div>
+/* Mantemos o tipo de responsabilidade por consistência,
+   mas não exibimos mais isso para a empresa. */
+function ResponsabilidadeBadge({ resp }: { resp: Responsabilidade }) {
+  if (resp === "profissional") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-700/30 dark:text-emerald-300">
+        <UserIcon size={12} /> Profissional
+      </span>
+    );
+  }
+  if (resp === "acrobatas") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-blue-100 text-blue-700 dark:bg-blue-700/30 dark:text-blue-300">
+        <Shield size={12} /> Acrobatas
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-purple-100 text-purple-700 dark:bg-purple-700/30 dark:text-purple-300">
+      <UserIcon size={12} />
+      <Shield size={12} /> Ambos
+    </span>
+  );
+}
 
-          {/* Filtros */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {(["todos", "válido", "pendente", "vencido"] as const).map((s) => (
-              <button
-                key={s}
-                className={cn(
-                  "px-3 py-1.5 rounded-full border text-xs transition-colors",
-                  tab === s
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-zinc-700 dark:text-gray-300 dark:hover:bg-white/5"
-                )}
-                onClick={() => setTab(s)}
-              >
-                {s}
-              </button>
-            ))}
-            <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">
-              {counters.total} documentos
-            </span>
-          </div>
+/* ======================
+   Barra de filtros docs
+====================== */
+function FiltroBar({
+  categorias,
+  query,
+  setQuery,
+  categoria,
+  setCategoria,
+  status,
+  setStatus,
+  sortKey,
+  setSortKey,
+  sortDir,
+  setSortDir,
+  onReset,
+}: {
+  categorias: string[];
+  query: string;
+  setQuery: (s: string) => void;
+  categoria: string;
+  setCategoria: (s: string) => void;
+  status: "Todos" | Status;
+  setStatus: (s: "Todos" | Status) => void;
+  sortKey: SortKey;
+  setSortKey: (k: SortKey) => void;
+  sortDir: "asc" | "desc";
+  setSortDir: (d: "asc" | "desc") => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
+      <div className="flex-1 flex items-center gap-2">
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70" size={16} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Pesquisar documento..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
-      </div>
 
-      {/* Lista agrupada */}
-      <div className="mt-6 grid gap-4">
-        {[...grouped.entries()].map(([cat, docs]) => (
-          <section
-            key={cat}
-            className="rounded-xl border bg-white shadow-sm border-gray-200 dark:bg-white/5 dark:border-zinc-800"
-          >
-            <div className="flex items-center justify-between gap-2 p-3 sm:p-4 border-b border-gray-200 dark:border-zinc-800">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="text-blue-600 dark:text-blue-400">{CATEG_ICON[cat]}</div>
-                <h2 className="text-sm font-medium truncate text-gray-900 dark:text-gray-100" title={cat}>
-                  {cat}
-                </h2>
-                <span className="text-[11px] rounded-full px-1.5 py-0.5 border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-300">
-                  {docs.length}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-3 sm:p-4 grid gap-3">
-              {docs.map((d) => (
-                <div key={d.id} className="rounded-lg border border-gray-200 dark:border-zinc-800 p-3 sm:p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="font-medium text-gray-900 dark:text-gray-100">
-                        {d.nome || d.tipo || "Documento"}
-                      </div>
-
-                      <div className="mt-1 text-xs text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-2">
-                        {d.numero && <span>nº {d.numero}</span>}
-                        {d.validade && (
-                          <span className="inline-flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5 opacity-70" />
-                            validade: {fmt(d.validade)}
-                          </span>
-                        )}
-                        {d.emissor && <span>emissor: {d.emissor}</span>}
-                      </div>
-
-                      <div className="mt-2 flex items-center gap-2 text-xs">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border",
-                            statusClasses[d.status]
-                          )}
-                        >
-                          {d.status}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <a
-                        href={d.arquivo_url || undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={cn(
-                          "px-2.5 py-1.5 rounded-md text-xs inline-flex items-center gap-1 justify-center",
-                          d.arquivo_url
-                            ? "bg-blue-600 hover:bg-blue-700 text-white"
-                            : "bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-zinc-800 dark:text-gray-400"
-                        )}
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Pré-visualizar
-                      </a>
-                      <a
-                        href={d.arquivo_url || undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download
-                        className={cn(
-                          "px-2.5 py-1.5 rounded-md border text-xs inline-flex items-center gap-1 justify-center",
-                          d.arquivo_url
-                            ? "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-zinc-700 dark:text-gray-300 dark:hover:bg-white/5"
-                            : "border-gray-200 text-gray-400 cursor-not-allowed dark:border-zinc-800"
-                        )}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        Baixar
-                      </a>
-                    </div>
-                  </div>
-                </div>
+        <div className="hidden sm:flex items-center gap-2">
+          <div className="relative">
+            <select
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+            >
+              <option value="Todas">Todas categorias</option>
+              {categorias.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
+            </select>
+            <ChevronDown
+              size={14}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70"
+            />
+          </div>
 
-              {docs.length === 0 && (
-                <div className="text-sm text-gray-500 dark:text-gray-400 px-1 py-8 text-center">
-                  Sem documentos nesta seção.
-                </div>
-              )}
+          <div className="relative">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as any)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+            >
+              <option value="Todos">Todos status</option>
+              <option value="Válido">Válidos</option>
+              <option value="Pendente">Pendentes</option>
+              <option value="Vencido">Vencidos</option>
+              <option value="Reprovado">Reprovados</option>
+            </select>
+          </div>
+
+          <div className="relative">
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+            >
+              <option value="validade">Ordenar por validade</option>
+              <option value="status">Ordenar por status</option>
+              <option value="nome">Ordenar por nome</option>
+              <option value="categoria">Ordenar por categoria</option>
+              <option value="atualizado_em">Ordenar por atualização</option>
+            </select>
+            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70">
+              {sortDir === "asc" ? <SortAsc size={14} /> : <SortDesc size={14} />}
             </div>
-          </section>
-        ))}
+          </div>
+
+          <button
+            onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+            className="px-2 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            title="Inverter ordem"
+          >
+            {sortDir === "asc" ? <SortAsc size={16} /> : <SortDesc size={16} />}
+          </button>
+
+          <button
+            onClick={onReset}
+            className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            title="Limpar filtros"
+          >
+            <RefreshCcw size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ---------------------------- StatBox --------------------------- */
-function StatBox({
-  title,
-  value,
-  icon,
-  tone = "default",
+/* ======================
+   Card de resumo
+====================== */
+function ResumoCard({
+  titulo,
+  valor,
+  cor,
+  icone,
 }: {
-  title: string;
-  value: number | string;
-  icon?: React.ReactNode;
-  tone?: "default" | "ok" | "warn" | "danger";
+  titulo: string;
+  valor: number | string;
+  cor: string;
+  icone: ReactNode;
 }) {
-  const tones: Record<typeof tone, string> = {
-    default: "bg-black/5 text-gray-800 dark:bg-white/5 dark:text-gray-100",
-    ok: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    warn: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    danger: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
-  };
   return (
-    <div className={cn("flex items-center gap-2 rounded-lg px-3 py-2", tones[tone])}>
-      {icon && <div className="shrink-0 text-current opacity-80">{icon}</div>}
-      <div className="min-w-0">
-        <div className="text-[11px] uppercase opacity-60">{title}</div>
-        <div className="text-sm font-semibold leading-5 truncate">{value}</div>
+    <motion.div
+      whileHover={{ scale: 1.04 }}
+      className="rounded-xl p-3 sm:p-4 text-center shadow-sm hover:shadow-md transition bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700"
+    >
+      <div className={`flex justify-center mb-1 sm:mb-2 ${cor}`}>{icone}</div>
+      <p className="text-[11px] sm:text-sm text-zinc-600 dark:text-zinc-400">
+        {titulo}
+      </p>
+      <p className="text-base sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+        {valor}
+      </p>
+    </motion.div>
+  );
+}
+
+/* ======================
+   Página principal
+====================== */
+
+export default function DocumentosProfissionaisEmpresa() {
+  const { user } = useAuth();
+
+  const [loading, setLoading] = useState(true);
+  const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [profissionais, setProfissionais] = useState<ProfissionalResumo[]>([]);
+  const [selectedProfId, setSelectedProfId] = useState<string | null>(null);
+
+  // filtros docs
+  const [query, setQuery] = useState("");
+  const [categoria, setCategoria] = useState<string>("Todas");
+  const [status, setStatus] = useState<"Todos" | Status>("Todos");
+  const [sortKey, setSortKey] = useState<SortKey>("validade");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // filtros profissionais
+  const [buscaProf, setBuscaProf] = useState("");
+  const [filtroAtividade, setFiltroAtividade] = useState<"todos" | "ativos" | "inativos">("todos");
+
+  useEffect(() => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
+    let ativo = true;
+
+    async function carregar() {
+      setLoading(true);
+
+      // 1) pega empresa do utilizador
+      const { data: empresa, error: empError } = await supabase
+        .from("empresas")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (empError || !empresa) {
+        console.error("Erro a obter empresa:", empError);
+        if (ativo) {
+          setDocumentos([]);
+          setProfissionais([]);
+          setSelectedProfId(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const empresaId = empresa.id;
+
+      // 2) carrega docs de todos profissionais ligados à empresa
+      const { data: rows, error: docsError } = await supabase
+        .from("empresa_docs_prof_v")
+        .select("*")
+        .eq("empresa_id", empresaId)
+        .order("profissional_nome", { ascending: true })
+        .order("documento_nome", { ascending: true });
+
+      if (!ativo) return;
+
+      if (docsError) {
+        console.error("Erro a carregar documentos:", docsError);
+        setDocumentos([]);
+        setProfissionais([]);
+        setSelectedProfId(null);
+        setLoading(false);
+        return;
+      }
+
+      const mappedDocs: Documento[] = [];
+      const profMap = new Map<string, ProfissionalResumo>();
+
+      (rows || []).forEach((d: any) => {
+        const originalNome: string = d.documento_nome || "";
+
+        const nomeNormalizado = originalNome.startsWith(
+          "Comprovativo de regularização de trabalhadores estrangeiros",
+        )
+          ? "Comprovativo de regularização de trabalhadores estrangeiros (Título ou Autorização de Residência/CPLP/TR)"
+          : originalNome;
+
+        const validadeStr = d.validade
+          ? new Date(d.validade).toLocaleDateString("pt-PT")
+          : null;
+        const atualizadoStr = d.atualizado_em
+          ? new Date(d.atualizado_em).toLocaleDateString("pt-PT")
+          : null;
+
+        let statusDoc: Status = d.status as Status;
+        if (validadeStr && statusDoc !== "Pendente" && statusDoc !== "Reprovado") {
+          const diff = daysUntil(validadeStr);
+          if (diff !== null && diff < 0) statusDoc = "Vencido";
+        }
+
+        let resp: Responsabilidade;
+        const r = (d.responsavel || "").toLowerCase();
+        if (r === "profissional") resp = "profissional";
+        else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
+        else resp = "ambos";
+
+        if (
+          nomeNormalizado.includes("Ficha de Aptidão Médica") ||
+          nomeNormalizado.includes("Registo de distribuição de EPI") ||
+          nomeNormalizado.includes(
+            "Comprovativo de Comunicação de Admissão na Segurança Social",
+          )
+        ) {
+          resp = "acrobatas";
+        }
+
+        mappedDocs.push({
+          id: d.doc_id,
+          profissional_id: d.profissional_id,
+          tipo_id: d.tipo_id,
+          nome: nomeNormalizado,
+          categoria: d.categoria,
+          validade: validadeStr,
+          status: statusDoc,
+          atualizado_em: atualizadoStr,
+          url: d.arquivo_url,
+          obrigatorio: d.obrigatorio,
+          responsabilidade: resp,
+          prof_pode_enviar: d.prof_pode_enviar,
+          bloqueado: d.bloqueado,
+          comentario_admin: d.comentario_admin ?? null,
+        });
+
+        // resumo do profissional
+        const profId = d.profissional_id as string;
+        const nomeProf = d.profissional_nome as string;
+        const ativoEmObra = !!d.profissional_ativo;
+
+        let resumo = profMap.get(profId);
+        if (!resumo) {
+          resumo = {
+            id: profId,
+            nome: nomeProf,
+            ativoEmObra,
+            totalDocs: 0,
+            pendentes: 0,
+            vencidos: 0,
+            validos: 0,
+          };
+          profMap.set(profId, resumo);
+        }
+
+        resumo.totalDocs += 1;
+        if (statusDoc === "Pendente") resumo.pendentes += 1;
+        if (statusDoc === "Vencido") resumo.vencidos += 1;
+        if (statusDoc === "Válido") resumo.validos += 1;
+        if (ativoEmObra) resumo.ativoEmObra = true;
+      });
+
+      const profList = Array.from(profMap.values()).sort((a, b) =>
+        a.nome.localeCompare(b.nome, "pt"),
+      );
+
+      setDocumentos(mappedDocs);
+      setProfissionais(profList);
+
+      if (profList.length > 0) {
+        const primeiroAtivo = profList.find((p) => p.ativoEmObra);
+        setSelectedProfId((primeiroAtivo || profList[0]).id);
+      } else {
+        setSelectedProfId(null);
+      }
+
+      setLoading(false);
+    }
+
+    carregar();
+
+    return () => {
+      ativo = false;
+    };
+  }, [user?.id]);
+
+  // docs do profissional selecionado
+  const docsDoProf = useMemo(
+    () =>
+      documentos.filter((d) =>
+        selectedProfId ? d.profissional_id === selectedProfId : false,
+      ),
+    [documentos, selectedProfId],
+  );
+
+  const resumoSelecionado = useMemo(() => {
+    const validos = docsDoProf.filter((d) => d.status === "Válido").length;
+    const pendentes = docsDoProf.filter((d) => d.status === "Pendente").length;
+    const vencidos = docsDoProf.filter((d) => d.status === "Vencido").length;
+    const obrigatorios =
+      docsDoProf.filter((d) => d.obrigatorio).length || docsDoProf.length;
+    const completion = obrigatorios
+      ? Math.round((validos / obrigatorios) * 100)
+      : 0;
+    return { validos, pendentes, vencidos, completion };
+  }, [docsDoProf]);
+
+  const categorias = useMemo(
+    () =>
+      Array.from(
+        new Set(docsDoProf.map((d) => d.categoria).filter(Boolean) as string[]),
+      ).sort((a, b) => a.localeCompare(b)),
+    [docsDoProf],
+  );
+
+  const docsFiltrados = useMemo(() => {
+    let arr = [...docsDoProf];
+
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      arr = arr.filter(
+        (d) =>
+          d.nome.toLowerCase().includes(q) ||
+          (d.categoria || "").toLowerCase().includes(q) ||
+          (d.validade || "").includes(q),
+      );
+    }
+    if (categoria !== "Todas")
+      arr = arr.filter((d) => d.categoria === categoria);
+    if (status !== "Todos") arr = arr.filter((d) => d.status === status);
+
+    arr.sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortKey === "validade" || sortKey === "atualizado_em") {
+        const da = parsePTDate(a[sortKey] || "");
+        const db = parsePTDate(b[sortKey] || "");
+        const va = da
+          ? da.getTime()
+          : sortDir === "asc"
+          ? Number.POSITIVE_INFINITY
+          : Number.NEGATIVE_INFINITY;
+        const vb = db
+          ? db.getTime()
+          : sortDir === "asc"
+          ? Number.POSITIVE_INFINITY
+          : Number.NEGATIVE_INFINITY;
+        return va > vb ? dir : va < vb ? -dir : 0;
+      }
+      const va = String(a[sortKey] ?? "").toLowerCase();
+      const vb = String(b[sortKey] ?? "").toLowerCase();
+      return va > vb ? dir : va < vb ? -dir : 0;
+    });
+
+    return arr;
+  }, [docsDoProf, query, categoria, status, sortKey, sortDir]);
+
+  const profSelecionado = useMemo(
+    () => profissionais.find((p) => p.id === selectedProfId) || null,
+    [profissionais, selectedProfId],
+  );
+
+  const profissionaisFiltrados = useMemo(() => {
+    let arr = [...profissionais];
+
+    if (filtroAtividade === "ativos") {
+      arr = arr.filter((p) => p.ativoEmObra);
+    } else if (filtroAtividade === "inativos") {
+      arr = arr.filter((p) => !p.ativoEmObra);
+    }
+
+    if (buscaProf.trim()) {
+      const q = buscaProf.toLowerCase();
+      arr = arr.filter((p) => p.nome.toLowerCase().includes(q));
+    }
+
+    return arr;
+  }, [profissionais, filtroAtividade, buscaProf]);
+
+  const handleResetFiltrosDocs = () => {
+    setQuery("");
+    setCategoria("Todas");
+    setStatus("Todos");
+    setSortKey("validade");
+    setSortDir("asc");
+  };
+
+  function openInNewTab(url?: string | null) {
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center mt-20">
+        <FileText className="animate-pulse text-blue-500" size={28} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-8 text-zinc-900 dark:text-zinc-100">
+      {/* Título geral */}
+      <div className="flex items-center gap-3 mb-2">
+        <Users className="text-blue-500 dark:text-blue-400 w-6 h-6 sm:w-7 sm:h-7" />
+        <h1 className="text-lg sm:text-2xl font-semibold">
+          Documentos dos Profissionais
+        </h1>
+      </div>
+      <p className="text-zinc-500 dark:text-zinc-400 text-sm sm:text-base mb-6 max-w-3xl">
+        Consulte a documentação dos trabalhadores associados à sua empresa,
+        verifique prazos de validade e faça download dos ficheiros quando
+        necessário.
+      </p>
+
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Sidebar – lista de profissionais */}
+        <aside className="lg:w-72 xl:w-80 bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Users size={18} className="text-blue-500" />
+            <h2 className="text-sm font-semibold">Profissionais</h2>
+          </div>
+
+          <div className="mb-3">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+              />
+              <input
+                value={buscaProf}
+                onChange={(e) => setBuscaProf(e.target.value)}
+                placeholder="Pesquisar profissional..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-1 mb-3 text-[11px]">
+            <button
+              onClick={() => setFiltroAtividade("todos")}
+              className={`flex-1 px-2 py-1 rounded-md border text-center ${
+                filtroAtividade === "todos"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setFiltroAtividade("ativos")}
+              className={`flex-1 px-2 py-1 rounded-md border text-center flex items-center justify-center gap-1 ${
+                filtroAtividade === "ativos"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
+              }`}
+            >
+              <CircleDot size={11} /> Ativos
+            </button>
+            <button
+              onClick={() => setFiltroAtividade("inativos")}
+              className={`flex-1 px-2 py-1 rounded-md border text-center flex items-center justify-center gap-1 ${
+                filtroAtividade === "inativos"
+                  ? "bg-zinc-700 text-white border-zinc-700"
+                  : "border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
+              }`}
+            >
+              <Circle size={11} /> Inativos
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
+            {profissionaisFiltrados.length === 0 ? (
+              <p className="text-xs text-zinc-500">
+                Nenhum profissional encontrado.
+              </p>
+            ) : (
+              profissionaisFiltrados.map((p) => {
+                const isSelected = p.id === selectedProfId;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedProfId(p.id)}
+                    className={`w-full text-left rounded-xl px-3 py-2 text-xs border transition flex flex-col gap-1 ${
+                      isSelected
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                        : "border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-[11px] line-clamp-1">
+                        {p.nome}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-1.5 py-[2px] rounded-full text-[10px] ${
+                          p.ativoEmObra
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-700/30 dark:text-emerald-300"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-700/40 dark:text-zinc-200"
+                        }`}
+                      >
+                        {p.ativoEmObra ? (
+                          <>
+                            <CircleDot size={9} /> Ativo em obra
+                          </>
+                        ) : (
+                          <>
+                            <Circle size={9} /> Sem obra
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400">
+                      <span>Total: {p.totalDocs}</span>
+                      <span>Pendentes: {p.pendentes}</span>
+                      <span>Vencidos: {p.vencidos}</span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </aside>
+
+        {/* Conteúdo principal: documentos do profissional selecionado */}
+        <main className="flex-1">
+          {!profSelecionado ? (
+            <div className="h-full flex items-center justify-center">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Selecione um profissional à esquerda para ver os documentos.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Header do profissional */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-blue-600/10 flex items-center justify-center">
+                      <UserIcon size={18} className="text-blue-500" />
+                    </div>
+                    <div>
+                      <h2 className="text-base sm:text-lg font-semibold">
+                        Documentos de {profSelecionado.nome}
+                      </h2>
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        <span className="inline-flex items-center gap-1">
+                          <Users size={11} /> Profissional ligado à sua empresa
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          {profSelecionado.ativoEmObra ? (
+                            <>
+                              <CircleDot size={10} className="text-emerald-500" />{" "}
+                              Ativo em obra
+                            </>
+                          ) : (
+                            <>
+                              <Circle size={10} className="text-zinc-400" /> Sem obra ativa
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cards resumo */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
+                <ResumoCard
+                  titulo="Válidos"
+                  valor={resumoSelecionado.validos}
+                  cor="text-green-500"
+                  icone={<CheckCircle2 size={18} />}
+                />
+                <ResumoCard
+                  titulo="Pendentes"
+                  valor={resumoSelecionado.pendentes}
+                  cor="text-yellow-500"
+                  icone={<AlertTriangle size={18} />}
+                />
+                <ResumoCard
+                  titulo="Vencidos"
+                  valor={resumoSelecionado.vencidos}
+                  cor="text-red-500"
+                  icone={<XCircle size={18} />}
+                />
+              </div>
+
+              {/* Barra de completude */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                    Completude do perfil de documentos
+                  </span>
+                  <span className="text-sm font-medium">
+                    {resumoSelecionado.completion}%
+                  </span>
+                </div>
+                <div className="h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full transition-all"
+                    style={{ width: `${resumoSelecionado.completion}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Filtros de documentos */}
+              <FiltroBar
+                categorias={categorias}
+                query={query}
+                setQuery={setQuery}
+                categoria={categoria}
+                setCategoria={setCategoria}
+                status={status}
+                setStatus={setStatus}
+                sortKey={sortKey}
+                setSortKey={setSortKey}
+                sortDir={sortDir}
+                setSortDir={setSortDir}
+                onReset={handleResetFiltrosDocs}
+              />
+
+              {/* Lista de docs */}
+              <div className="bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 sm:p-6 shadow-sm">
+                <h3 className="text-sm sm:text-lg font-medium mb-4 flex items-center gap-2 text-blue-500 dark:text-blue-400">
+                  <FileText size={18} /> Documentos
+                </h3>
+
+                {docsFiltrados.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-8 text-center">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      Nenhum documento encontrado para este profissional.
+                    </p>
+                    <button
+                      onClick={handleResetFiltrosDocs}
+                      className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs"
+                    >
+                      <RefreshCcw size={16} /> Limpar filtros
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* MOBILE – Cards */}
+                    <div className="space-y-3 sm:hidden">
+                      {docsFiltrados.map((doc) => (
+                        <motion.div
+                          key={doc.id}
+                          whileHover={{ scale: 1.02 }}
+                          className="rounded-xl p-3 border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#232c3d]"
+                        >
+                          <div className="flex justify-between items-start gap-3 mb-1">
+                            <div className="flex-1">
+                              <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">
+                                {doc.nome}
+                              </p>
+                              <div className="flex items-center gap-2 mt-[2px] flex-wrap">
+                                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                  {doc.categoria || "—"}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-[11px]">
+                                {doc.url ? (
+                                  <button
+                                    onClick={() => openInNewTab(doc.url)}
+                                    className="inline-flex items-center gap-1 text-blue-400 hover:underline underline-offset-2 break-all"
+                                  >
+                                    <FileText size={11} />
+                                    Ver documento enviado
+                                  </button>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                                    <FileText size={11} />
+                                    Nenhum ficheiro enviado
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <StatusBadge status={doc.status} />
+                          </div>
+
+                          <div className="flex items-center justify-between mt-2 text-xs">
+                            <VencimentoBadge validade={doc.validade} />
+                            <span className="text-zinc-500 dark:text-zinc-400">
+                              <Clock4 size={12} className="inline mr-1" />
+                              {doc.atualizado_em
+                                ? `Atualizado ${doc.atualizado_em}`
+                                : "Nunca atualizado"}
+                            </span>
+                          </div>
+
+                          <div className="flex gap-3 mt-3">
+                            <button
+                              onClick={() => openInNewTab(doc.url)}
+                              disabled={!doc.url}
+                              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition ${
+                                doc.url
+                                  ? "bg-blue-600/90 text-white hover:bg-blue-700"
+                                  : "bg-zinc-400 text-white opacity-70"
+                              }`}
+                            >
+                              <Eye size={14} /> Ver
+                            </button>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+
+                    {/* DESKTOP – Tabela */}
+                    <div className="hidden sm:block">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-left border-b border-zinc-300 dark:border-zinc-700">
+                            <th className="py-3 px-2">Documento</th>
+                            <th className="py-3 px-2">Categoria</th>
+                            <th className="py-3 px-2">Status</th>
+                            <th className="py-3 px-2">Validade</th>
+                            <th className="py-3 px-2">Atualizado</th>
+                            <th className="py-3 px-2 text-center">Ação</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {docsFiltrados.map((doc) => (
+                            <motion.tr
+                              key={doc.id}
+                              whileHover={{ scale: 1.01 }}
+                              className="border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-[#243043] transition"
+                            >
+                              <td className="py-3 px-2 font-medium align-top">
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span>{doc.nome}</span>
+                                  </div>
+                                  <div className="text-[11px]">
+                                    {doc.url ? (
+                                      <button
+                                        onClick={() => openInNewTab(doc.url)}
+                                        className="inline-flex items-center gap-1 text-blue-400 hover:underline underline-offset-2 break-all"
+                                      >
+                                        <FileText size={11} />
+                                        Ver documento enviado
+                                      </button>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                                        <FileText size={11} />
+                                        Nenhum ficheiro enviado
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-2">
+                                {doc.categoria || "—"}
+                              </td>
+                              <td className="py-3 px-2">
+                                <StatusBadge status={doc.status} />
+                              </td>
+                              <td className="py-3 px-2">
+                                <div className="flex items-center gap-2">
+                                  <span>{doc.validade || "—"}</span>
+                                  <VencimentoBadge validade={doc.validade} />
+                                </div>
+                              </td>
+                              <td className="py-3 px-2">
+                                {doc.atualizado_em || "—"}
+                              </td>
+                              <td className="py-3 px-2">
+                                <div className="flex justify-center">
+                                  <button
+                                    title={
+                                      doc.url
+                                        ? "Ver (abre em nova aba)"
+                                        : "Sem ficheiro"
+                                    }
+                                    onClick={() => openInNewTab(doc.url)}
+                                    disabled={!doc.url}
+                                    className={`p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 ${
+                                      doc.url
+                                        ? ""
+                                        : "opacity-50 cursor-not-allowed"
+                                    }`}
+                                  >
+                                    <Eye size={18} className="text-blue-500" />
+                                  </button>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="mt-8 sm:mt-10 text-center text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-xl">
+                Os documentos são enviados pelos profissionais ou pela equipa
+                Acrobatas e analisados para garantir a conformidade legal e de
+                segurança. A empresa tem acesso apenas para consulta e download.
+              </div>
+            </>
+          )}
+        </main>
       </div>
     </div>
   );

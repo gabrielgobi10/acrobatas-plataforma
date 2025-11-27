@@ -19,6 +19,7 @@ import {
   Clock,
   Folder,
   LogOut, // ✅ novo ícone
+  Settings, // ✅ ícone para Configurações
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext"; // ✅ garante logout
 
@@ -40,13 +41,12 @@ export default function SidebarProfissional({
     relatorios: false,
     documentos: false,
     carreira: false,
-    comunicacao: false,
+    comunicacao: false, // não usado mais, mas não atrapalha
   });
 
   const [collapsed, setCollapsed] = useState(false);
 
-const { logout } = useAuth();
-
+  const { logout } = useAuth();
 
   const toggleGroup = (group: string) => {
     setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));
@@ -265,68 +265,36 @@ const { logout } = useAuth();
                 className="pl-7 mt-1 space-y-1"
               >
                 <NavItem label="Meus Documentos" section="documentos_meus" />
-                <NavItem label="Alertas de Validade" section="documentos_alertas" />
+                {/* ❌ Removido: Alertas de Validade */}
               </motion.ul>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Comunicação */}
-        <div>
-          <button
-            onClick={() => toggleGroup("comunicacao")}
-            className={`flex items-center justify-between w-full px-2 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-blue-600 ${
-              collapsed ? "justify-center" : ""
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Bell className="w-5 h-5 text-blue-600" />
-              {!collapsed && <span>Comunicação</span>}
-            </div>
-            {!collapsed &&
-              (openGroups.comunicacao ? (
-                <ChevronUp className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              ))}
-          </button>
-          <AnimatePresence>
-            {!collapsed && openGroups.comunicacao && (
-              <motion.ul
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25 }}
-                className="pl-7 mt-1 space-y-1"
-              >
-                <NavItem label="Notificações" section="notificacoes" />
-                <NavItem label="Bate-papo com Equipa" section="batepapo" />
-                <NavItem label="Suporte" section="suporte" />
-              </motion.ul>
-            )}
-          </AnimatePresence>
-        </div>
+        {/* ❌ Removido bloco Comunicação (Notificações / Bate-papo / Suporte) */}
       </nav>
 
       {/* Rodapé */}
       <div className="border-t border-gray-200 dark:border-slate-800 p-4">
-        <div
-          className={`flex items-center justify-between ${
+        {/* Configurações */}
+        <button
+          onClick={() => onSelectSection("configuracoes")}
+          className={`w-full flex items-center justify-between ${
             collapsed ? "flex-col gap-2" : ""
           }`}
         >
           <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 text-sm">
-            <MessageSquare className="w-4 h-4 text-blue-600" />
-            {!collapsed && <span>Suporte</span>}
+            <Settings className="w-4 h-4 text-blue-600" />
+            {!collapsed && <span>Configurações</span>}
           </div>
           {!collapsed && (
             <Clock className="w-4 h-4 text-gray-400 dark:text-gray-500 hidden md:block" />
           )}
-        </div>
+        </button>
 
         {/* 🔹 Botão SAIR - só no mobile */}
         <button
-         onClick={logout}
+          onClick={logout}
           className="mt-4 flex md:hidden items-center gap-2 text-red-500 text-sm hover:text-red-600 transition"
         >
           <LogOut className="w-4 h-4" />

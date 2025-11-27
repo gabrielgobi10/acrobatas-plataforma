@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import {
   FileText,
@@ -15,11 +17,11 @@ import { motion, AnimatePresence } from "framer-motion";
 
 type Relatorio = {
   id: string;
-  data: string;
-  tipo_servico: string;
+  data_relatorio: string;
   descricao?: string | null;
-  horas_trabalhadas?: number | null;
-  obra?: {
+  horas_trabalhadas_total?: number | null;
+  progresso_total?: number | null;
+  obras?: {
     nome?: string | null;
     endereco?: string | null;
   } | null;
@@ -29,57 +31,97 @@ export default function RelatoriosDoDia() {
   const { user } = useAuth();
   const [relatorios, setRelatorios] = useState<Relatorio[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtroMes, setFiltroMes] = useState<string>("todos");
-  const [filtroObra, setFiltroObra] = useState<string>("todas");
+  const [filtroMes, setFiltroMes] = useState("todos");
+  const [filtroObra, setFiltroObra] = useState("todas");
   const [obras, setObras] = useState<{ id: string; nome: string | null }[]>([]);
   const [busca, setBusca] = useState("");
 
-  // 🔹 Carrega relatórios
+  // 🔹 Carrega relatórios com as colunas corretas
   useEffect(() => {
     async function carregar() {
-      if (!user) return;
+      if (!user?.id) return;
       setLoading(true);
 
-      let query = supabase
-        .from("relatorios_obras")
-        .select(
-          `id, data, tipo_servico, descricao, horas_trabalhadas,
-           obras ( nome, endereco )`
-        )
-        .eq("profissional_id", user.id)
-        .order("data", { ascending: false });
+      try {
+        // Buscar o usuario_id pelo auth_id
+        const { data: usuario } = await supabase
+          .from("usuarios")
+          .select("id")
+          .or(`auth_id.eq.${user.id},id.eq.${user.id}`)
+          .maybeSingle();
 
-      if (filtroMes !== "todos") {
-        const [ano, mes] = filtroMes.split("-");
-        const inicio = `${ano}-${mes}-01`;
-        const fim = new Date(parseInt(ano), parseInt(mes), 0)
-          .toISOString()
-          .slice(0, 10);
-        query = query.gte("data", inicio).lte("data", fim);
+        if (!usuario) {
+          console.warn("Nenhum usuario encontrado para auth_id:", user.id);
+          setRelatorios([]);
+          setLoading(false);
+          return;
+        }
+
+        // Buscar o profissional_id
+        const { data: prof } = await supabase
+          .from("profissionais")
+          .select("id")
+          .eq("usuario_id", usuario.id)
+          .maybeSingle();
+
+        let query = supabase
+          .from("relatorios_obras")
+          .select(
+            `id, data_relatorio, descricao, horas_trabalhadas_total, progresso_total,
+             obras:obra_id ( nome, endereco )`
+          )
+          .order("data_relatorio", { ascending: false });
+
+        if (prof?.id) query = query.eq("profissional_id", prof.id);
+
+        if (filtroMes !== "todos") {
+          const [ano, mes] = filtroMes.split("-");
+          const inicio = `${ano}-${mes}-01`;
+          const fim = new Date(parseInt(ano), parseInt(mes), 0)
+            .toISOString()
+            .slice(0, 10);
+          query = query.gte("data_relatorio", inicio).lte("data_relatorio", fim);
+        }
+
+        if (filtroObra !== "todas") query = query.eq("obra_id", filtroObra);
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        setRelatorios(data || []);
+      } catch (e) {
+        console.error("Erro ao carregar relatórios:", e);
+        setRelatorios([]);
+      } finally {
+        setLoading(false);
       }
-
-      if (filtroObra !== "todas") {
-        query = query.eq("obra_id", filtroObra);
-      }
-
-      const { data, error } = await query;
-      if (error) console.error(error);
-      else setRelatorios(data || []);
-
-      setLoading(false);
     }
 
     carregar();
-  }, [user, filtroMes, filtroObra]);
+  }, [user?.id, filtroMes, filtroObra]);
 
   // 🔹 Carrega lista de obras
   useEffect(() => {
     async function carregarObras() {
-      if (!user) return;
-      const { data, error } = await supabase
+      if (!user?.id) return;
+
+      const { data: usuario } = await supabase
+        .from("usuarios")
+        .select("id")
+        .or(`auth_id.eq.${user.id},id.eq.${user.id}`)
+        .maybeSingle();
+
+      const { data: prof } = await supabase
+        .from("profissionais")
+        .select("id")
+        .eq("usuario_id", usuario?.id)
+        .maybeSingle();
+
+      const { data } = await supabase
         .from("profissionais_obras")
         .select("obras ( id, nome )")
-        .eq("profissional_id", user.id);
+        .eq("profissional_id", prof?.id || "");
+
       if (data) {
         setObras(
           data
@@ -90,29 +132,24 @@ export default function RelatoriosDoDia() {
             .filter((o: any) => o.id)
         );
       }
-      if (error) console.error(error);
     }
     carregarObras();
-  }, [user]);
+  }, [user?.id]);
 
-  // 🔹 Filtro por texto
+  // 🔹 Filtro texto
   const relatoriosFiltrados = relatorios.filter((r) =>
     busca.length === 0
       ? true
       : r.descricao?.toLowerCase().includes(busca.toLowerCase()) ||
-        r.tipo_servico?.toLowerCase().includes(busca.toLowerCase()) ||
-        r.obra?.nome?.toLowerCase().includes(busca.toLowerCase())
+        r.obras?.nome?.toLowerCase().includes(busca.toLowerCase())
   );
 
   // 🔹 Estatísticas
   const totalHoras = relatorios.reduce(
-    (acc, r) => acc + (r.horas_trabalhadas || 0),
+    (acc, r) => acc + (r.horas_trabalhadas_total || 0),
     0
   );
 
-  // ========================================================================
-  // 🔹 UI Responsiva + Temas
-  // ========================================================================
   return (
     <div className="p-4 sm:p-8 text-gray-900 dark:text-gray-100 transition-colors duration-300">
       {/* Cabeçalho */}
@@ -128,19 +165,11 @@ export default function RelatoriosDoDia() {
       {/* Estatísticas */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         {[
-          {
-            label: "Relatórios totais",
-            valor: relatorios.length,
-            cor: "text-blue-500",
-          },
-          {
-            label: "Horas registradas",
-            valor: `${totalHoras.toFixed(1)}h`,
-            cor: "text-green-500",
-          },
+          { label: "Relatórios totais", valor: relatorios.length, cor: "text-blue-500" },
+          { label: "Horas registradas", valor: `${totalHoras.toFixed(1)}h`, cor: "text-green-500" },
           {
             label: "Obras envolvidas",
-            valor: new Set(relatorios.map((r) => r.obra?.nome)).size,
+            valor: new Set(relatorios.map((r) => r.obras?.nome)).size,
             cor: "text-yellow-500",
           },
           {
@@ -162,9 +191,7 @@ export default function RelatoriosDoDia() {
             <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
               {item.label}
             </p>
-            <p
-              className={`text-base sm:text-xl font-semibold ${item.cor} truncate`}
-            >
+            <p className={`text-base sm:text-xl font-semibold ${item.cor} truncate`}>
               {item.valor}
             </p>
           </div>
@@ -177,7 +204,7 @@ export default function RelatoriosDoDia() {
           <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
           <input
             type="text"
-            placeholder="Buscar por obra, tipo ou descrição..."
+            placeholder="Buscar por obra ou descrição..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             className="w-full bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100 pl-9 p-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm sm:text-base"
@@ -193,10 +220,7 @@ export default function RelatoriosDoDia() {
           {Array.from({ length: 12 }).map((_, i) => {
             const ano = new Date().getFullYear();
             const mes = (i + 1).toString().padStart(2, "0");
-            const label = new Date(`${ano}-${mes}-01`).toLocaleDateString(
-              "pt-PT",
-              { month: "long" }
-            );
+            const label = new Date(`${ano}-${mes}-01`).toLocaleDateString("pt-PT", { month: "long" });
             return (
               <option key={mes} value={`${ano}-${mes}`}>
                 {label.charAt(0).toUpperCase() + label.slice(1)}
@@ -229,10 +253,7 @@ export default function RelatoriosDoDia() {
           Nenhum relatório encontrado.
         </div>
       ) : (
-        <motion.div
-          layout
-          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6"
-        >
+        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           <AnimatePresence>
             {relatoriosFiltrados.map((r) => (
               <motion.div
@@ -248,16 +269,16 @@ export default function RelatoriosDoDia() {
                   <div className="flex items-center gap-2">
                     <CalendarDays className="text-blue-500 w-4 h-4" />
                     <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(r.data).toLocaleDateString("pt-PT")}
+                      {new Date(r.data_relatorio).toLocaleDateString("pt-PT")}
                     </p>
                   </div>
                   <span className="text-[10px] sm:text-xs bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 px-2 py-1 rounded-md flex items-center gap-1">
-                    <Wrench size={12} /> {r.tipo_servico}
+                    <Wrench size={12} /> {r.progresso_total ? `${r.progresso_total}%` : "Relatório"}
                   </span>
                 </div>
 
                 <p className="text-gray-900 dark:text-gray-100 font-medium text-sm sm:text-base mb-1">
-                  {r.obra?.nome || "Obra não identificada"}
+                  {r.obras?.nome || "Obra não identificada"}
                 </p>
                 <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-3 line-clamp-2">
                   {r.descricao || "Sem descrição"}
@@ -265,14 +286,11 @@ export default function RelatoriosDoDia() {
 
                 <div className="flex items-center justify-between text-[11px] sm:text-sm text-gray-500 dark:text-gray-400">
                   <span className="flex items-center gap-1">
-                    <Clock4 size={12} />
-                    {r.horas_trabalhadas
-                      ? `${r.horas_trabalhadas.toFixed(1)}h`
-                      : "—"}
+                    <Clock4 size={12} />{" "}
+                    {r.horas_trabalhadas_total ? `${r.horas_trabalhadas_total.toFixed(1)}h` : "—"}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Building2 size={12} />
-                    {r.obra?.endereco || "Sem endereço"}
+                    <Building2 size={12} /> {r.obras?.endereco || "Sem endereço"}
                   </span>
                 </div>
 

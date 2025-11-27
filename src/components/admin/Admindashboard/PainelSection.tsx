@@ -1,450 +1,292 @@
-import { useEffect, useState } from "react";
 import {
   Users,
-  Briefcase,
   Building2,
-  FileWarning,
-  TrendingUp,
-  Sparkles,
-  Clock,
-  AlertTriangle,
-  FileText,
-  PlusCircle,
-  Receipt,
-  CheckSquare,
   HardHat,
-  Settings,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Activity,
+  ArrowRight,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
-  Tooltip,
+  YAxis,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  Tooltip,
+  CartesianGrid,
 } from "recharts";
-import { supabase } from "../../../lib/supabase";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
-// =====================================================
-// Painel Administrativo Inteligente (Completo)
-// =====================================================
+/* ======================================================
+   MOCK (provisório — depois liga no Supabase)
+====================================================== */
+const KPI_DATA = [
+  {
+    title: "Profissionais ativos",
+    value: 12,
+    trend: "+8%",
+    icon: Users,
+    color: "text-blue-400",
+  },
+  {
+    title: "Empresas ativas",
+    value: 4,
+    trend: "+1",
+    icon: Building2,
+    color: "text-emerald-400",
+  },
+  {
+    title: "Obras em andamento",
+    value: 6,
+    trend: "+2",
+    icon: HardHat,
+    color: "text-yellow-400",
+  },
+  {
+    title: "Faturamento do mês (€)",
+    value: "12.500",
+    trend: "+12%",
+    icon: TrendingUp,
+    color: "text-purple-400",
+  },
+];
+
+const DIAGNOSTICO = [
+  {
+    label: "Atividade operacional",
+    score: 82,
+    color: "text-blue-400",
+    desc: "Fluxo forte nas obras hoje.",
+  },
+  {
+    label: "Conformidade documental",
+    score: 73,
+    color: "text-emerald-400",
+    desc: "Documentação quase toda válida.",
+  },
+  {
+    label: "Produtividade geral",
+    score: 69,
+    color: "text-yellow-400",
+    desc: "Horas entregues acima da média.",
+  },
+  {
+    label: "Riscos & Alertas",
+    score: 58,
+    color: "text-red-400",
+    desc: "Pendências precisam de atenção.",
+  },
+];
+
+const ATIVIDADES = [
+  {
+    title: "Novo profissional aprovado",
+    icon: Users,
+    time: "há 2h",
+  },
+  {
+    title: "Empresa cadastrada: Casais",
+    icon: Building2,
+    time: "há 5h",
+  },
+  {
+    title: "Obra iniciada em Lisboa",
+    icon: HardHat,
+    time: "há 8h",
+  },
+  {
+    title: "Relatório diário enviado",
+    icon: FileText,
+    time: "ontem",
+  },
+];
+
+const GRAFICO = [
+  { mes: "Jun", valor: 540 },
+  { mes: "Jul", valor: 820 },
+  { mes: "Ago", valor: 1020 },
+  { mes: "Set", valor: 1190 },
+  { mes: "Out", valor: 1520 },
+];
+
+/* ======================================================
+   COMPONENTE PRINCIPAL
+====================================================== */
 export default function PainelSection() {
-  const navigate = useNavigate();
+  const [ready, setReady] = useState(true);
 
-  // ========= 1️⃣ Cards Principais =========
-  const [cards, setCards] = useState([
-    {
-      id: "profissionais",
-      titulo: "Profissionais Ativos",
-      valor: 0,
-      variacao: 0,
-      ultimaAtualizacao: null,
-      rota: "/admin/profissionais",
-      icone: <Users className="w-6 h-6" />,
-      cor: "from-blue-500 to-blue-400",
-    },
-    {
-      id: "empresas",
-      titulo: "Empresas Parceiras",
-      valor: 0,
-      variacao: 0,
-      ultimaAtualizacao: null,
-      rota: "/admin/empresas",
-      icone: <Briefcase className="w-6 h-6" />,
-      cor: "from-green-500 to-emerald-400",
-    },
-    {
-      id: "obras",
-      titulo: "Obras Ativas",
-      valor: 0,
-      variacao: 0,
-      ultimaAtualizacao: null,
-      rota: "/admin/obras",
-      icone: <Building2 className="w-6 h-6" />,
-      cor: "from-purple-500 to-indigo-400",
-    },
-    {
-      id: "faturamento",
-      titulo: "Faturamento do Mês (€)",
-      valor: 0,
-      variacao: 0,
-      ultimaAtualizacao: null,
-      rota: "/admin/financeiro",
-      icone: <TrendingUp className="w-6 h-6" />,
-      cor: "from-yellow-500 to-amber-400",
-    },
-    {
-      id: "pendencias",
-      titulo: "Pendências Atuais",
-      valor: 0,
-      variacao: 0,
-      ultimaAtualizacao: null,
-      rota: "/admin/pendencias",
-      icone: <FileWarning className="w-6 h-6" />,
-      cor: "from-rose-500 to-pink-400",
-    },
-  ]);
-
-  // ========= 2️⃣ Alertas =========
-  const [alertas, setAlertas] = useState([]);
-
-  // ========= 3️⃣ IA Recomendações =========
-  const [iaRecomendacoes, setIaRecomendacoes] = useState({
-    recomendou: [],
-    detectou: [],
-    previu: [],
-  });
-
-  // ========= 4️⃣ Gráficos =========
-  const [periodo, setPeriodo] = useState("Mensal");
-
-  const dataMensal = [
-    { mes: "Jan", cadastros: 50 },
-    { mes: "Fev", cadastros: 90 },
-    { mes: "Mar", cadastros: 130 },
-    { mes: "Abr", cadastros: 80 },
-    { mes: "Mai", cadastros: 140 },
-    { mes: "Jun", cadastros: 120 },
-  ];
-
-  const dadosPie = [
-    { nome: "Profissionais", valor: 58, cor: "#3B82F6" },
-    { nome: "Empresas", valor: 12, cor: "#22C55E" },
-    { nome: "Administradores", valor: 7, cor: "#A855F7" },
-  ];
-
-  // ========= 5️⃣ Atividades =========
-  const [atividades, setAtividades] = useState([]);
-
-  // ========= 6️⃣ Resumo Diário =========
-  const [resumo, setResumo] = useState(null);
-
-  // ========= 🔄 Buscar dados =========
-  useEffect(() => {
-    async function fetchCards() {
-      const { data: profissionais } = await supabase
-        .from("usuarios")
-        .select("*")
-        .eq("tipo_usuario", "profissional");
-
-      const { data: empresas } = await supabase
-        .from("usuarios")
-        .select("*")
-        .eq("tipo_usuario", "empresa");
-
-      const { data: obras } = await supabase
-        .from("obras")
-        .select("*")
-        .eq("status", "ativa");
-
-      const { data: faturamento } = await supabase.rpc("get_faturamento_mes");
-
-      const { data: pendencias } = await supabase
-        .from("alertas")
-        .select("*")
-        .eq("status", "pendente");
-
-      setCards((prev) =>
-        prev.map((card) => {
-          const base = {
-            profissionais: profissionais?.length || 0,
-            empresas: empresas?.length || 0,
-            obras: obras?.length || 0,
-            faturamento: faturamento?.[0]?.valor_total || 0,
-            pendencias: pendencias?.length || 0,
-          };
-          return {
-            ...card,
-            valor: base[card.id],
-            variacao: Math.floor(Math.random() * 15) - 5, // Mock de variação
-            ultimaAtualizacao: new Date().toLocaleTimeString("pt-PT", {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          };
-        })
-      );
-    }
-
-    async function fetchAlertas() {
-      const { data } = await supabase
-        .from("alertas")
-        .select("*")
-        .order("prioridade", { ascending: true });
-      setAlertas(data || []);
-    }
-
-    async function fetchAtividades() {
-      const { data } = await supabase
-        .from("atividades")
-        .select("*")
-        .order("criado_em", { ascending: false });
-      setAtividades(data || []);
-    }
-
-    async function fetchResumo() {
-      const { data } = await supabase.rpc("get_resumo_dia");
-      setResumo(data);
-    }
-
-    // IA Simulada
-    setIaRecomendacoes({
-      recomendou: [
-        "📋 Enviar Pedro Silva para obra Porto Paranhos.",
-        "🏢 Priorizar empresa Casais para novos contratos.",
-      ],
-      detectou: [
-        "⚠️ Queda de produtividade de Ana Torres (-18%).",
-        "💡 Obra de Lisboa com 60% de atraso estimado.",
-      ],
-      previu: [
-        "📈 Receita estimada novembro: €67.000 (+12%).",
-        "🏗️ 2 obras com risco alto — Porto Paranhos e Quiet Studio.",
-      ],
-    });
-
-    fetchCards();
-    fetchAlertas();
-    fetchAtividades();
-    fetchResumo();
-  }, []);
-
-  // ========= Supabase Realtime - Atividades =========
-  useEffect(() => {
-    const canal = supabase
-      .channel("atividades")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "atividades" },
-        (payload) => {
-          setAtividades((prev) => [payload.new, ...prev]);
-        }
-      )
-      .subscribe();
-
-    return () => supabase.removeChannel(canal);
-  }, []);
-
-  // =====================================================
-  // Render principal
-  // =====================================================
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: ready ? 1 : 0, y: ready ? 0 : 15 }}
       transition={{ duration: 0.4 }}
-      className="min-h-screen p-6 bg-[#f8fafc] space-y-8"
+      className="space-y-10"
     >
-      {/* =================== Linha 1 - Cards Principais =================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-        {cards.map((c) => (
+      {/* Título */}
+      <div>
+        <h1 className="text-xl sm:text-2xl font-semibold">
+          Visão Geral da Operação
+        </h1>
+        <p className="text-slate-400 text-sm">
+          Informações essenciais do ecossistema Acrobatas.
+        </p>
+      </div>
+
+      {/* ======================================================
+          KPIs Premium (4 colunas → mobile 1)
+      ======================================================= */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {KPI_DATA.map((kpi, index) => (
           <motion.div
-            key={c.id}
-            onClick={() => navigate(c.rota)}
-            whileHover={{ scale: 1.03 }}
-            className={`cursor-pointer bg-gradient-to-br ${c.cor} text-white p-5 rounded-2xl shadow-md flex justify-between items-center`}
+            key={kpi.title}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            className="
+              p-5 rounded-xl bg-slate-900/40 border border-slate-800 
+              shadow-xl hover:bg-slate-900/60 transition cursor-pointer
+            "
           >
-            <div>
-              <h4 className="text-sm opacity-90">{c.titulo}</h4>
-              <p className="text-3xl font-bold mt-1">
-                {c.id === "faturamento" ? "€" : ""} {c.valor}
-              </p>
-              <p
-                className={`text-xs mt-1 ${
-                  c.variacao >= 0 ? "text-green-200" : "text-red-200"
-                }`}
-              >
-                {c.variacao >= 0 ? "↑" : "↓"} {Math.abs(c.variacao)}% vs mês anterior
-              </p>
-              <p className="text-[11px] text-white/70 mt-1">
-                Atualizado às {c.ultimaAtualizacao}
-              </p>
+            <div className="flex items-start justify-between">
+              <kpi.icon className={`w-7 h-7 ${kpi.color}`} />
+              <span className="text-xs text-slate-500">{kpi.trend}</span>
             </div>
-            <div className="bg-white bg-gray-100/20 p-3 rounded-xl">{c.icone}</div>
+
+            <div className="mt-3 text-3xl font-bold">{kpi.value}</div>
+            <p className="text-sm font-medium text-slate-300">{kpi.title}</p>
           </motion.div>
         ))}
       </div>
 
-      {/* =================== Linha 2 - Alertas Automáticos =================== */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white bg-white rounded-2xl p-5 shadow-sm border">
-        {alertas.map((a) => (
-          <div
-            key={a.id}
-            onClick={() => alert(JSON.stringify(a.detalhes, null, 2))}
-            className={`flex items-center justify-between px-4 py-3 rounded-xl shadow-sm cursor-pointer ${
-              a.prioridade === 1
-                ? "bg-red-50 text-red-700"
-                : a.prioridade === 2
-                ? "bg-orange-50 text-orange-700"
-                : "bg-green-50 text-green-700"
-            }`}
-          >
-            <span>{a.mensagem}</span>
-            <button className="text-xs underline opacity-70 hover:opacity-100">
-              Ver detalhes
-            </button>
-          </div>
-        ))}
-      </div>
+      {/* ======================================================
+          Diagnóstico Inteligente (moderno premium)
+      ======================================================= */}
+      <div className="p-6 rounded-xl bg-slate-900/40 border border-slate-800 shadow-xl">
+        <h2 className="font-semibold mb-4">Diagnóstico Inteligente</h2>
 
-      {/* =================== Linha 3 - Recomendações da IA =================== */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {Object.entries(iaRecomendacoes).map(([cat, lista]) => (
-          <div key={cat} className="bg-white dark:bg-zinc-900 border rounded-2xl shadow-sm p-6">
-            <h3 className="font-semibold text-gray-700 mb-3 capitalize">
-              {cat === "recomendou"
-                ? "🤖 IA Recomendou"
-                : cat === "detectou"
-                ? "⚠️ IA Detectou"
-                : "📈 IA Previu"}
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600 text-gray-600">
-              {lista.map((r, i) => (
-                <li key={i}>{r}</li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      {/* =================== Linha 4 - Gráficos =================== */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Gráfico 1 */}
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-semibold text-gray-700">Novos Registos</h3>
-            <select
-              value={periodo}
-              onChange={(e) => setPeriodo(e.target.value)}
-              className="border rounded-lg px-2 py-1 text-sm text-gray-600 text-gray-700"
-            >
-              <option>Mensal</option>
-              <option>Trimestral</option>
-              <option>Anual</option>
-            </select>
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dataMensal}>
-              <XAxis dataKey="mes" stroke="#94A3B8" />
-              <Tooltip />
-              <Bar dataKey="cadastros" fill="#3B82F6" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="text-xs text-gray-500 text-gray-500 mt-2">
-            📊 Crescimento médio: +23% nos últimos 3 meses.
-          </p>
-        </div>
-
-        {/* Gráfico 2 */}
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border">
-          <h3 className="font-semibold text-gray-700 mb-3">
-            Distribuição de Usuários
-          </h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie
-                data={dadosPie}
-                cx="50%"
-                cy="50%"
-                innerRadius={50}
-                outerRadius={80}
-                dataKey="valor"
-              >
-                {dadosPie.map((d, i) => (
-                  <Cell key={i} fill={d.cor} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Gráfico 3 */}
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border">
-          <h3 className="font-semibold text-gray-700 mb-3">
-            Obras Iniciadas / Concluídas
-          </h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dataMensal}>
-              <XAxis dataKey="mes" stroke="#94A3B8" />
-              <Tooltip />
-              <Bar dataKey="cadastros" fill="#10B981" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* =================== Linha 5 - Timeline =================== */}
-      <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border">
-        <h3 className="font-semibold text-gray-700 mb-4 flex items-center gap-2">
-          <Clock className="w-4 h-4 text-blue-500" /> Atividades Recentes
-        </h3>
-        <div className="relative border-l-2 border-gray-100 border-gray-100 ml-4">
-          {atividades.map((a) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {DIAGNOSTICO.map((item) => (
             <div
-              key={a.id}
-              onClick={() => navigate(`/perfil/${a.entidade}`)}
-              className="relative pl-6 mb-5 cursor-pointer hover:opacity-80"
+              key={item.label}
+              className="
+                p-4 rounded-lg bg-slate-900/60 
+                border border-slate-800 shadow-md
+              "
             >
-              <span className="absolute -left-2 top-1">
-                <AlertTriangle className="w-3 h-3 text-blue-500" />
-              </span>
-              <p className="text-sm text-gray-700">
-                {a.descricao} —{" "}
-                <span className="text-gray-500 text-gray-600 text-xs">
-                  {new Date(a.criado_em).toLocaleTimeString("pt-PT")}
-                </span>
-              </p>
+              <div className="text-sm text-slate-400">{item.label}</div>
+
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-3xl font-bold">{item.score}</span>
+                <span className={`text-xl ${item.color}`}>●</span>
+              </div>
+
+              <p className="text-xs text-slate-500 mt-2">{item.desc}</p>
+
+              <div className="mt-3 w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${item.color.replace(
+                    "text",
+                    "bg"
+                  )} rounded-full`}
+                  style={{ width: `${item.score}%` }}
+                />
+              </div>
             </div>
           ))}
         </div>
-        <div className="text-right mt-3">
-          <button
-            onClick={() => navigate("/admin/atividades")}
-            className="text-xs text-blue-600 hover:underline"
-          >
-            Ver tudo →
-          </button>
-        </div>
       </div>
 
-      {/* =================== Linha 6 - Resumo Diário =================== */}
-      {resumo && (
-        <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border shadow-sm">
-          <h3 className="font-semibold text-gray-700 mb-3">
-            Resumo Diário — {resumo.data}
-          </h3>
-          <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
-            <li>🏢 {resumo.empresas_novas} novas empresas cadastradas</li>
-            <li>👷 {resumo.profissionais_ativos} profissionais iniciaram obra</li>
-            <li>💰 Receita total do dia: €{resumo.receita_dia}</li>
-            <li>📊 Status: {resumo.status}</li>
-          </ul>
-        </div>
-      )}
+      {/* ======================================================
+          GRID FINAL: Atividades + Estado + Gráfico
+      ======================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* ===== ATIVIDADES RECENTES ===== */}
+        <div className="p-6 rounded-xl bg-slate-900/40 border border-slate-800 shadow-lg">
+          <h2 className="font-semibold mb-4">Atividades Recentes</h2>
+          <div className="space-y-4">
+            {ATIVIDADES.map((a, i) => (
+              <div
+                key={i}
+                className="
+                  flex items-center gap-3 p-3 rounded-lg 
+                  bg-slate-900/50 border border-slate-800
+                "
+              >
+                <a.icon className="w-6 h-6 text-slate-300" />
+                <div className="flex-1">
+                  <div className="text-sm">{a.title}</div>
+                  <div className="text-xs text-slate-500">{a.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
 
-      {/* =================== Linha 7 - Barra Fixa =================== */}
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 flex gap-4 bg-white dark:bg-zinc-900/80 backdrop-blur-md shadow-lg rounded-full px-6 py-3 z-50">
-        {[
-          { icone: <PlusCircle className="w-5 h-5" />, texto: "Novo Pedido" },
-          { icone: <Receipt className="w-5 h-5" />, texto: "Gerar Fatura" },
-          { icone: <CheckSquare className="w-5 h-5" />, texto: "Aprovar Empresa" },
-          { icone: <HardHat className="w-5 h-5" />, texto: "Cadastrar Obra" },
-          { icone: <Settings className="w-5 h-5" />, texto: "Gerar Relatório IA" },
-        ].map((b, i) => (
-          <button
-            key={i}
-            title={`${b.texto} — executar ação rapidamente`}
-            className="flex items-center gap-2 bg-gray-50 bg-gray-50 hover:bg-gray-100 dark:bg-zinc-900 text-gray-700 px-4 py-2 rounded-full text-sm font-medium transition"
-          >
-            {b.icone} {b.texto}
+          <button className="mt-4 text-xs text-blue-400 flex items-center gap-1">
+            Ver todas <ArrowRight className="w-3 h-3" />
           </button>
-        ))}
+        </div>
+
+        {/* ===== ESTADO DA OPERAÇÃO ===== */}
+        <div className="p-6 rounded-xl bg-slate-900/40 border border-slate-800 shadow-lg">
+          <h2 className="font-semibold mb-4">Estado da Operação</h2>
+
+          <div className="space-y-4 text-sm">
+            <ItemEstado
+              icon={CheckCircle2}
+              text="Nenhuma obra com atraso crítico"
+              color="text-emerald-400"
+            />
+            <ItemEstado
+              icon={AlertTriangle}
+              text="Pendências de validação (3)"
+              color="text-yellow-400"
+            />
+            <ItemEstado
+              icon={AlertTriangle}
+              text="Documentos vencidos (0)"
+              color="text-red-400"
+            />
+          </div>
+        </div>
+
+        {/* ===== GRÁFICO PRINCIPAL ===== */}
+        <div className="p-6 rounded-xl bg-slate-900/40 border border-slate-800 shadow-lg">
+          <h2 className="font-semibold mb-4">Movimento Geral</h2>
+
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={GRAFICO}>
+              <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+              <XAxis dataKey="mes" stroke="#94a3b8" />
+              <YAxis stroke="#94a3b8" />
+              <Tooltip />
+              <Line
+                type="monotone"
+                dataKey="valor"
+                stroke="#38bdf8"
+                strokeWidth={3}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </motion.div>
+  );
+}
+
+/* ======================================================
+   SUBCOMPONENTES
+====================================================== */
+function ItemEstado({ icon: Icon, text, color }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon className={`w-5 h-5 ${color}`} />
+      <span>{text}</span>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 // src/components/company/EmpresaPainel.tsx
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useCallback } from "react";
+import { motion } from "framer-motion";
 import { Building2, Users, DollarSign, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import GraficosPainel from "./GraficosPainel";
 import { useTranslation } from "react-i18next";
 
-type QuickSection =
+export type QuickSection =
   | "novos-pedidos"
   | "obras-ativas"
   | "documentos-profissionais"
@@ -36,13 +36,8 @@ function formatEUR(v: number) {
 }
 function ym(dt?: string | null) {
   if (!dt) return "—";
-  try {
-    return new Date(dt).toISOString().slice(0, 7);
-  } catch {
-    return "—";
-  }
+  try { return new Date(dt).toISOString().slice(0, 7); } catch { return "—"; }
 }
-// garante pelo menos N meses para os gráficos
 function serieMinima(base: Record<string, number>, meses = 3) {
   const map = new Map(Object.entries(base));
   const now = new Date();
@@ -94,31 +89,35 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
   const [graficoIndex, setGraficoIndex] = useState(0);
   const graficosMobile = ["Ações", "Obras", "Custos"];
 
+  // ✅ Handler mobile-safe: navega + dispara callback do pai
+  const handleQuick = useCallback((section: QuickSection) => {
+    switch (section) {
+      case "novos-pedidos":            navigate("/empresa/pedidos/novos"); break;
+      case "obras-ativas":             navigate("/empresa/obras/ativas"); break;
+      case "documentos-profissionais": navigate("/empresa/documentos/profissionais"); break;
+      case "equipes-em-campo":         navigate("/empresa/profissionais/equipes"); break;
+      default: break;
+    }
+    onQuickAction?.(section);
+  }, [navigate, onQuickAction]);
+
   useEffect(() => {
     (async () => {
-      // 1) Descobrir empresa via RPC (mesma fonte da página ObrasAtivas)
+      // 1) Descobrir empresa via RPC
       let empresaId: string | null = null;
       const rpc = await supabase.rpc("minha_empresa_id");
       if (!rpc.error) empresaId = (rpc.data as string) ?? null;
       if (!empresaId) empresaId = (user?.user_metadata?.empresa_id as string) || null;
       if (!empresaId) {
         setStats({ obrasAtivas: 0, profissionais: 0, custoTotal: 0, entregasPrazo: 0, obrasAtrasadas: 0 });
-        setObrasAtivas([]);
-        setObrasMes([]);
-        setCustosMes([]);
-        return;
+        setObrasAtivas([]); setObrasMes([]); setCustosMes([]); return;
       }
 
       // 2) Obras da empresa
-      const { data: obrasRaw, error: eObras } = await supabase
+      const { data: obrasRaw } = await supabase
         .from<ObraBase>("obras")
         .select("id,nome,local,empresa_id,data_inicio,data_fim,created_at:criado_em")
         .eq("empresa_id", empresaId);
-
-      if (eObras) {
-        console.error("[Painel] obras ->", eObras);
-        return;
-      }
 
       const obras = (obrasRaw || []).sort((a, b) => {
         const aa = a.data_inicio ? new Date(a.data_inicio).getTime() : 0;
@@ -131,11 +130,10 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       // 3) Progresso médio por obra
       const progressoPorObra = new Map<string, number>();
       if (obraIds.length) {
-        const { data: rels, error: eRel } = (await supabase
+        const { data: rels } = (await supabase
           .from("relatorios_obras")
           .select("obra_id,progresso")
           .in("obra_id", obraIds)) as { data: Relatorio[] | null; error: any };
-        if (eRel) console.error("[Painel] relatorios_obras ->", eRel);
 
         const sum = new Map<string, number>();
         const cnt = new Map<string, number>();
@@ -153,11 +151,10 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       // 4) Profissionais por obra (apenas vínculos ativos)
       const profsPorObra = new Map<string, number>();
       if (obraIds.length) {
-        const { data: vincs, error: eV } = await supabase
+        const { data: vincs } = await supabase
           .from<Vinculo>("profissionais_obras")
           .select("obra_id,status")
           .in("obra_id", obraIds);
-        if (eV) console.error("[Painel] profissionais_obras ->", eV);
 
         (vincs || []).forEach((v) => {
           if (v.status && v.status.toLowerCase() !== "ativo") return;
@@ -165,19 +162,17 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         });
       }
 
-      // 5) Custos (usar valor_total e data_custo)
+      // 5) Custos
       const somaCustoPorObra = new Map<string, number>();
       let custoMesAtualTotal = 0;
       const agoraYM = new Date().toISOString().slice(0, 7);
       if (obraIds.length) {
-        const { data: custos, error: eC } = await supabase
+        const { data: custos } = await supabase
           .from<CustoObra>("custos_obra")
           .select("obra_id, valor:valor_total, data:data_custo, mes")
           .in("obra_id", obraIds);
-        if (eC) console.error("[Painel] custos_obra ->", eC);
 
         const mapaCustoMes = new Map<string, number>();
-
         (custos || []).forEach((c) => {
           const v = Number(c.valor || 0);
           const chaveMes = c.mes && /^\d{4}-\d{2}$/.test(c.mes) ? c.mes : ym(c.data);
@@ -186,13 +181,9 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
           if (chaveMes === agoraYM) custoMesAtualTotal += v;
         });
 
-        // garante série mínima para o gráfico
         const base: Record<string, number> = {};
         mapaCustoMes.forEach((v, k) => (base[k] = v));
-        const serie = serieMinima(base, 3).map(({ mes, custo }) => ({
-          mes,
-          custo: base[mes] ?? 0,
-        }));
+        const serie = serieMinima(base, 3).map(({ mes }) => ({ mes, custo: base[mes] ?? 0 }));
         setCustosMes(serie);
       } else {
         setCustosMes([]);
@@ -227,7 +218,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         obrasAtrasadas: atrasadas,
       });
 
-      // série de obras/mês (com fallback de meses vazios)
+      // série de obras/mês (com fallback)
       const mapaObrasMes = new Map<string, number>();
       obras.forEach((o) => {
         const chave = o.data_inicio ? ym(o.data_inicio) : ym(o.created_at);
@@ -235,27 +226,10 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       });
       const baseObras: Record<string, number> = {};
       mapaObrasMes.forEach((v, k) => (baseObras[k] = v));
-      const serieObras = serieMinima(baseObras, 3).map(({ mes }) => ({
-        mes,
-        obras: baseObras[mes] ?? 0,
-      }));
+      const serieObras = serieMinima(baseObras, 3).map(({ mes }) => ({ mes, obras: baseObras[mes] ?? 0 }));
       setObrasMes(serieObras);
     })();
-  }, [user?.id]);
-
-  // 🔧 FIX 1: ping de resize no mount do painel (garante primeiro cálculo)
-  useEffect(() => {
-    const t = setTimeout(() => window.dispatchEvent(new Event("resize")), 80);
-    return () => clearTimeout(t);
-  }, []);
-
-  // 🔧 FIX 2: ping quando dados dos gráficos são preenchidos/alterados
-  useEffect(() => {
-    if (obrasMes.length || custosMes.length) {
-      const t = setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-      return () => clearTimeout(t);
-    }
-  }, [obrasMes, custosMes]);
+  }, [user?.id, navigate, onQuickAction]);
 
   const nomeEmpresa =
     user?.user_metadata?.nome ||
@@ -263,56 +237,27 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
     t("empresaPainel.nomePadrao");
 
   const KPIs = [
-    {
-      label: "Obras Ativas",
-      value: stats.obrasAtivas,
-      icon: Building2,
-      color: "from-blue-500 to-cyan-500",
-      sub: "Total em execução",
-      link: "/empresa/obras",
-    },
-    {
-      label: "Equipe em Campo",
-      value: stats.profissionais,
-      icon: Users,
-      color: "from-green-500 to-emerald-500",
-      sub: "Profissionais ativos",
-      link: "/empresa/profissionais",
-    },
-    {
-      label: "Custos Totais",
-      value: formatEUR(stats.custoTotal),
-      icon: DollarSign,
-      color: "from-indigo-500 to-purple-500",
-      sub: "Mês atual",
-      link: "/empresa/relatorios",
-    },
-    {
-      label: "Eficiência",
-      value: `${stats.entregasPrazo}%`,
-      icon: CheckCircle2,
-      color: "from-yellow-500 to-orange-500",
-      sub: "Entregas no prazo",
-      link: "/empresa/relatorios",
-    },
+    { label: "Obras Ativas", value: stats.obrasAtivas, icon: Building2, color: "from-blue-500 to-cyan-500", sub: "Total em execução", link: "/empresa/obras" },
+    { label: "Equipe em Campo", value: stats.profissionais, icon: Users, color: "from-green-500 to-emerald-500", sub: "Profissionais ativos", link: "/empresa/profissionais" },
+    { label: "Custos Totais", value: formatEUR(stats.custoTotal), icon: DollarSign, color: "from-indigo-500 to-purple-500", sub: "Mês atual", link: "/empresa/relatorios" },
+    { label: "Eficiência", value: `${stats.entregasPrazo}%`, icon: CheckCircle2, color: "from-yellow-500 to-orange-500", sub: "Entregas no prazo", link: "/empresa/relatorios" },
   ];
+
+  const MAX_OBRAS = 5;
+  const obrasVisiveis = obrasAtivas.slice(0, MAX_OBRAS);
+  const temMaisQueMax = obrasAtivas.length > MAX_OBRAS;
 
   return (
     <div className="w-full mx-auto px-6 flex flex-col gap-6 max-w-[1180px] 2xl:max-w-[1200px]">
       {/* HEADER */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="bg-white dark:bg-[#161d27] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-[#1f2a37]"
-      >
+      <div className="bg-white dark:bg-[#161d27] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-[#1f2a37]">
         <h2 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
           👋 Bem-vindo, {nomeEmpresa}.
         </h2>
         <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
           {t("empresaPainel.mensagemIntro") || "Acompanhe o desempenho da sua empresa em tempo real."}
         </p>
-      </motion.div>
+      </div>
 
       {/* KPIs MOBILE */}
       <div className="sm:hidden grid grid-cols-2 gap-3">
@@ -348,9 +293,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
             <div className="flex justify-between items-start relative z-10">
               <div>
                 <p className="text-xs sm:text-sm opacity-90">{kpi.label}</p>
-                <h2 className="text-xl sm:text-3xl font-bold mt-1 leading-tight">
-                  {kpi.value}
-                </h2>
+                <h2 className="text-xl sm:text-3xl font-bold mt-1 leading-tight">{kpi.value}</h2>
                 <p className="text-[11px] sm:text-xs opacity-80 mt-1">{kpi.sub}</p>
               </div>
               <kpi.icon className="w-6 h-6 sm:w-8 sm:h-8 opacity-80" />
@@ -361,7 +304,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
 
       {/* GRÁFICOS DESKTOP */}
       <div className="hidden sm:block overflow-x-hidden">
-        <GraficosPainel obrasMes={obrasMes} custosMes={custosMes} onQuickAction={onQuickAction} />
+        <GraficosPainel obrasMes={obrasMes} custosMes={custosMes} onQuickAction={handleQuick} />
       </div>
 
       {/* GRÁFICOS MOBILE */}
@@ -370,26 +313,17 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
           Painel de Ações e Indicadores
         </h3>
         <div className="w-full relative flex items-center justify-center min-h-[240px] overflow-hidden">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={graficoIndex}
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              transition={{ duration: 0.35 }}
-              className="w-full"
-            >
-              {graficoIndex === 0 && (
-                <GraficosPainel obrasMes={obrasMes} custosMes={[]} onQuickAction={onQuickAction} />
-              )}
-              {graficoIndex === 1 && (
-                <GraficosPainel obrasMes={[]} custosMes={custosMes} onQuickAction={onQuickAction} />
-              )}
-              {graficoIndex === 2 && (
-                <GraficosPainel obrasMes={[]} custosMes={[]} onQuickAction={onQuickAction} />
-              )}
-            </motion.div>
-          </AnimatePresence>
+          <div className="w-full">
+            {graficoIndex === 0 && (
+              <GraficosPainel obrasMes={obrasMes} custosMes={[]} onQuickAction={handleQuick} />
+            )}
+            {graficoIndex === 1 && (
+              <GraficosPainel obrasMes={[]} custosMes={custosMes} onQuickAction={handleQuick} />
+            )}
+            {graficoIndex === 2 && (
+              <GraficosPainel obrasMes={[]} custosMes={[]} onQuickAction={handleQuick} />
+            )}
+          </div>
         </div>
         <div className="flex justify-center gap-2 mt-4">
           {graficosMobile.map((_, idx) => (
@@ -404,19 +338,16 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         </div>
       </div>
 
-      {/* TABELA / LISTA DE OBRAS ATIVAS */}
+      {/* OBRAS ATIVAS */}
       <div className="bg-white dark:bg-[#161d27] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-[#1f2a37]">
         <h3 className="font-semibold mb-4 text-gray-700 dark:text-gray-200 flex items-center gap-2 text-base sm:text-lg">
           <Building2 className="w-5 h-5 text-blue-500" /> Obras Ativas
         </h3>
 
-        {/* Mobile: cards */}
+        {/* Mobile: cards (máx. 5) */}
         <div className="sm:hidden space-y-3">
-          {obrasAtivas.map((obra) => (
-            <div
-              key={obra.id}
-              className="rounded-xl border border-gray-200 dark:border-[#1f2a37] bg-white/70 dark:bg-[#0f1520] p-3"
-            >
+          {obrasVisiveis.map((obra) => (
+            <div key={obra.id} className="rounded-xl border border-gray-200 dark:border-[#1f2a37] bg-white/70 dark:bg-[#0f1520] p-3">
               <div className="flex items-center justify-between">
                 <p className="font-semibold text-gray-900 dark:text-gray-100">{obra.nome || "—"}</p>
                 <span className="px-2 py-0.5 rounded-full text-[11px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
@@ -427,12 +358,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
                 {obra.local || "—"} · {obra.profissionais} prof · {formatEUR(obra.custo || 0)}
               </p>
               <div className="mt-2 w-full bg-gray-200 dark:bg-[#1f2a37] h-2 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${obra.progresso || 0}%` }}
-                  transition={{ duration: 0.9 }}
-                  className="h-2 bg-blue-500"
-                />
+                <div className="h-2 bg-blue-500" style={{ width: `${obra.progresso || 0}%` }} />
               </div>
               <button
                 onClick={() => navigate(`/empresa/obras/${obra.id}`)}
@@ -444,7 +370,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
           ))}
         </div>
 
-        {/* Desktop: tabela sem scroll horizontal */}
+        {/* Desktop: tabela (máx. 5) */}
         {obrasAtivas.length > 0 && (
           <div className="hidden sm:block md:overflow-x-visible">
             <table className="w-full text-sm border-b mb-2">
@@ -460,24 +386,15 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {obrasAtivas.map((obra) => (
-                  <motion.tr
-                    key={obra.id}
-                    whileHover={{ backgroundColor: "rgba(59,130,246,0.05)" }}
-                    className="border-b last:border-none dark:border-[#1f2a37]"
-                  >
+                {obrasVisiveis.map((obra) => (
+                  <motion.tr key={obra.id} whileHover={{ backgroundColor: "rgba(59,130,246,0.05)" }} className="border-b last:border-none dark:border-[#1f2a37]">
                     <td className="py-3 font-medium text-gray-800 dark:text-gray-100">{obra.nome || "—"}</td>
                     <td className="text-gray-700 dark:text-gray-300">{obra.local || "—"}</td>
                     <td className="text-gray-700 dark:text-gray-300">{obra.profissionais}</td>
                     <td className="text-gray-700 dark:text-gray-300 tabular-nums">{formatEUR(obra.custo || 0)}</td>
                     <td>
                       <div className="w-28 lg:w-36 bg-gray-200 dark:bg-[#1f2a37] h-2 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${obra.progresso || 0}%` }}
-                          transition={{ duration: 1 }}
-                          className="h-2 bg-blue-500"
-                        />
+                        <div className="h-2 bg-blue-500" style={{ width: `${obra.progresso || 0}%` }} />
                       </div>
                     </td>
                     <td>
@@ -505,8 +422,19 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
             Nenhuma obra ativa no momento.
           </p>
         )}
+
+        {/* Botão "Ver todas" quando há mais de 5 */}
+        {temMaisQueMax && (
+          <div className="mt-3 flex justify-center">
+            <button
+              onClick={() => navigate("/empresa/obras")}
+              className="px-4 py-2 text-sm rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+            >
+              Ver todas
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

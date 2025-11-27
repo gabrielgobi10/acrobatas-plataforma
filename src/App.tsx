@@ -6,8 +6,8 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
+import { MotionConfig } from "framer-motion";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { supabase } from "./lib/supabase";
 import { Toaster } from "react-hot-toast";
 
 // 🔹 Login
@@ -16,11 +16,13 @@ import { LoginPage } from "./components/LoginPage";
 // 🏢 Empresa
 import CompanyDashboard from "./components/company/CompanyDashboard";
 import ObrasPage from "./components/company/Obras";
-import DetalhesObra from "./components/company/DetalhesObra"; // (mantido caso ainda use)
 import DetalhesObraAtiva from "./components/company/DetalhesObraAtiva";
 import Profissionais from "./components/company/Profissionais";
+import ProfissionalDetalhes from "./components/company/ProfissionalDetalhes";
 import Relatorios from "./components/company/Relatorios";
 import ChatComEquipa from "./components/company/ChatComEquipa";
+import PerfilEmpresa from "./components/company/CentralDeNavegacaoEmpresa/Outros/PerfilEmpresa";
+import Notificacoes from "./components/company/CentralDeNavegacaoEmpresa/Outros/Notificacoes";
 
 // 👨‍💼 Admin e Mestre
 import AdminDashboard from "./components/admin/Admindashboard/AdminDashboard";
@@ -50,89 +52,97 @@ import Financeiro from "./components/company/CentralDeNavegacaoEmpresa/Relatorio
 
 import Documentos from "./components/company/CentralDeNavegacaoEmpresa/Documentos/Documentos";
 
-// =====================================================
+// ✅ Admin pages internas
+import PedidosSection from "./components/admin/Admindashboard/PedidosSection";
+// certo
+import ProfissionalPerfilPage from "@/components/admin/ProfissionalPerfilPage";
+
+
+/* ========= KILL SWITCH ========= */
+if (typeof document !== "undefined") {
+  document.documentElement.classList.add("no-anim");
+}
+/* =============================== */
 
 function AppContent() {
   const { user, isAuthenticated, loading } = useAuth();
   const location = useLocation();
 
-  // 🔎 Teste básico de conexão
-  useEffect(() => {
-    async function testarConexao() {
-      const { data, error } = await supabase.from("usuarios").select("*");
-      console.log("🧠 TESTE SUPABASE - DATA:", data);
-      console.log("🧠 TESTE SUPABASE - ERROR:", error);
-    }
-    testarConexao();
-  }, []);
-
   if (loading) {
-    return <p style={{ textAlign: "center", marginTop: "40vh" }}>Carregando...</p>;
+    return (
+      <p style={{ textAlign: "center", marginTop: "40vh" }}>
+        Carregando...
+      </p>
+    );
   }
 
-  // 🔐 Login se não autenticado
   if (!isAuthenticated || !user) return <LoginPage />;
 
   // 👷 PROFISSIONAL
   if (user.tipo_usuario === "profissional") {
     return (
-      <>
-        <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
-        <Routes>
-          <Route path="/profissional/*" element={<ProfessionalDashboard />} />
-          <Route index element={<Navigate to="/profissional" replace />} />
-        </Routes>
-      </>
+      <Routes>
+        <Route path="/profissional/*" element={<ProfessionalDashboard />} />
+        <Route index element={<Navigate to="/profissional" replace />} />
+      </Routes>
     );
   }
 
   // 🏢 EMPRESA
   if (user.tipo_usuario === "empresa") {
     return (
-      <>
-        <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
-        <Routes>
-          <Route path="/empresa" element={<CompanyDashboard />}>
-            {/* Pedidos */}
-            <Route path="pedidos/novos" element={<NovosPedidos />} />
-            <Route path="pedidos/em-avaliacao" element={<EmAvaliacao />} />
-            <Route path="pedidos/aprovados" element={<Aprovados />} />
+      <Routes>
+        <Route path="/empresa/*" element={<CompanyDashboard />}>
+          {/* 🧾 Pedidos */}
+          <Route path="pedidos/novos" element={<NovosPedidos />} />
+          <Route path="pedidos/novo" element={<NovosPedidos />} />
+          <Route path="pedidos/em-avaliacao" element={<EmAvaliacao />} />
+          <Route path="pedidos/aprovados" element={<Aprovados />} />
+          <Route
+            path="pedidos"
+            element={<Navigate to="/empresa/pedidos/em-avaliacao" replace />}
+          />
 
-            {/* Obras */}
-            <Route path="obras" element={<ObrasPage />} />
+          {/* 🏗️ Obras */}
+          <Route path="obras" element={<ObrasPage />} />
+          <Route path="obras/:id/detalhes" element={<DetalhesObraAtiva />} />
+          <Route path="obras/:id" element={<DetalhesObraAtiva />} />
+          <Route path="obras/ativas/:id" element={<DetalhesObraAtiva />} />
+          <Route path="obras/ativas" element={<ObrasAtivas />} />
+          <Route path="obras/historico" element={<Historico />} />
+          <Route path="obras/adicionar" element={<AdicionarObra />} />
 
-            {/* ✅ Caminho canônico para detalhes */}
-            <Route path="obras/:id/detalhes" element={<DetalhesObraAtiva />} />
+          {/* 👷‍♂️ Profissionais */}
+          <Route path="profissionais" element={<Profissionais />} />
+          <Route path="profissionais/base" element={<Profissionais />} />
+          <Route path="profissionais/equipes" element={<EquipesEmCampo />} />
+          <Route path="profissionais/adicionar" element={<AdicionarProfissionalPage />} />
+          <Route path="profissionais/faltas" element={<FaltasPresencas />} />
+          <Route path="profissionais/perfil/:id" element={<ProfissionalPerfil />} />
 
-            {/* ✅ Aliases/compat: ambos abrem o mesmo detalhe */}
-            <Route path="obras/:id" element={<DetalhesObraAtiva />} />
-            <Route path="obras/ativas/:id" element={<DetalhesObraAtiva />} />
+          {/* ✅ Detalhe alternativo */}
+          <Route path="profissional/:id" element={<ProfissionalDetalhes />} />
 
-            <Route path="obras/ativas" element={<ObrasAtivas />} />
-            <Route path="obras/historico" element={<Historico />} />
-            <Route path="obras/adicionar" element={<AdicionarObra />} />
+          {/* 📊 Relatórios */}
+          <Route path="relatorios" element={<Relatorios />} />
+          <Route path="relatorios/custos" element={<CustosMensais />} />
+          <Route path="relatorios/desempenho" element={<Desempenho />} />
+          <Route path="relatorios/financeiro" element={<Financeiro />} />
 
-            {/* Profissionais */}
-            <Route path="profissionais" element={<Profissionais />} />
-            <Route path="profissionais/equipes" element={<EquipesEmCampo />} />
-            <Route path="profissionais/adicionar" element={<AdicionarProfissionalPage />} />
-            <Route path="profissionais/faltas" element={<FaltasPresencas />} />
-            <Route path="profissionais/perfil/:id" element={<ProfissionalPerfil />} />
+          {/* 📂 Documentos & Chat */}
+          <Route path="documentos" element={<Documentos />} />
+          <Route path="chat" element={<ChatComEquipa />} />
 
-            {/* Relatórios */}
-            <Route path="relatorios/custos" element={<CustosMensais />} />
-            <Route path="relatorios/desempenho" element={<Desempenho />} />
-            <Route path="relatorios/financeiro" element={<Financeiro />} />
+          {/* 👤 Perfil & 🔔 Notificações */}
+          <Route path="perfil" element={<PerfilEmpresa />} />
+          <Route path="notificacoes" element={<Notificacoes />} />
 
-            {/* Documentos e Chat */}
-            <Route path="documentos" element={<Documentos />} />
-            <Route path="chat" element={<ChatComEquipa />} />
-          </Route>
+          <Route index element={<></>} />
+        </Route>
 
-          {/* Fallback */}
-          <Route path="*" element={<CompanyDashboard />} />
-        </Routes>
-      </>
+        <Route path="/" element={<Navigate to="/empresa" replace />} />
+        <Route path="*" element={<Navigate to="/empresa" replace />} />
+      </Routes>
     );
   }
 
@@ -142,10 +152,18 @@ function AppContent() {
       return <GabrielDashboard />;
     }
     return (
-      <>
-        <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
-        <AdminDashboard />
-      </>
+      <Routes>
+        <Route path="/admin/*" element={<AdminDashboard />}>
+          <Route index element={<Navigate to="pedidos" replace />} />
+          <Route path="pedidos" element={<PedidosSection />} />
+          {/* 🔥 Nova rota: Perfil do Profissional no Admin */}
+          <Route path="profissionais/:usuarioId" element={<ProfissionalPerfilPage />} />
+        </Route>
+
+        {/* Fallbacks úteis */}
+        <Route path="/" element={<Navigate to="/admin" replace />} />
+        <Route path="*" element={<Navigate to="/admin" replace />} />
+      </Routes>
     );
   }
 
@@ -159,11 +177,14 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/*" element={<AppContent />} />
-        </Routes>
-      </AuthProvider>
+      <MotionConfig reducedMotion="always" transition={{ duration: 0 }}>
+        <AuthProvider>
+          <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+          <Routes>
+            <Route path="/*" element={<AppContent />} />
+          </Routes>
+        </AuthProvider>
+      </MotionConfig>
     </BrowserRouter>
   );
 }

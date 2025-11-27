@@ -71,30 +71,67 @@ export default function VagasDisponiveis() {
 
   // 🔹 Enviar candidatura
   async function enviarCandidatura() {
-    if (!user) {
-      alert("É necessário estar autenticado para se candidatar.");
+    if (!user?.id) {
+      alert("Aguarde um momento, seu perfil ainda está sendo carregado.");
       return;
     }
+
     if (!vagaSelecionada) return;
 
     setEnviando(true);
 
-    const { error } = await supabase.from("vagas_candidaturas").insert({
-      vaga_id: vagaSelecionada.id,
-      profissional_id: user.id,
-      observacao,
-    });
+    try {
+      console.log("Usuário logado:", user.id, user.email);
 
-    if (error) {
-      console.error("Erro ao enviar candidatura:", error);
-      alert("Erro ao enviar candidatura. Tente novamente.");
-    } else {
-      setEnviado(true);
-      setTimeout(() => {
-        setVagaSelecionada(null);
-        setObservacao("");
-        setEnviado(false);
-      }, 2000);
+      // 🔸 Busca o profissional vinculado ao user.id
+      const { data: prof, error: profError } = await supabase
+        .from("profissionais")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (profError) {
+        console.error("Erro ao buscar profissional:", profError.message);
+        alert("Erro ao identificar seu perfil profissional.");
+        setEnviando(false);
+        return;
+      }
+
+      if (!prof) {
+        alert("Perfil profissional não encontrado. Verifique seu cadastro.");
+        setEnviando(false);
+        return;
+      }
+
+      console.log("Profissional encontrado:", prof.id);
+
+      // 🔸 Insere a candidatura
+      const { error: insertError } = await supabase
+        .from("vagas_candidaturas")
+        .insert([
+          {
+            vaga_id: vagaSelecionada.id,
+            profissional_id: prof.id,
+            observacao,
+            status: "Pendente",
+            criada_em: new Date().toISOString(),
+          },
+        ]);
+
+      if (insertError) {
+        console.error("Erro ao enviar candidatura:", insertError.message);
+        alert("Erro ao enviar candidatura. Tente novamente.");
+      } else {
+        setEnviado(true);
+        setTimeout(() => {
+          setVagaSelecionada(null);
+          setObservacao("");
+          setEnviado(false);
+        }, 2000);
+      }
+    } catch (err) {
+      console.error("Erro inesperado:", err);
+      alert("Ocorreu um erro inesperado. Tente novamente.");
     }
 
     setEnviando(false);
