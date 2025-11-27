@@ -21,7 +21,6 @@ import {
   ChevronDown,
   SortAsc,
   SortDesc,
-  Shield,
   User as UserIcon,
   Users,
   CircleDot,
@@ -131,34 +130,9 @@ function VencimentoBadge({ validade }: { validade?: string | null }) {
   );
 }
 
-function ResponsabilidadeBadge({ resp }: { resp: Responsabilidade }) {
-  if (resp === "profissional") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-700/30 dark:text-emerald-300">
-        <UserIcon size={12} /> Profissional
-      </span>
-    );
-  }
-  if (resp === "acrobatas") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-blue-100 text-blue-700 dark:bg-blue-700/30 dark:text-blue-300">
-        <Shield size={12} /> Acrobatas
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-purple-100 text-purple-700 dark:bg-purple-700/30 dark:text-purple-300">
-      <UserIcon size={12} />
-      <Shield size={12} /> Ambos
-    </span>
-  );
-}
-
 /* ======================
    Barra de filtros docs
 ====================== */
-type FiltroResp = "todas" | "profissional" | "acrobatas";
-
 function FiltroBar({
   categorias,
   query,
@@ -172,8 +146,6 @@ function FiltroBar({
   sortDir,
   setSortDir,
   onReset,
-  filtroResp,
-  setFiltroResp,
 }: {
   categorias: string[];
   query: string;
@@ -187,28 +159,27 @@ function FiltroBar({
   sortDir: "asc" | "desc";
   setSortDir: (d: "asc" | "desc") => void;
   onReset: () => void;
-  filtroResp: FiltroResp;
-  setFiltroResp: (f: FiltroResp) => void;
 }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
-      <div className="flex-1 flex items-center gap-2">
-        <div className="relative w-full sm:max-w-xs">
+      <div className="flex-1 flex flex-col gap-2">
+        <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70" size={16} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Pesquisar documento..."
+            placeholder="Pesquisar por nome, categoria ou data..."
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
-        <div className="hidden sm:flex items-center gap-2">
-          <div className="relative">
+        {/* filtros avançados */}
+        <div className="flex items-center gap-2 max-w-full overflow-x-auto pb-1">
+          <div className="relative min-w-[160px]">
             <select
               value={categoria}
               onChange={(e) => setCategoria(e.target.value)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+              className="w-full appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] text-xs sm:text-sm"
             >
               <option value="Todas">Todas categorias</option>
               {categorias.map((c) => (
@@ -223,11 +194,11 @@ function FiltroBar({
             />
           </div>
 
-          <div className="relative">
+          <div className="relative min-w-[140px]">
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as any)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+              className="w-full appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] text-xs sm:text-sm"
             >
               <option value="Todos">Todos status</option>
               <option value="Válido">Válidos</option>
@@ -235,13 +206,17 @@ function FiltroBar({
               <option value="Vencido">Vencidos</option>
               <option value="Reprovado">Reprovados</option>
             </select>
+            <ChevronDown
+              size={14}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70"
+            />
           </div>
 
-          <div className="relative">
+          <div className="relative min-w-[170px]">
             <select
               value={sortKey}
               onChange={(e) => setSortKey(e.target.value as SortKey)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
+              className="w-full appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] text-xs sm:text-sm"
             >
               <option value="validade">Ordenar por validade</option>
               <option value="status">Ordenar por status</option>
@@ -256,7 +231,7 @@ function FiltroBar({
 
           <button
             onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
-            className="px-2 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="flex items-center justify-center px-2 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             title="Inverter ordem"
           >
             {sortDir === "asc" ? <SortAsc size={16} /> : <SortDesc size={16} />}
@@ -264,61 +239,14 @@ function FiltroBar({
 
           <button
             onClick={onReset}
-            className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs sm:text-sm whitespace-nowrap"
             title="Limpar filtros"
           >
-            <RefreshCcw size={16} />
+            <RefreshCcw size={14} /> Limpar
           </button>
         </div>
       </div>
-
-      {/* Filtro rápido de responsabilidade */}
-      <div className="flex justify-center sm:justify-end gap-1 rounded-lg bg-zinc-900/5 dark:bg-zinc-100/5 p-1">
-        <RespToggleItem
-          active={filtroResp === "todas"}
-          onClick={() => setFiltroResp("todas")}
-          label="Todos"
-        />
-        <RespToggleItem
-          active={filtroResp === "profissional"}
-          onClick={() => setFiltroResp("profissional")}
-          label="Profissional"
-          icon={<UserIcon size={14} />}
-        />
-        <RespToggleItem
-          active={filtroResp === "acrobatas"}
-          onClick={() => setFiltroResp("acrobatas")}
-          label="Acrobatas"
-          icon={<Shield size={14} />}
-        />
-      </div>
     </div>
-  );
-}
-
-function RespToggleItem({
-  active,
-  onClick,
-  label,
-  icon,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  icon?: ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs sm:text-sm transition ${
-        active
-          ? "bg-blue-600 text-white shadow-sm"
-          : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/60"
-      }`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
   );
 }
 
@@ -370,7 +298,6 @@ export default function DocumentosProfissionaisEmpresa() {
   const [status, setStatus] = useState<"Todos" | Status>("Todos");
   const [sortKey, setSortKey] = useState<SortKey>("validade");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [filtroResp, setFiltroResp] = useState<FiltroResp>("todas");
 
   // filtros profissionais
   const [buscaProf, setBuscaProf] = useState("");
@@ -519,16 +446,7 @@ export default function DocumentosProfissionaisEmpresa() {
           else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
           else resp = "ambos";
 
-          if (
-            nomeNormalizado.includes("Ficha de Aptidão Médica") ||
-            nomeNormalizado.includes("Registo de distribuição de EPI") ||
-            nomeNormalizado.includes(
-              "Comprovativo de Comunicação de Admissão na Segurança Social",
-            )
-          ) {
-            resp = "acrobatas";
-          }
-
+          // para a empresa não precisamos mostrar isso, mas mantemos no objeto
           mappedDocs.push({
             id: d.doc_id,
             profissional_id: d.profissional_id,
@@ -644,13 +562,6 @@ export default function DocumentosProfissionaisEmpresa() {
     if (categoria !== "Todas")
       arr = arr.filter((d) => d.categoria === categoria);
     if (status !== "Todos") arr = arr.filter((d) => d.status === status);
-    if (filtroResp !== "todas") {
-      arr = arr.filter((d) =>
-        filtroResp === "profissional"
-          ? d.responsabilidade !== "acrobatas"
-          : d.responsabilidade === "acrobatas",
-      );
-    }
 
     arr.sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
@@ -675,7 +586,7 @@ export default function DocumentosProfissionaisEmpresa() {
     });
 
     return arr;
-  }, [docsDoProf, query, categoria, status, sortKey, sortDir, filtroResp]);
+  }, [docsDoProf, query, categoria, status, sortKey, sortDir]);
 
   const profSelecionado = useMemo(
     () => profissionais.find((p) => p.id === selectedProfId) || null,
@@ -705,7 +616,6 @@ export default function DocumentosProfissionaisEmpresa() {
     setStatus("Todos");
     setSortKey("validade");
     setSortDir("asc");
-    setFiltroResp("todas");
   };
 
   function openInNewTab(url?: string | null) {
@@ -865,7 +775,7 @@ export default function DocumentosProfissionaisEmpresa() {
                       <h2 className="text-base sm:text-lg font-semibold">
                         Documentos de {profSelecionado.nome}
                       </h2>
-                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap">
                         <span className="inline-flex items-center gap-1">
                           <Users size={11} /> Profissional ligado à sua empresa
                         </span>
@@ -941,8 +851,6 @@ export default function DocumentosProfissionaisEmpresa() {
                 sortDir={sortDir}
                 setSortDir={setSortDir}
                 onReset={handleResetFiltrosDocs}
-                filtroResp={filtroResp}
-                setFiltroResp={setFiltroResp}
               />
 
               {/* Lista de docs */}
@@ -978,13 +886,15 @@ export default function DocumentosProfissionaisEmpresa() {
                               <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">
                                 {doc.nome}
                               </p>
-                              <div className="flex items-center gap-2 mt-[2px] flex-wrap">
-                                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                              <div className="flex items-center gap-2 mt-[2px] flex-wrap text-[11px]">
+                                <span className="text-zinc-500 dark:text-zinc-400">
                                   {doc.categoria || "—"}
                                 </span>
-                                <ResponsabilidadeBadge
-                                  resp={doc.responsabilidade}
-                                />
+                                {doc.obrigatorio && (
+                                  <span className="px-2 py-[1px] rounded-full bg-blue-600/10 text-blue-500">
+                                    Obrigatório
+                                  </span>
+                                )}
                               </div>
                               <div className="mt-1 text-[11px]">
                                 {doc.url ? (
@@ -1002,15 +912,6 @@ export default function DocumentosProfissionaisEmpresa() {
                                   </span>
                                 )}
                               </div>
-                              {doc.comentario_admin && (
-                                <div className="mt-2">
-                                  <div className="rounded-lg border border-blue-500/20 bg-blue-50/80 dark:bg-blue-900/20 px-2.5 py-1.5">
-                                    <p className="text-[11px] leading-snug text-blue-900 dark:text-blue-50">
-                                      {doc.comentario_admin}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                             <StatusBadge status={doc.status} />
                           </div>
@@ -1049,7 +950,6 @@ export default function DocumentosProfissionaisEmpresa() {
                           <tr className="text-left border-b border-zinc-300 dark:border-zinc-700">
                             <th className="py-3 px-2">Documento</th>
                             <th className="py-3 px-2">Categoria</th>
-                            <th className="py-3 px-2">Responsável</th>
                             <th className="py-3 px-2">Status</th>
                             <th className="py-3 px-2">Validade</th>
                             <th className="py-3 px-2">Atualizado</th>
@@ -1067,6 +967,11 @@ export default function DocumentosProfissionaisEmpresa() {
                                 <div className="flex flex-col gap-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span>{doc.nome}</span>
+                                    {doc.obrigatorio && (
+                                      <span className="px-2 py-[1px] rounded-full bg-blue-600/10 text-[11px] text-blue-500">
+                                        Obrigatório
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-[11px]">
                                     {doc.url ? (
@@ -1084,26 +989,10 @@ export default function DocumentosProfissionaisEmpresa() {
                                       </span>
                                     )}
                                   </div>
-                                  {doc.comentario_admin && (
-                                    <div className="mt-2">
-                                      <div className="inline-flex max-w-xl">
-                                        <div className="flex items-start gap-2 rounded-lg border border-blue-500/25 bg-blue-50/90 dark:bg-blue-900/20 dark:border-blue-800/60 px-3 py-2">
-                                          <p className="text-[11px] leading-snug text-blue-900 dark:text-blue-50">
-                                            {doc.comentario_admin}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
                                 </div>
                               </td>
                               <td className="py-3 px-2">
                                 {doc.categoria || "—"}
-                              </td>
-                              <td className="py-3 px-2">
-                                <ResponsabilidadeBadge
-                                  resp={doc.responsabilidade}
-                                />
                               </td>
                               <td className="py-3 px-2">
                                 <StatusBadge status={doc.status} />
@@ -1158,4 +1047,3 @@ export default function DocumentosProfissionaisEmpresa() {
     </div>
   );
 }
-
