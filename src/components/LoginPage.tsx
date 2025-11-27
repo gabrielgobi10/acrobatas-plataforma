@@ -209,7 +209,10 @@ export const LoginPage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex justify-center items-start md:items-center relative overflow-x-hidden w-full">
+    <div
+      className="min-h-[100dvh] md:min-h-screen bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex justify-center items-start md:items-center relative overflow-x-hidden w-full"
+      style={{ minHeight: "100dvh" }}
+    >
       {/* 🌍 Desktop: idioma + suporte */}
       <div className="hidden sm:flex absolute top-3 right-3 items-center gap-3 z-20">
         <IdiomaSelector />
