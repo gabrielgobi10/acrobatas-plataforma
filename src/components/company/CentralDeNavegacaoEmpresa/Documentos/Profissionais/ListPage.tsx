@@ -1,4 +1,4 @@
-// src/components/company/DocumentosProfissionaisEmpresa.tsx
+// src/components/company/Documentos/DocumentosProfissionaisEmpresa.tsx
 "use client";
 
 import {
@@ -131,8 +131,6 @@ function VencimentoBadge({ validade }: { validade?: string | null }) {
   );
 }
 
-/* Mantemos o tipo de responsabilidade por consistência,
-   mas não exibimos mais isso para a empresa. */
 function ResponsabilidadeBadge({ resp }: { resp: Responsabilidade }) {
   if (resp === "profissional") {
     return (
@@ -159,6 +157,8 @@ function ResponsabilidadeBadge({ resp }: { resp: Responsabilidade }) {
 /* ======================
    Barra de filtros docs
 ====================== */
+type FiltroResp = "todas" | "profissional" | "acrobatas";
+
 function FiltroBar({
   categorias,
   query,
@@ -172,6 +172,8 @@ function FiltroBar({
   sortDir,
   setSortDir,
   onReset,
+  filtroResp,
+  setFiltroResp,
 }: {
   categorias: string[];
   query: string;
@@ -185,6 +187,8 @@ function FiltroBar({
   sortDir: "asc" | "desc";
   setSortDir: (d: "asc" | "desc") => void;
   onReset: () => void;
+  filtroResp: FiltroResp;
+  setFiltroResp: (f: FiltroResp) => void;
 }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
@@ -267,7 +271,54 @@ function FiltroBar({
           </button>
         </div>
       </div>
+
+      {/* Filtro rápido de responsabilidade */}
+      <div className="flex justify-center sm:justify-end gap-1 rounded-lg bg-zinc-900/5 dark:bg-zinc-100/5 p-1">
+        <RespToggleItem
+          active={filtroResp === "todas"}
+          onClick={() => setFiltroResp("todas")}
+          label="Todos"
+        />
+        <RespToggleItem
+          active={filtroResp === "profissional"}
+          onClick={() => setFiltroResp("profissional")}
+          label="Profissional"
+          icon={<UserIcon size={14} />}
+        />
+        <RespToggleItem
+          active={filtroResp === "acrobatas"}
+          onClick={() => setFiltroResp("acrobatas")}
+          label="Acrobatas"
+          icon={<Shield size={14} />}
+        />
+      </div>
     </div>
+  );
+}
+
+function RespToggleItem({
+  active,
+  onClick,
+  label,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon?: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs sm:text-sm transition ${
+        active
+          ? "bg-blue-600 text-white shadow-sm"
+          : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/60"
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
   );
 }
 
@@ -319,14 +370,21 @@ export default function DocumentosProfissionaisEmpresa() {
   const [status, setStatus] = useState<"Todos" | Status>("Todos");
   const [sortKey, setSortKey] = useState<SortKey>("validade");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filtroResp, setFiltroResp] = useState<FiltroResp>("todas");
 
   // filtros profissionais
   const [buscaProf, setBuscaProf] = useState("");
   const [filtroAtividade, setFiltroAtividade] = useState<"todos" | "ativos" | "inativos">("todos");
 
+  /* ======================
+     Carregar dados (empresa + profissionais + docs)
+  ====================== */
   useEffect(() => {
     if (!user?.id) {
       setLoading(false);
+      setDocumentos([]);
+      setProfissionais([]);
+      setSelectedProfId(null);
       return;
     }
 
@@ -335,144 +393,204 @@ export default function DocumentosProfissionaisEmpresa() {
     async function carregar() {
       setLoading(true);
 
-      // 1) pega empresa do utilizador
-      const { data: empresa, error: empError } = await supabase
-        .from("empresas")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      try {
+        // 1) pega ID da empresa ligada ao utilizador (RPC já usado em Minha Equipa)
+        const { data: empId, error: empErr } = await supabase.rpc(
+          "minha_empresa_id",
+        );
 
-      if (empError || !empresa) {
-        console.error("Erro a obter empresa:", empError);
+        if (empErr) {
+          throw empErr;
+        }
+
+        const empresaId = empId as string | null;
+
+        if (!empresaId) {
+          if (ativo) {
+            setDocumentos([]);
+            setProfissionais([]);
+            setSelectedProfId(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // 2) profissionais vinculados à empresa
+        const { data: vinc, error: vincErr } = await supabase
+          .from("profissionais_obras")
+          .select("profissional_id")
+          .eq("empresa_id", empresaId);
+
+        if (vincErr) {
+          throw vincErr;
+        }
+
+        const idsProfissionais = Array.from(
+          new Set(
+            (vinc || [])
+              .map((v: any) => v.profissional_id)
+              .filter(Boolean) as string[],
+          ),
+        );
+
+        if (idsProfissionais.length === 0) {
+          if (ativo) {
+            setDocumentos([]);
+            setProfissionais([]);
+            setSelectedProfId(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // 3) nomes dos profissionais
+        const { data: profDb, error: profErr } = await supabase
+          .from("profissionais")
+          .select("id, nome")
+          .in("id", idsProfissionais);
+
+        if (profErr) {
+          throw profErr;
+        }
+
+        // 4) documentos desses profissionais (mesma view usada no painel profissional)
+        const { data: docsDb, error: docsErr } = await supabase
+          .from("admin_docs_prof_v")
+          .select("*")
+          .in("profissional_id", idsProfissionais)
+          .order("profissional_id", { ascending: true })
+          .order("documento_nome", { ascending: true });
+
+        if (docsErr) {
+          throw docsErr;
+        }
+
+        if (!ativo) return;
+
+        const mappedDocs: Documento[] = [];
+        const profMap = new Map<string, ProfissionalResumo>();
+
+        // cria base dos profissionais
+        (profDb || []).forEach((p: any) => {
+          const id = p.id as string;
+          profMap.set(id, {
+            id,
+            nome: p.nome || "Profissional",
+            // enquanto não temos flag real, considera todos com vínculo como ativos
+            ativoEmObra: true,
+            totalDocs: 0,
+            pendentes: 0,
+            vencidos: 0,
+            validos: 0,
+          });
+        });
+
+        // mapeia docs + contagens
+        (docsDb || []).forEach((d: any) => {
+          const originalNome: string = d.documento_nome || "";
+
+          // remover contactos de emergência da lista
+          if (originalNome.toLowerCase().startsWith("contactos de emergência")) {
+            return;
+          }
+
+          const nomeNormalizado = originalNome.startsWith(
+            "Comprovativo de regularização de trabalhadores estrangeiros",
+          )
+            ? "Comprovativo de regularização de trabalhadores estrangeiros (Título ou Autorização de Residência/CPLP/TR)"
+            : originalNome;
+
+          const validadeStr = d.validade
+            ? new Date(d.validade).toLocaleDateString("pt-PT")
+            : null;
+          const atualizadoStr = d.atualizado_em
+            ? new Date(d.atualizado_em).toLocaleDateString("pt-PT")
+            : null;
+
+          let statusDoc: Status = d.status as Status;
+          if (validadeStr && statusDoc !== "Pendente" && statusDoc !== "Reprovado") {
+            const diff = daysUntil(validadeStr);
+            if (diff !== null && diff < 0) statusDoc = "Vencido";
+          }
+
+          let resp: Responsabilidade;
+          const r = (d.responsavel || "").toLowerCase();
+          if (r === "profissional") resp = "profissional";
+          else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
+          else resp = "ambos";
+
+          if (
+            nomeNormalizado.includes("Ficha de Aptidão Médica") ||
+            nomeNormalizado.includes("Registo de distribuição de EPI") ||
+            nomeNormalizado.includes(
+              "Comprovativo de Comunicação de Admissão na Segurança Social",
+            )
+          ) {
+            resp = "acrobatas";
+          }
+
+          mappedDocs.push({
+            id: d.doc_id,
+            profissional_id: d.profissional_id,
+            tipo_id: d.tipo_id,
+            nome: nomeNormalizado,
+            categoria: d.categoria,
+            validade: validadeStr,
+            status: statusDoc,
+            atualizado_em: atualizadoStr,
+            url: d.arquivo_url,
+            obrigatorio: d.obrigatorio,
+            responsabilidade: resp,
+            prof_pode_enviar: d.prof_pode_enviar,
+            bloqueado: d.bloqueado,
+            comentario_admin: d.comentario_admin ?? null,
+          });
+
+          const pid = d.profissional_id as string;
+          let resumo = profMap.get(pid);
+          if (!resumo) {
+            resumo = {
+              id: pid,
+              nome: "Profissional",
+              ativoEmObra: true,
+              totalDocs: 0,
+              pendentes: 0,
+              vencidos: 0,
+              validos: 0,
+            };
+            profMap.set(pid, resumo);
+          }
+
+          resumo.totalDocs += 1;
+          if (statusDoc === "Pendente") resumo.pendentes += 1;
+          if (statusDoc === "Vencido") resumo.vencidos += 1;
+          if (statusDoc === "Válido") resumo.validos += 1;
+        });
+
+        const profList = Array.from(profMap.values()).sort((a, b) =>
+          a.nome.localeCompare(b.nome, "pt"),
+        );
+
+        setDocumentos(mappedDocs);
+        setProfissionais(profList);
+
+        if (profList.length > 0) {
+          const primeiroAtivo = profList.find((p) => p.ativoEmObra);
+          setSelectedProfId((primeiroAtivo || profList[0]).id);
+        } else {
+          setSelectedProfId(null);
+        }
+
+        setLoading(false);
+      } catch (e) {
+        console.error("Erro a carregar documentos da empresa:", e);
         if (ativo) {
           setDocumentos([]);
           setProfissionais([]);
           setSelectedProfId(null);
           setLoading(false);
         }
-        return;
       }
-
-      const empresaId = empresa.id;
-
-      // 2) carrega docs de todos profissionais ligados à empresa
-      const { data: rows, error: docsError } = await supabase
-        .from("empresa_docs_prof_v")
-        .select("*")
-        .eq("empresa_id", empresaId)
-        .order("profissional_nome", { ascending: true })
-        .order("documento_nome", { ascending: true });
-
-      if (!ativo) return;
-
-      if (docsError) {
-        console.error("Erro a carregar documentos:", docsError);
-        setDocumentos([]);
-        setProfissionais([]);
-        setSelectedProfId(null);
-        setLoading(false);
-        return;
-      }
-
-      const mappedDocs: Documento[] = [];
-      const profMap = new Map<string, ProfissionalResumo>();
-
-      (rows || []).forEach((d: any) => {
-        const originalNome: string = d.documento_nome || "";
-
-        const nomeNormalizado = originalNome.startsWith(
-          "Comprovativo de regularização de trabalhadores estrangeiros",
-        )
-          ? "Comprovativo de regularização de trabalhadores estrangeiros (Título ou Autorização de Residência/CPLP/TR)"
-          : originalNome;
-
-        const validadeStr = d.validade
-          ? new Date(d.validade).toLocaleDateString("pt-PT")
-          : null;
-        const atualizadoStr = d.atualizado_em
-          ? new Date(d.atualizado_em).toLocaleDateString("pt-PT")
-          : null;
-
-        let statusDoc: Status = d.status as Status;
-        if (validadeStr && statusDoc !== "Pendente" && statusDoc !== "Reprovado") {
-          const diff = daysUntil(validadeStr);
-          if (diff !== null && diff < 0) statusDoc = "Vencido";
-        }
-
-        let resp: Responsabilidade;
-        const r = (d.responsavel || "").toLowerCase();
-        if (r === "profissional") resp = "profissional";
-        else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
-        else resp = "ambos";
-
-        if (
-          nomeNormalizado.includes("Ficha de Aptidão Médica") ||
-          nomeNormalizado.includes("Registo de distribuição de EPI") ||
-          nomeNormalizado.includes(
-            "Comprovativo de Comunicação de Admissão na Segurança Social",
-          )
-        ) {
-          resp = "acrobatas";
-        }
-
-        mappedDocs.push({
-          id: d.doc_id,
-          profissional_id: d.profissional_id,
-          tipo_id: d.tipo_id,
-          nome: nomeNormalizado,
-          categoria: d.categoria,
-          validade: validadeStr,
-          status: statusDoc,
-          atualizado_em: atualizadoStr,
-          url: d.arquivo_url,
-          obrigatorio: d.obrigatorio,
-          responsabilidade: resp,
-          prof_pode_enviar: d.prof_pode_enviar,
-          bloqueado: d.bloqueado,
-          comentario_admin: d.comentario_admin ?? null,
-        });
-
-        // resumo do profissional
-        const profId = d.profissional_id as string;
-        const nomeProf = d.profissional_nome as string;
-        const ativoEmObra = !!d.profissional_ativo;
-
-        let resumo = profMap.get(profId);
-        if (!resumo) {
-          resumo = {
-            id: profId,
-            nome: nomeProf,
-            ativoEmObra,
-            totalDocs: 0,
-            pendentes: 0,
-            vencidos: 0,
-            validos: 0,
-          };
-          profMap.set(profId, resumo);
-        }
-
-        resumo.totalDocs += 1;
-        if (statusDoc === "Pendente") resumo.pendentes += 1;
-        if (statusDoc === "Vencido") resumo.vencidos += 1;
-        if (statusDoc === "Válido") resumo.validos += 1;
-        if (ativoEmObra) resumo.ativoEmObra = true;
-      });
-
-      const profList = Array.from(profMap.values()).sort((a, b) =>
-        a.nome.localeCompare(b.nome, "pt"),
-      );
-
-      setDocumentos(mappedDocs);
-      setProfissionais(profList);
-
-      if (profList.length > 0) {
-        const primeiroAtivo = profList.find((p) => p.ativoEmObra);
-        setSelectedProfId((primeiroAtivo || profList[0]).id);
-      } else {
-        setSelectedProfId(null);
-      }
-
-      setLoading(false);
     }
 
     carregar();
@@ -526,6 +644,13 @@ export default function DocumentosProfissionaisEmpresa() {
     if (categoria !== "Todas")
       arr = arr.filter((d) => d.categoria === categoria);
     if (status !== "Todos") arr = arr.filter((d) => d.status === status);
+    if (filtroResp !== "todas") {
+      arr = arr.filter((d) =>
+        filtroResp === "profissional"
+          ? d.responsabilidade !== "acrobatas"
+          : d.responsabilidade === "acrobatas",
+      );
+    }
 
     arr.sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
@@ -550,7 +675,7 @@ export default function DocumentosProfissionaisEmpresa() {
     });
 
     return arr;
-  }, [docsDoProf, query, categoria, status, sortKey, sortDir]);
+  }, [docsDoProf, query, categoria, status, sortKey, sortDir, filtroResp]);
 
   const profSelecionado = useMemo(
     () => profissionais.find((p) => p.id === selectedProfId) || null,
@@ -580,6 +705,7 @@ export default function DocumentosProfissionaisEmpresa() {
     setStatus("Todos");
     setSortKey("validade");
     setSortDir("asc");
+    setFiltroResp("todas");
   };
 
   function openInNewTab(url?: string | null) {
@@ -815,6 +941,8 @@ export default function DocumentosProfissionaisEmpresa() {
                 sortDir={sortDir}
                 setSortDir={setSortDir}
                 onReset={handleResetFiltrosDocs}
+                filtroResp={filtroResp}
+                setFiltroResp={setFiltroResp}
               />
 
               {/* Lista de docs */}
@@ -854,6 +982,9 @@ export default function DocumentosProfissionaisEmpresa() {
                                 <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
                                   {doc.categoria || "—"}
                                 </span>
+                                <ResponsabilidadeBadge
+                                  resp={doc.responsabilidade}
+                                />
                               </div>
                               <div className="mt-1 text-[11px]">
                                 {doc.url ? (
@@ -871,6 +1002,15 @@ export default function DocumentosProfissionaisEmpresa() {
                                   </span>
                                 )}
                               </div>
+                              {doc.comentario_admin && (
+                                <div className="mt-2">
+                                  <div className="rounded-lg border border-blue-500/20 bg-blue-50/80 dark:bg-blue-900/20 px-2.5 py-1.5">
+                                    <p className="text-[11px] leading-snug text-blue-900 dark:text-blue-50">
+                                      {doc.comentario_admin}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                             <StatusBadge status={doc.status} />
                           </div>
@@ -909,6 +1049,7 @@ export default function DocumentosProfissionaisEmpresa() {
                           <tr className="text-left border-b border-zinc-300 dark:border-zinc-700">
                             <th className="py-3 px-2">Documento</th>
                             <th className="py-3 px-2">Categoria</th>
+                            <th className="py-3 px-2">Responsável</th>
                             <th className="py-3 px-2">Status</th>
                             <th className="py-3 px-2">Validade</th>
                             <th className="py-3 px-2">Atualizado</th>
@@ -943,10 +1084,26 @@ export default function DocumentosProfissionaisEmpresa() {
                                       </span>
                                     )}
                                   </div>
+                                  {doc.comentario_admin && (
+                                    <div className="mt-2">
+                                      <div className="inline-flex max-w-xl">
+                                        <div className="flex items-start gap-2 rounded-lg border border-blue-500/25 bg-blue-50/90 dark:bg-blue-900/20 dark:border-blue-800/60 px-3 py-2">
+                                          <p className="text-[11px] leading-snug text-blue-900 dark:text-blue-50">
+                                            {doc.comentario_admin}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                               <td className="py-3 px-2">
                                 {doc.categoria || "—"}
+                              </td>
+                              <td className="py-3 px-2">
+                                <ResponsabilidadeBadge
+                                  resp={doc.responsabilidade}
+                                />
                               </td>
                               <td className="py-3 px-2">
                                 <StatusBadge status={doc.status} />
@@ -1001,3 +1158,4 @@ export default function DocumentosProfissionaisEmpresa() {
     </div>
   );
 }
+

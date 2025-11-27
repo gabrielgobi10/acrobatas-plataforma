@@ -6,6 +6,10 @@
     <!-- 🔹 Ícone -->
     <link rel="icon" type="image/png" href="/Design sem nome (40).png" />
 
+    <!-- 🔹 Manifest PWA -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0f172a" />
+
     <!-- 🔹 Viewport travado + notch safe -->
     <meta
       name="viewport"
@@ -29,7 +33,8 @@
     <title>Acrobatas Workforce - Conectando Profissionais e Empresas</title>
 
     <style>
-      html, body {
+      html,
+      body {
         margin: 0;
         padding: 0;
         height: 100%;
@@ -58,7 +63,12 @@
       }
 
       /* 🔹 Impede zoom automático em inputs < 16px */
-      input, select, textarea, button { font-size: 16px !important; }
+      input,
+      select,
+      textarea,
+      button {
+        font-size: 16px !important;
+      }
 
       /* ❗ Recomendo NÃO desabilitar seleção globalmente.
          Se ainda quiser, aplique só onde precisa. */
@@ -68,7 +78,7 @@
     <!-- 🔒 Impede pinch e duplo toque no Safari -->
     <script>
       document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
-      document.addEventListener("dblclick",     (e) => e.preventDefault(), { passive: false });
+      document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
     </script>
   </head>
 
@@ -97,11 +107,15 @@
         document.body.appendChild(edge);
 
         let startX = 0;
-        const onStart = (e) => { startX = e.touches[0].clientX; };
-        const onMove  = (e) => { if (startX < 16) e.preventDefault(); };
+        const onStart = (e) => {
+          startX = e.touches[0].clientX;
+        };
+        const onMove = (e) => {
+          if (startX < 16) e.preventDefault();
+        };
 
         edge.addEventListener("touchstart", onStart, { passive: false });
-        edge.addEventListener("touchmove",  onMove,  { passive: false });
+        edge.addEventListener("touchmove", onMove, { passive: false });
 
         // 2) Trava de histórico (opcional, mas eficaz no dashboard)
         if (isIOS && "pushState" in history) {
