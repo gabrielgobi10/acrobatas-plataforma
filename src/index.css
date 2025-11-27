@@ -10,6 +10,7 @@
 /* html controla comportamento geral de scroll */
 html {
   scroll-behavior: auto !important;
+  overflow-y: auto;
 }
 
 /* Corpo base da aplicação */
@@ -32,18 +33,6 @@ body {
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  /* respeitar safe-area (notch / barra gestos) em PWA/iOS */
-  padding-top: env(safe-area-inset-top);
-  padding-right: env(safe-area-inset-right);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-
-  /* fallback para iOS antigos */
-  padding-top: constant(safe-area-inset-top);
-  padding-right: constant(safe-area-inset-right);
-  padding-bottom: constant(safe-area-inset-bottom);
-  padding-left: constant(safe-area-inset-left);
 }
 
 /* Root ocupa a tela toda */
@@ -150,14 +139,7 @@ html.no-anim *::after {
   }
 }
 
-/* Não força a barra sempre visível; só quando precisar */
-html {
-  overflow-y: auto;
-}
-
 /* ====== Shell genérico para páginas full-screen (login, dashboards mobile, etc.) ====== */
-/* Usa isso como “moldura” da página pra ficar perfeito em qualquer telemóvel */
-
 .app-shell {
   min-height: 100dvh;
   width: 100%;
@@ -180,4 +162,13 @@ html {
     max-width: 960px;
     padding: 32px 24px 48px;
   }
+}
+
+/* ✅ Garante que campos continuam focáveis e selecionáveis */
+input,
+textarea,
+select,
+button {
+  -webkit-user-select: text !important;
+  user-select: text !important;
 }

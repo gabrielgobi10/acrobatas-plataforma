@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, FocusEvent } from "react";
 import {
   Users,
   Building2,
@@ -38,12 +38,14 @@ export const LoginPage = () => {
   const [adminKey, setAdminKey] = useState("");
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showLangModal, setShowLangModal] = useState(false); // ✅ idioma mobile modal
+  const [showLangModal, setShowLangModal] = useState(false);
 
   const { login, register, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
-  // 🔹 Listener para evento vindo do MobileDock
+  /* ======================
+     Eventos externos (MobileDock)
+  ====================== */
   useEffect(() => {
     const openLang = () => setShowLangModal(true);
     window.addEventListener("toggle-idioma", openLang);
@@ -54,7 +56,9 @@ export const LoginPage = () => {
     };
   }, []);
 
-  // 🔹 Lembrar tipo de usuário
+  /* ======================
+     Lembrar tipo de usuário
+  ====================== */
   useEffect(() => {
     const savedRole = localStorage.getItem("userRole");
     if (savedRole === "professional" || savedRole === "company") {
@@ -66,7 +70,9 @@ export const LoginPage = () => {
     localStorage.setItem("userRole", userRole);
   }, [userRole]);
 
-  // 🔹 Redirecionamento pós-login
+  /* ======================
+     Redirecionamento pós-login (auth context)
+  ====================== */
   useEffect(() => {
     if (isAuthenticated && user) {
       switch (user.tipo_usuario) {
@@ -88,7 +94,9 @@ export const LoginPage = () => {
     }
   }, [isAuthenticated, user, navigate]);
 
-  // 🔹 Enviar formulário
+  /* ======================
+     Submit
+  ====================== */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -107,12 +115,14 @@ export const LoginPage = () => {
         professional: "profissional",
         company: "empresa",
         admin: "admin",
-      };
+      } as const;
+
       const tipo = adminMode ? "admin" : tipoMap[userRole];
 
       if (isLogin) {
         const userData = await login(email, password, tipo);
         setSuccess(t("login.sucessoLogin"));
+
         setTimeout(() => {
           switch (userData.tipo_usuario) {
             case "empresa":
@@ -123,6 +133,9 @@ export const LoginPage = () => {
               break;
             case "admin":
               navigate("/admin");
+              break;
+            case "mestre":
+              navigate("/mestre");
               break;
             default:
               navigate("/");
@@ -143,7 +156,9 @@ export const LoginPage = () => {
     }
   };
 
-  // 🔹 Validação da chave admin
+  /* ======================
+     Admin key
+  ====================== */
   const handleConfirmAdminKey = () => {
     const adminKeyEnv = import.meta.env.VITE_ADMIN_ACCESS_KEY || "acrobatas2024";
     if (adminKey === adminKeyEnv) {
@@ -155,12 +170,35 @@ export const LoginPage = () => {
     }
   };
 
-  const handleTabSwitch = (login: boolean) => {
-    setIsLogin(login);
+  const handleTabSwitch = (loginTab: boolean) => {
+    setIsLogin(loginTab);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 🔹 Idiomas disponíveis (para modal mobile)
+  /* ======================
+     Scroll em iOS ao focar inputs
+  ====================== */
+  const handleInputFocus = (
+    e: FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    if (typeof window === "undefined") return;
+    const ua = window.navigator.userAgent || "";
+    const isIOS = /iP(ad|hone|od)/.test(ua);
+    if (!isIOS) return;
+
+    const target = e.target as HTMLElement;
+    setTimeout(() => {
+      try {
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+      } catch {
+        // ignore
+      }
+    }, 250);
+  };
+
+  /* ======================
+     Idiomas para o modal mobile
+  ====================== */
   const LANGUAGES = [
     { code: "pt", name: "Português", flag: "🇵🇹" },
     { code: "en", name: "English", flag: "🇬🇧" },
@@ -171,15 +209,8 @@ export const LoginPage = () => {
   ];
 
   return (
-    <div
-      className="min-h-[100dvh] bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex justify-center items-start md:items-center px-4 sm:px-6 py-4 sm:py-6 relative overflow-x-hidden overflow-y-auto"
-      style={{
-        // respeita notch / barra inferior no iPhone
-        paddingTop: "max(1rem, env(safe-area-inset-top))",
-        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
-      }}
-    >
-      {/* 🌍 Desktop */}
+    <div className="min-h-screen bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex justify-center items-start md:items-center relative overflow-x-hidden w-full">
+      {/* 🌍 Desktop: idioma + suporte */}
       <div className="hidden sm:flex absolute top-3 right-3 items-center gap-3 z-20">
         <IdiomaSelector />
         <Suporte />
@@ -188,240 +219,253 @@ export const LoginPage = () => {
       {/* 🚀 Mobile Dock */}
       <MobileDock />
 
-      {/* 🔹 Container principal */}
-      <div className="w-full max-w-5xl flex flex-col md:grid md:grid-cols-2 gap-6 md:gap-8 items-stretch mt-4 md:mt-0 mb-6">
-        {/* ESQUERDA */}
-        <div className="order-1 bg-white/95 rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col justify-center relative">
-          <div className="text-center mb-8">
-            <img
-              src="/Design sem nome (45).png"
-              alt="Acrobatas Workforce"
-              className="h-14 sm:h-20 mx-auto mb-3 animate-fade-in"
-            />
-          </div>
-
-          {/* Abas */}
-          <div className="flex border-b border-gray-200 mb-6">
-            <button
-              onClick={() => handleTabSwitch(true)}
-              className={`flex-1 pb-2 sm:pb-3 text-center font-semibold transition-all ${
-                isLogin
-                  ? "text-blue-600 border-b-2 border-blue-600"
-                  : "text-gray-500"
-              }`}
-            >
-              {t("login.entrar")}
-            </button>
-            <button
-              onClick={() => handleTabSwitch(false)}
-              className={`flex-1 pb-2 sm:pb-3 text-center font-semibold transition-all ${
-                !isLogin
-                  ? "text-blue-600 border-b-2 border-blue-600"
-                  : "text-gray-500"
-              }`}
-            >
-              {t("login.cadastrar")}
-            </button>
-          </div>
-
-          {/* Alertas */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-sm"
-              >
-                <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                <p>{error}</p>
-              </motion.div>
-            )}
-            {success && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3 text-sm"
-              >
-                <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                <p>{success}</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Formulário */}
-          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
-            {!adminMode && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t("login.tipoUsuario")}
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setUserRole("professional")}
-                    className={`p-3 sm:p-4 rounded-lg border-2 transition-all ${
-                      userRole === "professional"
-                        ? "border-blue-600 bg-blue-50 text-blue-600"
-                        : "border-gray-300 hover:border-blue-300"
-                    }`}
-                  >
-                    <Users className="w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-1 sm:mb-2" />
-                    <span className="text-xs sm:text-sm font-semibold">
-                      {t("login.profissional")}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUserRole("company")}
-                    className={`p-3 sm:p-4 rounded-lg border-2 transition-all ${
-                      userRole === "company"
-                        ? "border-blue-600 bg-blue-50 text-blue-600"
-                        : "border-gray-300 hover:border-blue-300"
-                    }`}
-                  >
-                    <Building2 className="w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-1 sm:mb-2" />
-                    <span className="text-xs sm:text-sm font-semibold">
-                      {t("login.empresa")}
-                    </span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t("login.nomeCompleto")} <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all text-sm sm:text-base"
-                  placeholder={t("login.nomeCompleto")}
-                  required
-                />
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t("login.email")} <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all text-sm sm:text-base"
-                placeholder="seu@email.com"
-                required
+      {/* Safe-area + padding geral */}
+      <div
+        className="w-full px-4 sm:px-6 py-4 sm:py-6 flex justify-center"
+        style={{
+          paddingTop: "max(1rem, env(safe-area-inset-top))",
+          paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
+        }}
+      >
+        {/* Container principal */}
+        <div className="w-full max-w-5xl flex flex-col md:grid md:grid-cols-2 gap-6 md:gap-8 items-stretch mt-2 md:mt-0">
+          {/* ESQUERDA – formulário */}
+          <div className="order-1 bg-white/95 rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col justify-center relative">
+            <div className="text-center mb-8">
+              <img
+                src="/Design sem nome (45).png"
+                alt="Acrobatas Workforce"
+                className="h-14 sm:h-20 mx-auto mb-3 animate-fade-in"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t("login.senha")} <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all pr-9 sm:pr-10 text-sm sm:text-base"
-                  placeholder="******"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 sm:right-3 top-2.5 sm:top-3 text-gray-500 hover:text-blue-600"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" />
-                  ) : (
-                    <Eye className="w-4 h-4 sm:w-5 sm:h-5" />
-                  )}
-                </button>
-              </div>
+            {/* Abas login/cadastro */}
+            <div className="flex border-b border-gray-200 mb-6">
+              <button
+                onClick={() => handleTabSwitch(true)}
+                className={`flex-1 pb-2 sm:pb-3 text-center font-semibold transition-all ${
+                  isLogin
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-500"
+                }`}
+              >
+                {t("login.entrar")}
+              </button>
+              <button
+                onClick={() => handleTabSwitch(false)}
+                className={`flex-1 pb-2 sm:pb-3 text-center font-semibold transition-all ${
+                  !isLogin
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-500"
+                }`}
+              >
+                {t("login.cadastrar")}
+              </button>
             </div>
 
-            {isLogin && (
-              <p
-                onClick={() => setShowForgotPassword(true)}
-                className="text-xs text-gray-500 hover:text-blue-600 cursor-pointer text-right"
-              >
-                {t("login.esqueceuSenha")}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-blue-600 text-white py-2.5 sm:py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-xl disabled:opacity-60 flex items-center justify-center text-sm sm:text-base"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin mr-2" />{" "}
-                  {t("login.aguarde")}
-                </>
-              ) : isLogin ? (
-                t("login.entrar")
-              ) : (
-                t("login.cadastrar")
+            {/* Alertas */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-sm"
+                >
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p>{error}</p>
+                </motion.div>
               )}
-            </button>
+              {success && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3 text-sm"
+                >
+                  <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                  <p>{success}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            {isLogin && !adminMode && (
-              <button
-                type="button"
-                onClick={() => setShowAdminModal(true)}
-                className="w-full mt-3 text-gray-400 hover:text-blue-600 text-xs sm:text-sm font-medium flex items-center justify-center gap-1 transition-colors"
-              >
-                <Shield className="w-3 h-3" />
-                {t("login.acessoAdmin")}
-              </button>
-            )}
-          </form>
-        </div>
-
-        {/* DIREITA */}
-        <div className="order-2 bg-white/10 backdrop-blur-sm rounded-2xl p-8 text-white shadow-xl border border-white/20 mt-6 md:mt-0">
-          <h2 className="text-3xl font-bold mb-6 text-center md:text-left">
-            {t("login.sistema")}
-          </h2>
-          <div className="space-y-6">
-            {[
-              {
-                icon: <Users className="w-6 h-6 text-blue-200" />,
-                title: t("login.profissional"),
-                text: t("login.descricaoProfissionais"),
-              },
-              {
-                icon: <Building2 className="w-6 h-6 text-blue-200" />,
-                title: t("login.empresa"),
-                text: t("login.descricaoEmpresas"),
-              },
-              {
-                icon: <Shield className="w-6 h-6 text-blue-200" />,
-                title: t("login.cadastroGratuito"),
-                text: t("login.descricaoCadastro"),
-              },
-            ].map((item, i) => (
-              <div
-                key={i}
-                className="flex gap-4 items-start bg-white/5 md:bg-transparent p-3 md:p-0 rounded-xl md:rounded-none border border-white/10 md:border-0"
-              >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center border border-white/20">
-                  {item.icon}
-                </div>
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+              {!adminMode && (
                 <div>
-                  <h3 className="font-bold text-lg mb-1">{item.title}</h3>
-                  <p className="text-blue-100 text-sm">{item.text}</p>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {t("login.tipoUsuario")}
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setUserRole("professional")}
+                      className={`p-3 sm:p-4 rounded-lg border-2 transition-all ${
+                        userRole === "professional"
+                          ? "border-blue-600 bg-blue-50 text-blue-600"
+                          : "border-gray-300 hover:border-blue-300"
+                      }`}
+                    >
+                      <Users className="w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-1 sm:mb-2" />
+                      <span className="text-xs sm:text-sm font-semibold">
+                        {t("login.profissional")}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUserRole("company")}
+                      className={`p-3 sm:p-4 rounded-lg border-2 transition-all ${
+                        userRole === "company"
+                          ? "border-blue-600 bg-blue-50 text-blue-600"
+                          : "border-gray-300 hover:border-blue-300"
+                      }`}
+                    >
+                      <Building2 className="w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-1 sm:mb-2" />
+                      <span className="text-xs sm:text-sm font-semibold">
+                        {t("login.empresa")}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!isLogin && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {t("login.nomeCompleto")}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onFocus={handleInputFocus}
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all text-sm sm:text-base"
+                    placeholder={t("login.nomeCompleto")}
+                    required
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  {t("login.email")} <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onFocus={handleInputFocus}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all text-sm sm:text-base"
+                  placeholder="seu@email.com"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  {t("login.senha")} <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onFocus={handleInputFocus}
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all pr-9 sm:pr-10 text-sm sm:text-base"
+                    placeholder="******"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 sm:right-3 top-2.5 sm:top-3 text-gray-500 hover:text-blue-600"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" />
+                    ) : (
+                      <Eye className="w-4 h-4 sm:w-5 sm:h-5" />
+                    )}
+                  </button>
                 </div>
               </div>
-            ))}
+
+              {isLogin && (
+                <p
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-xs text-gray-500 hover:text-blue-600 cursor-pointer text-right"
+                >
+                  {t("login.esqueceuSenha")}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-blue-600 text-white py-2.5 sm:py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-xl disabled:opacity-60 flex items-center justify-center text-sm sm:text-base"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin mr-2" />
+                    {t("login.aguarde")}
+                  </>
+                ) : isLogin ? (
+                  t("login.entrar")
+                ) : (
+                  t("login.cadastrar")
+                )}
+              </button>
+
+              {isLogin && !adminMode && (
+                <button
+                  type="button"
+                  onClick={() => setShowAdminModal(true)}
+                  className="w-full mt-3 text-gray-400 hover:text-blue-600 text-xs sm:text-sm font-medium flex items-center justify-center gap-1 transition-colors"
+                >
+                  <Shield className="w-3 h-3" />
+                  {t("login.acessoAdmin")}
+                </button>
+              )}
+            </form>
+          </div>
+
+          {/* DIREITA – texto institucional */}
+          <div className="order-2 bg-white/10 backdrop-blur-sm rounded-2xl p-8 text-white shadow-xl border border-white/20 mt-6 md:mt-0">
+            <h2 className="text-3xl font-bold mb-6 text-center md:text-left">
+              {t("login.sistema")}
+            </h2>
+            <div className="space-y-6">
+              {[
+                {
+                  icon: <Users className="w-6 h-6 text-blue-200" />,
+                  title: t("login.profissional"),
+                  text: t("login.descricaoProfissionais"),
+                },
+                {
+                  icon: <Building2 className="w-6 h-6 text-blue-200" />,
+                  title: t("login.empresa"),
+                  text: t("login.descricaoEmpresas"),
+                },
+                {
+                  icon: <Shield className="w-6 h-6 text-blue-200" />,
+                  title: t("login.cadastroGratuito"),
+                  text: t("login.descricaoCadastro"),
+                },
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  className="flex gap-4 items-start bg-white/5 md:bg-transparent p-3 md:p-0 rounded-xl md:rounded-none border border-white/10 md:border-0"
+                >
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center border border-white/20">
+                    {item.icon}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg mb-1">{item.title}</h3>
+                    <p className="text-blue-100 text-sm">{item.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -429,8 +473,18 @@ export const LoginPage = () => {
       {/* 🔐 MODAL ADMIN */}
       <AnimatePresence>
         {showAdminModal && (
-          <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-            <motion.div className="bg-white rounded-2xl p-8 w-[90%] max-w-[380px] shadow-2xl relative">
+          <motion.div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="bg-white rounded-2xl p-8 w-[90%] max-w-[380px] shadow-2xl relative"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+            >
               <button
                 onClick={() => setShowAdminModal(false)}
                 className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
