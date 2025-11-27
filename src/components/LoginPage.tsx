@@ -160,7 +160,8 @@ export const LoginPage = () => {
      Admin key
   ====================== */
   const handleConfirmAdminKey = () => {
-    const adminKeyEnv = import.meta.env.VITE_ADMIN_ACCESS_KEY || "acrobatas2024";
+    const adminKeyEnv =
+      import.meta.env.VITE_ADMIN_ACCESS_KEY || "acrobatas2024";
     if (adminKey === adminKeyEnv) {
       setAdminMode(true);
       setUserRole("admin");
@@ -210,7 +211,7 @@ export const LoginPage = () => {
 
   return (
     <div
-      className="safe-screen md:min-h-screen bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex justify-center items-start md:items-center relative overflow-x-hidden w-full"
+      className="min-h-[100dvh] md:min-h-screen bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex flex-col items-center md:items-center justify-start relative overflow-x-hidden w-full"
     >
       {/* 🌍 Desktop: idioma + suporte */}
       <div className="hidden sm:flex absolute top-3 right-3 items-center gap-3 z-20">
@@ -584,6 +585,13 @@ export const LoginPage = () => {
             document.body
           )}
       </AnimatePresence>
+
+      {/* espaçador para cobrir a área do gesto do iOS */}
+      <div
+        aria-hidden="true"
+        className="w-full"
+        style={{ height: "env(safe-area-inset-bottom)" }}
+      />
     </div>
   );
 };
