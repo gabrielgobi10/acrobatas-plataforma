@@ -807,348 +807,347 @@ export default function CompanyDashboard() {
   const avatarBg = { backgroundColor: `hsl(${hue} 70% 45%)` };
 
   return (
-    <div
-      className={`flex min-h-screen ${backgroundClass}`}
-    >
-      <div className="hidden md:flex">
-        <SidebarDock onSelectSection={gotoSection} />
-      </div>
+    <div className={`safe-screen ${backgroundClass}`}>
+      <div className="flex h-full">
+        <div className="hidden md:flex">
+          <SidebarDock onSelectSection={gotoSection} />
+        </div>
 
-      {/* MOBILE SIDEBAR */}
-      {sidebarOpen ? (
-        <>
-          <div
-            className="fixed inset-0 z-[998] bg-black/55 backdrop-blur-sm"
-            onClick={() => setSidebarOpen(false)}
-            aria-hidden="true"
-          />
-          <div
-            className="fixed left-0 top-0 z-[999] h-full w-[304px]"
-            role="dialog"
-            aria-modal="true"
-          >
-            <SidebarDock
-              onSelectSection={gotoSection}
-              onCloseMobile={() => setSidebarOpen(false)}
+        {/* MOBILE SIDEBAR */}
+        {sidebarOpen ? (
+          <>
+            <div
+              className="fixed inset-0 z-[998] bg-black/55 backdrop-blur-sm"
+              onClick={() => setSidebarOpen(false)}
+              aria-hidden="true"
             />
-          </div>
-        </>
-      ) : null}
-
-      <div className="relative flex min-h-screen flex-1 flex-col overflow-hidden">
-        {/* HEADER */}
-        <header
-          className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
-            theme === "dark"
-              ? "bg-[#050816]/85 border-slate-800/70"
-              : "bg-white/80 border-zinc-200/80"
-          }`}
-        >
-          <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 sm:px-5 py-2.5">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="rounded-lg p-2 md:hidden hover:bg-slate-200/70 dark:hover:bg-slate-800/80"
-                aria-label="Abrir menu"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-              {/* sem título aqui */}
+            <div
+              className="fixed left-0 top-0 z-[999] h-full w-[304px]"
+              role="dialog"
+              aria-modal="true"
+            >
+              <SidebarDock
+                onSelectSection={gotoSection}
+                onCloseMobile={() => setSidebarOpen(false)}
+              />
             </div>
+          </>
+        ) : null}
 
-            <nav className="hidden gap-6 text-sm font-medium md:flex">
+        <div className="relative flex min-h-full flex-1 flex-col overflow-hidden">
+          {/* HEADER */}
+          <header
+            className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
+              theme === "dark"
+                ? "bg-[#050816]/85 border-slate-800/70"
+                : "bg-white/80 border-zinc-200/80"
+            }`}
+          >
+            <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 sm:px-5 py-2.5">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="rounded-lg p-2 md:hidden hover:bg-slate-200/70 dark:hover:bg-slate-800/80"
+                  aria-label="Abrir menu"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              </div>
+
+              <nav className="hidden gap-6 text-sm font-medium md:flex">
+                {[
+                  ["painel", "Painel"],
+                  ["obras", "Obras"],
+                  ["profissionais", "Profissionais"],
+                  ["relatorios", "Relatórios"],
+                  ["chat", "Chat"],
+                ].map(([key, label]) => {
+                  const isActive = section === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => gotoSection(key)}
+                      className={`relative pb-1 ${
+                        isActive
+                          ? "font-semibold text-sky-500"
+                          : "text-slate-600 hover:text-sky-500 dark:text-slate-300"
+                      }`}
+                    >
+                      {label}
+                      {isActive && (
+                        <span className="absolute -bottom-[2px] left-0 right-0 h-[2px] rounded-full bg-sky-500" />
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div className="relative flex items-center">
+                <button
+                  onClick={toggleTheme}
+                  className="rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  aria-label="Alternar tema"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-5 w-5 text-amber-300" />
+                  ) : (
+                    <Moon className="h-5 w-5 text-slate-700" />
+                  )}
+                </button>
+
+                <span className="mx-2 hidden h-6 w-px md:block bg-slate-200/70 dark:bg-slate-700/70" />
+
+                <button
+                  onClick={() => {
+                    if (isMobile) {
+                      setSection("notificacoes");
+                      navigate("/empresa/notificacoes");
+                    } else {
+                      setShowNotifications((s) => !s);
+                    }
+                  }}
+                  className="relative rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  aria-label="Notificações"
+                >
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-0 -top-0 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                <div className="relative ml-2">
+                  <button
+                    ref={avatarRef}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setUserMenuOpen((v) => !v);
+                    }}
+                    className="group flex items-center gap-3 rounded-xl px-2.5 py-1.5 hover:bg-slate-100/80 dark:hover:bg-slate-800/80"
+                    aria-haspopup="menu"
+                    aria-expanded={userMenuOpen}
+                  >
+                    <div
+                      className="h-9 w-9 rounded-full ring-1 ring-black/5 dark:ring-white/10 shadow-sm grid place-items-center text-white select-none"
+                      style={avatarBg}
+                    >
+                      <span className="text-[12px] font-semibold">
+                        {initials}
+                      </span>
+                    </div>
+                    <div className="hidden flex-col leading-tight text-left min-w-0 sm:flex">
+                      <span className="text-sm font-medium truncate">
+                        {profile?.nome ||
+                          user?.email?.split("@")[0] ||
+                          "Utilizador"}
+                      </span>
+                      <span className="text-xs opacity-70 truncate">
+                        {profile?.email || user?.email}
+                      </span>
+                    </div>
+                  </button>
+
+                  {userMenuOpen && (
+                    <div
+                      className={`absolute z-[1001] right-0 top-11 w-64 rounded-2xl border shadow-xl overflow-hidden ${
+                        theme === "dark"
+                          ? "bg-[#050819]/95 border-slate-800/70"
+                          : "bg-white/95 border-zinc-200/80"
+                      } backdrop-blur-xl`}
+                    >
+                      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                        <div
+                          className="h-10 w-10 rounded-full grid place-items-center text-white"
+                          style={avatarBg}
+                        >
+                          <span className="text-[12px] font-semibold">
+                            {initials}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold truncate">
+                            {profile?.nome ||
+                              user?.email?.split("@")[0] ||
+                              "Utilizador"}
+                          </div>
+                          <div className="text-xs opacity-70 truncate">
+                            {profile?.email || user?.email}
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className={
+                          theme === "dark"
+                            ? "border-t border-slate-800/60"
+                            : "border-t border-zinc-200/60"
+                        }
+                      >
+                        <button
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            gotoSection("perfil-empresa");
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800/80"
+                        >
+                          <User className="h-4 w-4" /> Meu Perfil
+                        </button>
+                        <button
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            gotoSection("financeiro");
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800/80"
+                        >
+                          <Wallet className="h-4 w-4" /> Financeiro
+                        </button>
+                        <button
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            handleLogout();
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800 text-rose-500"
+                        >
+                          <LogOut className="h-4 w-4" /> Sair
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {!isMobile && <NotificationsOverlay />}
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-400/20 max-w-[1400px] w-full mx-auto px-4 sm:px-6 md:px-8 py-5 sm:py-6 flex flex-col gap-6 md:pb-0 pb-24">
+            {(isObrasChild || isProfissionaisChild || isProfissionalDetalhe) ? (
+              <Outlet />
+            ) : (
+              (() => {
+                const map: Record<string, JSX.Element> = {
+                  painel: (
+                    <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
+                  ),
+                  obras: <Outlet />,
+                  profissionais: <Profissionais />,
+                  relatorios: <Relatorios />,
+                  chat: <ChatComEquipa />,
+
+                  // pedidos
+                  "novos-pedidos": (
+                    <NovosPedidos setSection={setSection} />
+                  ),
+                  "em-avaliacao": <EmAvaliacao />,
+                  aprovados: <Aprovados />,
+
+                  // obras
+                  "obras-ativas": <ObrasAtivas />,
+                  historico: <Historico />,
+                  "adicionar-obra": <AdicionarObra />,
+
+                  // relatórios
+                  "custos-mensais": <CustosMensais />,
+                  desempenho: <Desempenho />,
+                  financeiro: <Financeiro />,
+
+                  // documentos
+                  documentos: <Documentos />,
+                  "documentos-acrobatas": <Acrobatas />,
+                  "documentos-profissionais": <ProfissionaisDocs />,
+                  "documentos-meus": <MeusDocumentos />,
+
+                  // outros
+                  configuracoes: <Configuracoes />,
+                  notificacoes: <Notificacoes />,
+                  "perfil-empresa": <PerfilEmpresa />,
+
+                  // profissionais (sub)
+                  "equipes-em-campo": <EquipesEmCampo />,
+                  "adicionar-profissional": <AdicionarProfissional />,
+                  "faltas-presencas": <FaltasPresencas />,
+                };
+                return (
+                  map[section] || (
+                    <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
+                  )
+                );
+              })()
+            )}
+            <div className="h-10 sm:h-0" />
+          </main>
+
+          {/* Bottom nav mobile */}
+          <nav
+            className={`md:hidden fixed bottom-0 inset-x-0 z-10 border-t ${
+              theme === "dark"
+                ? "bg-[#050816]/95 border-slate-800/70"
+                : "bg-white/95 border-zinc-200/70"
+            } pb-[env(safe-area-inset-bottom)]`}
+          >
+            <div className="mx-auto max-w-[720px] px-4 py-2 flex justify-between">
               {[
-                ["painel", "Painel"],
-                ["obras", "Obras"],
-                ["profissionais", "Profissionais"],
-                ["relatorios", "Relatórios"],
-                ["chat", "Chat"],
-              ].map(([key, label]) => {
+                { key: "painel", label: "Painel", icon: LayoutDashboard },
+                { key: "obras", label: "Obras", icon: Briefcase },
+                { key: "profissionais", label: "Profissionais", icon: Users },
+                { key: "relatorios", label: "Relatórios", icon: BarChart2 },
+                { key: "chat", label: "Chat", icon: MessageCircle },
+              ].map(({ key, label, icon: Icon }) => {
                 const isActive = section === key;
                 return (
                   <button
                     key={key}
                     onClick={() => gotoSection(key)}
-                    className={`relative pb-1 ${
+                    className={`relative flex flex-col items-center gap-0.5 text-[11px] font-medium px-2 py-1 rounded-xl ${
                       isActive
-                        ? "font-semibold text-sky-500"
-                        : "text-slate-600 hover:text-sky-500 dark:text-slate-300"
+                        ? "text-sky-400"
+                        : "text-slate-400 hover:text-sky-400"
                     }`}
                   >
-                    {label}
+                    <Icon className="relative h-5 w-5" />
+                    <span>{label}</span>
                     {isActive && (
-                      <span className="absolute -bottom-[2px] left-0 right-0 h-[2px] rounded-full bg-sky-500" />
+                      <span className="absolute -bottom-1 left-1/2 h-[2px] w-6 -translate-x-1/2 rounded-full bg-sky-400" />
                     )}
                   </button>
                 );
               })}
-            </nav>
+            </div>
+          </nav>
+        </div>
 
-            <div className="relative flex items-center">
-              <button
-                onClick={toggleTheme}
-                className="rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-                aria-label="Alternar tema"
-              >
-                {theme === "dark" ? (
-                  <Sun className="h-5 w-5 text-amber-300" />
-                ) : (
-                  <Moon className="h-5 w-5 text-slate-700" />
+        {/* Toast */}
+        {toast && (
+          <div className="fixed bottom-4 right-4 z-[1100] max-w-xs rounded-2xl border border-slate-200/70 bg-white/95 dark:border-slate-800/70 dark:bg-[#050819]/95 shadow-lg px-4 py-3 text-sm backdrop-blur-xl">
+            <div className="flex items-start gap-2">
+              {toast.icon === "x" ? (
+                <XCircle className="h-4 w-4 text-rose-500 mt-[2px]" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-[2px]" />
+              )}
+              <div className="flex-1">
+                <p className="font-semibold">{toast.titulo}</p>
+                {toast.conteudo && (
+                  <p className="mt-1 text-xs opacity-80">
+                    {toast.conteudo}
+                  </p>
                 )}
-              </button>
-
-              <span className="mx-2 hidden h-6 w-px md:block bg-slate-200/70 dark:bg-slate-700/70" />
-
-              <button
-                onClick={() => {
-                  if (isMobile) {
-                    setSection("notificacoes");
-                    navigate("/empresa/notificacoes");
-                  } else {
-                    setShowNotifications((s) => !s);
-                  }
-                }}
-                className="relative rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-                aria-label="Notificações"
-              >
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -right-0 -top-0 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-              </button>
-
-              <div className="relative ml-2">
-                <button
-                  ref={avatarRef}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setUserMenuOpen((v) => !v);
-                  }}
-                  className="group flex items-center gap-3 rounded-xl px-2.5 py-1.5 hover:bg-slate-100/80 dark:hover:bg-slate-800/80"
-                  aria-haspopup="menu"
-                  aria-expanded={userMenuOpen}
-                >
-                  <div
-                    className="h-9 w-9 rounded-full ring-1 ring-black/5 dark:ring-white/10 shadow-sm grid place-items-center text-white select-none"
-                    style={avatarBg}
+                {toast.url && (
+                  <button
+                    onClick={() => {
+                      setToast(null);
+                      navigate(toast.url!);
+                    }}
+                    className="mt-2 text-xs text-sky-600 underline underline-offset-2 dark:text-sky-300"
                   >
-                    <span className="text-[12px] font-semibold">
-                      {initials}
-                    </span>
-                  </div>
-                  <div className="hidden flex-col leading-tight text-left min-w-0 sm:flex">
-                    <span className="text-sm font-medium truncate">
-                      {profile?.nome ||
-                        user?.email?.split("@")[0] ||
-                        "Utilizador"}
-                    </span>
-                    <span className="text-xs opacity-70 truncate">
-                      {profile?.email || user?.email}
-                    </span>
-                  </div>
-                </button>
-
-                {userMenuOpen && (
-                  <div
-                    className={`absolute z-[1001] right-0 top-11 w-64 rounded-2xl border shadow-xl overflow-hidden ${
-                      theme === "dark"
-                        ? "bg-[#050819]/95 border-slate-800/70"
-                        : "bg-white/95 border-zinc-200/80"
-                    } backdrop-blur-xl`}
-                  >
-                    <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-                      <div
-                        className="h-10 w-10 rounded-full grid place-items-center text-white"
-                        style={avatarBg}
-                      >
-                        <span className="text-[12px] font-semibold">
-                          {initials}
-                        </span>
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold truncate">
-                          {profile?.nome ||
-                            user?.email?.split("@")[0] ||
-                            "Utilizador"}
-                        </div>
-                        <div className="text-xs opacity-70 truncate">
-                          {profile?.email || user?.email}
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      className={
-                        theme === "dark"
-                          ? "border-t border-slate-800/60"
-                          : "border-t border-zinc-200/60"
-                      }
-                    >
-                      <button
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          gotoSection("perfil-empresa");
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800/80"
-                      >
-                        <User className="h-4 w-4" /> Meu Perfil
-                      </button>
-                      <button
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          gotoSection("financeiro");
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800/80"
-                      >
-                        <Wallet className="h-4 w-4" /> Financeiro
-                      </button>
-                      <button
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          handleLogout();
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800 text-rose-500"
-                      >
-                        <LogOut className="h-4 w-4" /> Sair
-                      </button>
-                    </div>
-                  </div>
+                    Ver detalhes
+                  </button>
                 )}
               </div>
-
-              {!isMobile && <NotificationsOverlay />}
             </div>
           </div>
-        </header>
-
-        <main className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-400/20 max-w-[1400px] w-full mx-auto px-4 sm:px-6 md:px-8 py-5 sm:py-6 min-h-[calc(100vh-5rem)] flex flex-col gap-6 md:pb-0 pb-24">
-          {(isObrasChild || isProfissionaisChild || isProfissionalDetalhe) ? (
-            <Outlet />
-          ) : (
-            (() => {
-              const map: Record<string, JSX.Element> = {
-                painel: (
-                  <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
-                ),
-                obras: <Outlet />,
-                profissionais: <Profissionais />,
-                relatorios: <Relatorios />,
-                chat: <ChatComEquipa />,
-
-                // pedidos
-                "novos-pedidos": (
-                  <NovosPedidos setSection={setSection} />
-                ),
-                "em-avaliacao": <EmAvaliacao />,
-                aprovados: <Aprovados />,
-
-                // obras
-                "obras-ativas": <ObrasAtivas />,
-                historico: <Historico />,
-                "adicionar-obra": <AdicionarObra />,
-
-                // relatórios
-                "custos-mensais": <CustosMensais />,
-                desempenho: <Desempenho />,
-                financeiro: <Financeiro />,
-
-                // documentos
-                documentos: <Documentos />,
-                "documentos-acrobatas": <Acrobatas />,
-                "documentos-profissionais": <ProfissionaisDocs />,
-                "documentos-meus": <MeusDocumentos />,
-
-                // outros
-                configuracoes: <Configuracoes />,
-                notificacoes: <Notificacoes />,
-                "perfil-empresa": <PerfilEmpresa />,
-
-                // profissionais (sub)
-                "equipes-em-campo": <EquipesEmCampo />,
-                "adicionar-profissional": <AdicionarProfissional />,
-                "faltas-presencas": <FaltasPresencas />,
-              };
-              return (
-                map[section] || (
-                  <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
-                )
-              );
-            })()
-          )}
-          <div className="h-10 sm:h-0" />
-        </main>
-
-        {/* Bottom nav mobile */}
-        <nav
-          className={`md:hidden fixed bottom-0 inset-x-0 z-10 border-t ${
-            theme === "dark"
-              ? "bg-[#050816]/95 border-slate-800/70"
-              : "bg-white/95 border-zinc-200/70"
-          } pb-[env(safe-area-inset-bottom)]`}
-        >
-          <div className="mx-auto max-w-[720px] px-4 py-2 flex justify-between">
-            {[
-              { key: "painel", label: "Painel", icon: LayoutDashboard },
-              { key: "obras", label: "Obras", icon: Briefcase },
-              { key: "profissionais", label: "Profissionais", icon: Users },
-              { key: "relatorios", label: "Relatórios", icon: BarChart2 },
-              { key: "chat", label: "Chat", icon: MessageCircle },
-            ].map(({ key, label, icon: Icon }) => {
-              const isActive = section === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => gotoSection(key)}
-                  className={`relative flex flex-col items-center gap-0.5 text-[11px] font-medium px-2 py-1 rounded-xl ${
-                    isActive
-                      ? "text-sky-400"
-                      : "text-slate-400 hover:text-sky-400"
-                  }`}
-                >
-                  <Icon className="relative h-5 w-5" />
-                  <span>{label}</span>
-                  {isActive && (
-                    <span className="absolute -bottom-1 left-1/2 h-[2px] w-6 -translate-x-1/2 rounded-full bg-sky-400" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
+        )}
       </div>
-
-      {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-[1100] max-w-xs rounded-2xl border border-slate-200/70 bg-white/95 dark:border-slate-800/70 dark:bg-[#050819]/95 shadow-lg px-4 py-3 text-sm backdrop-blur-xl">
-          <div className="flex items-start gap-2">
-            {toast.icon === "x" ? (
-              <XCircle className="h-4 w-4 text-rose-500 mt-[2px]" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-[2px]" />
-            )}
-            <div className="flex-1">
-              <p className="font-semibold">{toast.titulo}</p>
-              {toast.conteudo && (
-                <p className="mt-1 text-xs opacity-80">
-                  {toast.conteudo}
-                </p>
-              )}
-              {toast.url && (
-                <button
-                  onClick={() => {
-                    setToast(null);
-                    navigate(toast.url!);
-                  }}
-                  className="mt-2 text-xs text-sky-600 underline underline-offset-2 dark:text-sky-300"
-                >
-                  Ver detalhes
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -210,8 +210,7 @@ export const LoginPage = () => {
 
   return (
     <div
-      className="min-h-[100dvh] md:min-h-screen bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex justify-center items-start md:items-center relative overflow-x-hidden w-full"
-      style={{ minHeight: "100dvh" }}
+      className="safe-screen md:min-h-screen bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex justify-center items-start md:items-center relative overflow-x-hidden w-full"
     >
       {/* 🌍 Desktop: idioma + suporte */}
       <div className="hidden sm:flex absolute top-3 right-3 items-center gap-3 z-20">
@@ -223,13 +222,7 @@ export const LoginPage = () => {
       <MobileDock />
 
       {/* Safe-area + padding geral */}
-      <div
-        className="w-full px-4 sm:px-6 py-4 sm:py-6 flex justify-center"
-        style={{
-          paddingTop: "max(1rem, env(safe-area-inset-top))",
-          paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
-        }}
-      >
+      <div className="w-full px-4 sm:px-6 py-4 sm:py-6 flex justify-center">
         {/* Container principal */}
         <div className="w-full max-w-5xl flex flex-col md:grid md:grid-cols-2 gap-6 md:gap-8 items-stretch mt-2 md:mt-0">
           {/* ESQUERDA – formulário */}
