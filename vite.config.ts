@@ -11,6 +11,10 @@ export default defineConfig({
       "@company": path.resolve(__dirname, "src/components/company"),
     },
   },
+
+  // 🔹 ISSO AQUI É O IMPORTANTE PRO CAPACITOR
+  base: "./",
+
   server: {
     port: 5173,
     open: true,
@@ -19,4 +23,3 @@ export default defineConfig({
     },
   },
 });
-

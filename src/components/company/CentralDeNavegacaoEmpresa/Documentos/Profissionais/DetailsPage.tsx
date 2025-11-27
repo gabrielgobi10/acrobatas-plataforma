@@ -1,7 +1,12 @@
 // src/components/company/Documentos/DocumentosProfissionaisEmpresa.tsx
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -16,10 +21,11 @@ import {
   ChevronDown,
   SortAsc,
   SortDesc,
+  Shield,
+  User as UserIcon,
   Users,
   CircleDot,
   Circle,
-  User as UserIcon,
 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
@@ -30,8 +36,7 @@ import { supabase } from "@/lib/supabase";
 ====================== */
 type Status = "Válido" | "Pendente" | "Vencido" | "Reprovado";
 type SortKey = "nome" | "categoria" | "validade" | "atualizado_em" | "status";
-
-type Responsabilidade = "profissional" | "acrobatas" | "ambos"; // continua vindo da view, só não mostramos
+type Responsabilidade = "profissional" | "acrobatas" | "ambos";
 
 type Documento = {
   id: string;
@@ -47,7 +52,6 @@ type Documento = {
   responsabilidade: Responsabilidade;
   prof_pode_enviar?: boolean | null;
   bloqueado?: boolean | null;
-  comentario_admin?: string | null;
 };
 
 type ProfissionalResumo = {
@@ -102,14 +106,14 @@ function VencimentoBadge({ validade }: { validade?: string | null }) {
   const d = daysUntil(validade);
   if (d === null) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+      <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
         <Calendar size={14} /> Sem validade
       </span>
     );
   }
   if (d < 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-red-500">
+      <span className="inline-flex items-center gap-1 text-xs text-red-600">
         <Calendar size={14} /> Vencido há {Math.abs(d)}d
       </span>
     );
@@ -117,8 +121,8 @@ function VencimentoBadge({ validade }: { validade?: string | null }) {
   const near = d <= 15;
   return (
     <span
-      className={`inline-flex items-center gap-1 text-[11px] ${
-        near ? "text-yellow-500" : "text-zinc-600 dark:text-zinc-300"
+      className={`inline-flex items-center gap-1 text-xs ${
+        near ? "text-yellow-600" : "text-zinc-600 dark:text-zinc-300"
       }`}
     >
       <Calendar size={14} /> Vence em {d}d
@@ -126,10 +130,32 @@ function VencimentoBadge({ validade }: { validade?: string | null }) {
   );
 }
 
+function ResponsabilidadeBadge({ resp }: { resp: Responsabilidade }) {
+  if (resp === "profissional") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-700/30 dark:text-emerald-300">
+        <UserIcon size={12} /> Profissional
+      </span>
+    );
+  }
+  if (resp === "acrobatas") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-blue-100 text-blue-700 dark:bg-blue-700/30 dark:text-blue-300">
+        <Shield size={12} /> Acrobatas
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-purple-100 text-purple-700 dark:bg-purple-700/30 dark:text-purple-300">
+      <UserIcon size={12} />
+      <Shield size={12} /> Ambos
+    </span>
+  );
+}
+
 /* ======================
    Barra de filtros docs
 ====================== */
-
 function FiltroBar({
   categorias,
   query,
@@ -159,23 +185,23 @@ function FiltroBar({
 }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
-      <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
+      <div className="flex-1 flex items-center gap-2">
         <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70" size={16} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Pesquisar por nome, categoria ou data..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            placeholder="Pesquisar documento..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hidden sm:flex items-center gap-2">
           <div className="relative">
             <select
               value={categoria}
               onChange={(e) => setCategoria(e.target.value)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] text-xs sm:text-sm"
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
             >
               <option value="Todas">Todas categorias</option>
               {categorias.map((c) => (
@@ -194,7 +220,7 @@ function FiltroBar({
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as any)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] text-xs sm:text-sm"
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
             >
               <option value="Todos">Todos status</option>
               <option value="Válido">Válidos</option>
@@ -202,17 +228,13 @@ function FiltroBar({
               <option value="Vencido">Vencidos</option>
               <option value="Reprovado">Reprovados</option>
             </select>
-            <ChevronDown
-              size={14}
-              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70"
-            />
           </div>
 
           <div className="relative">
             <select
               value={sortKey}
               onChange={(e) => setSortKey(e.target.value as SortKey)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] text-xs sm:text-sm"
+              className="appearance-none pl-3 pr-8 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725]"
             >
               <option value="validade">Ordenar por validade</option>
               <option value="status">Ordenar por status</option>
@@ -235,10 +257,10 @@ function FiltroBar({
 
           <button
             onClick={onReset}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs sm:text-sm"
+            className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             title="Limpar filtros"
           >
-            <RefreshCcw size={14} /> Limpar
+            <RefreshCcw size={16} />
           </button>
         </div>
       </div>
@@ -266,7 +288,9 @@ function ResumoCard({
       className="rounded-xl p-3 sm:p-4 text-center shadow-sm hover:shadow-md transition bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700"
     >
       <div className={`flex justify-center mb-1 sm:mb-2 ${cor}`}>{icone}</div>
-      <p className="text-[11px] sm:text-sm text-zinc-600 dark:text-zinc-400">{titulo}</p>
+      <p className="text-[11px] sm:text-sm text-zinc-600 dark:text-zinc-400">
+        {titulo}
+      </p>
       <p className="text-base sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100">
         {valor}
       </p>
@@ -277,8 +301,6 @@ function ResumoCard({
 /* ======================
    Página principal
 ====================== */
-
-const PROFISSIONAIS_POR_PAGINA = 12;
 
 export default function DocumentosProfissionaisEmpresa() {
   const { user } = useAuth();
@@ -298,7 +320,6 @@ export default function DocumentosProfissionaisEmpresa() {
   // filtros profissionais
   const [buscaProf, setBuscaProf] = useState("");
   const [filtroAtividade, setFiltroAtividade] = useState<"todos" | "ativos" | "inativos">("todos");
-  const [paginaProf, setPaginaProf] = useState(1);
 
   /* ======================
      Carregar dados (empresa + profissionais + docs)
@@ -318,9 +339,14 @@ export default function DocumentosProfissionaisEmpresa() {
       setLoading(true);
 
       try {
-        const { data: empId, error: empErr } = await supabase.rpc("minha_empresa_id");
+        // 1) pega ID da empresa ligada ao utilizador (RPC já usado em Minha Equipa)
+        const { data: empId, error: empErr } = await supabase.rpc(
+          "minha_empresa_id",
+        );
 
-        if (empErr) throw empErr;
+        if (empErr) {
+          throw empErr;
+        }
 
         const empresaId = empId as string | null;
 
@@ -334,12 +360,15 @@ export default function DocumentosProfissionaisEmpresa() {
           return;
         }
 
+        // 2) profissionais vinculados à empresa
         const { data: vinc, error: vincErr } = await supabase
           .from("profissionais_obras")
           .select("profissional_id")
           .eq("empresa_id", empresaId);
 
-        if (vincErr) throw vincErr;
+        if (vincErr) {
+          throw vincErr;
+        }
 
         const idsProfissionais = Array.from(
           new Set(
@@ -359,13 +388,17 @@ export default function DocumentosProfissionaisEmpresa() {
           return;
         }
 
+        // 3) nomes dos profissionais
         const { data: profDb, error: profErr } = await supabase
           .from("profissionais")
           .select("id, nome")
           .in("id", idsProfissionais);
 
-        if (profErr) throw profErr;
+        if (profErr) {
+          throw profErr;
+        }
 
+        // 4) documentos desses profissionais (mesma view usada no painel profissional)
         const { data: docsDb, error: docsErr } = await supabase
           .from("admin_docs_prof_v")
           .select("*")
@@ -373,18 +406,22 @@ export default function DocumentosProfissionaisEmpresa() {
           .order("profissional_id", { ascending: true })
           .order("documento_nome", { ascending: true });
 
-        if (docsErr) throw docsErr;
+        if (docsErr) {
+          throw docsErr;
+        }
 
         if (!ativo) return;
 
         const mappedDocs: Documento[] = [];
         const profMap = new Map<string, ProfissionalResumo>();
 
+        // cria base dos profissionais
         (profDb || []).forEach((p: any) => {
           const id = p.id as string;
           profMap.set(id, {
             id,
             nome: p.nome || "Profissional",
+            // enquanto não temos flag real, considera todos com vínculo como ativos
             ativoEmObra: true,
             totalDocs: 0,
             pendentes: 0,
@@ -393,10 +430,14 @@ export default function DocumentosProfissionaisEmpresa() {
           });
         });
 
+        // mapeia docs + contagens
         (docsDb || []).forEach((d: any) => {
           const originalNome: string = d.documento_nome || "";
 
-          if (originalNome.toLowerCase().startsWith("contactos de emergência")) return;
+          // remover contactos de emergência da lista
+          if (originalNome.toLowerCase().startsWith("contactos de emergência")) {
+            return;
+          }
 
           const nomeNormalizado = originalNome.startsWith(
             "Comprovativo de regularização de trabalhadores estrangeiros",
@@ -423,6 +464,16 @@ export default function DocumentosProfissionaisEmpresa() {
           else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
           else resp = "ambos";
 
+          if (
+            nomeNormalizado.includes("Ficha de Aptidão Médica") ||
+            nomeNormalizado.includes("Registo de distribuição de EPI") ||
+            nomeNormalizado.includes(
+              "Comprovativo de Comunicação de Admissão na Segurança Social",
+            )
+          ) {
+            resp = "acrobatas";
+          }
+
           mappedDocs.push({
             id: d.doc_id,
             profissional_id: d.profissional_id,
@@ -437,7 +488,6 @@ export default function DocumentosProfissionaisEmpresa() {
             responsabilidade: resp,
             prof_pode_enviar: d.prof_pode_enviar,
             bloqueado: d.bloqueado,
-            comentario_admin: d.comentario_admin ?? null,
           });
 
           const pid = d.profissional_id as string;
@@ -475,7 +525,6 @@ export default function DocumentosProfissionaisEmpresa() {
           setSelectedProfId(null);
         }
 
-        setPaginaProf(1);
         setLoading(false);
       } catch (e) {
         console.error("Erro a carregar documentos da empresa:", e);
@@ -587,26 +636,6 @@ export default function DocumentosProfissionaisEmpresa() {
     return arr;
   }, [profissionais, filtroAtividade, buscaProf]);
 
-  // paginação profissionais
-  const totalProfissionais = profissionaisFiltrados.length;
-  const totalPaginas =
-    totalProfissionais === 0
-      ? 1
-      : Math.ceil(totalProfissionais / PROFISSIONAIS_POR_PAGINA);
-
-  useEffect(() => {
-    if (paginaProf > totalPaginas) {
-      setPaginaProf(totalPaginas);
-    }
-    if (paginaProf < 1) {
-      setPaginaProf(1);
-    }
-  }, [paginaProf, totalPaginas]);
-
-  const inicio = (paginaProf - 1) * PROFISSIONAIS_POR_PAGINA;
-  const fim = inicio + PROFISSIONAIS_POR_PAGINA;
-  const profissionaisPagina = profissionaisFiltrados.slice(inicio, fim);
-
   const handleResetFiltrosDocs = () => {
     setQuery("");
     setCategoria("Todas");
@@ -659,10 +688,7 @@ export default function DocumentosProfissionaisEmpresa() {
               />
               <input
                 value={buscaProf}
-                onChange={(e) => {
-                  setBuscaProf(e.target.value);
-                  setPaginaProf(1);
-                }}
+                onChange={(e) => setBuscaProf(e.target.value)}
                 placeholder="Pesquisar profissional..."
                 className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#101725] focus:ring-2 focus:ring-blue-500 outline-none"
               />
@@ -671,10 +697,7 @@ export default function DocumentosProfissionaisEmpresa() {
 
           <div className="flex gap-1 mb-3 text-[11px]">
             <button
-              onClick={() => {
-                setFiltroAtividade("todos");
-                setPaginaProf(1);
-              }}
+              onClick={() => setFiltroAtividade("todos")}
               className={`flex-1 px-2 py-1 rounded-md border text-center ${
                 filtroAtividade === "todos"
                   ? "bg-blue-600 text-white border-blue-600"
@@ -684,10 +707,7 @@ export default function DocumentosProfissionaisEmpresa() {
               Todos
             </button>
             <button
-              onClick={() => {
-                setFiltroAtividade("ativos");
-                setPaginaProf(1);
-              }}
+              onClick={() => setFiltroAtividade("ativos")}
               className={`flex-1 px-2 py-1 rounded-md border text-center flex items-center justify-center gap-1 ${
                 filtroAtividade === "ativos"
                   ? "bg-emerald-600 text-white border-emerald-600"
@@ -697,10 +717,7 @@ export default function DocumentosProfissionaisEmpresa() {
               <CircleDot size={11} /> Ativos
             </button>
             <button
-              onClick={() => {
-                setFiltroAtividade("inativos");
-                setPaginaProf(1);
-              }}
+              onClick={() => setFiltroAtividade("inativos")}
               className={`flex-1 px-2 py-1 rounded-md border text-center flex items-center justify-center gap-1 ${
                 filtroAtividade === "inativos"
                   ? "bg-zinc-700 text-white border-zinc-700"
@@ -711,13 +728,13 @@ export default function DocumentosProfissionaisEmpresa() {
             </button>
           </div>
 
-          <div className="space-y-2 max-h-[420px] overflow-auto pr-1 flex-1">
-            {profissionaisPagina.length === 0 ? (
+          <div className="space-y-2 flex-1 overflow-auto pr-1">
+            {profissionaisFiltrados.length === 0 ? (
               <p className="text-xs text-zinc-500">
                 Nenhum profissional encontrado.
               </p>
             ) : (
-              profissionaisPagina.map((p) => {
+              profissionaisFiltrados.map((p) => {
                 const isSelected = p.id === selectedProfId;
                 return (
                   <button
@@ -730,7 +747,7 @@ export default function DocumentosProfissionaisEmpresa() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-[13px] sm:text-sm line-clamp-1">
+                      <span className="font-semibold text-[11px] line-clamp-1 text-sm">
                         {p.nome}
                       </span>
                       <span
@@ -761,45 +778,6 @@ export default function DocumentosProfissionaisEmpresa() {
               })
             )}
           </div>
-
-          {/* paginação */}
-          {totalProfissionais > 0 && (
-            <div className="mt-3 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
-              <span>
-                {inicio + 1}–{Math.min(fim, totalProfissionais)} de{" "}
-                {totalProfissionais}
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPaginaProf((p) => Math.max(1, p - 1))}
-                  disabled={paginaProf === 1}
-                  className={`px-2 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 ${
-                    paginaProf === 1
-                      ? "opacity-50 cursor-not-allowed"
-                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  }`}
-                >
-                  {"<"}
-                </button>
-                <span className="px-1">
-                  {paginaProf}/{totalPaginas}
-                </span>
-                <button
-                  onClick={() =>
-                    setPaginaProf((p) => Math.min(totalPaginas, p + 1))
-                  }
-                  disabled={paginaProf === totalPaginas}
-                  className={`px-2 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 ${
-                    paginaProf === totalPaginas
-                      ? "opacity-50 cursor-not-allowed"
-                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  }`}
-                >
-                  {">"}
-                </button>
-              </div>
-            </div>
-          )}
         </aside>
 
         {/* Conteúdo principal: documentos do profissional selecionado */}
@@ -934,11 +912,14 @@ export default function DocumentosProfissionaisEmpresa() {
                               <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">
                                 {doc.nome}
                               </p>
-
-                              <span className="mt-0.5 inline-block text-[11px] text-zinc-500 dark:text-zinc-400">
-                                {doc.categoria || "—"}
-                              </span>
-
+                              <div className="flex items-center gap-2 mt-[2px] flex-wrap">
+                                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                  {doc.categoria || "—"}
+                                </span>
+                                <ResponsabilidadeBadge
+                                  resp={doc.responsabilidade}
+                                />
+                              </div>
                               <div className="mt-1 text-[11px]">
                                 {doc.url ? (
                                   <button
@@ -976,7 +957,7 @@ export default function DocumentosProfissionaisEmpresa() {
                               className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition ${
                                 doc.url
                                   ? "bg-blue-600/90 text-white hover:bg-blue-700"
-                                  : "bg-zinc-400 text-white opacity-70 cursor-not-allowed"
+                                  : "bg-zinc-400 text-white opacity-70"
                               }`}
                             >
                               <Eye size={14} /> Ver
@@ -993,6 +974,7 @@ export default function DocumentosProfissionaisEmpresa() {
                           <tr className="text-left border-b border-zinc-300 dark:border-zinc-700">
                             <th className="py-3 px-2">Documento</th>
                             <th className="py-3 px-2">Categoria</th>
+                            <th className="py-3 px-2">Responsável</th>
                             <th className="py-3 px-2">Status</th>
                             <th className="py-3 px-2">Validade</th>
                             <th className="py-3 px-2">Atualizado</th>
@@ -1008,7 +990,9 @@ export default function DocumentosProfissionaisEmpresa() {
                             >
                               <td className="py-3 px-2 font-medium align-top">
                                 <div className="flex flex-col gap-1">
-                                  <span>{doc.nome}</span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span>{doc.nome}</span>
+                                  </div>
                                   <div className="text-[11px]">
                                     {doc.url ? (
                                       <button
@@ -1031,13 +1015,16 @@ export default function DocumentosProfissionaisEmpresa() {
                                 {doc.categoria || "—"}
                               </td>
                               <td className="py-3 px-2">
+                                <ResponsabilidadeBadge
+                                  resp={doc.responsabilidade}
+                                />
+                              </td>
+                              <td className="py-3 px-2">
                                 <StatusBadge status={doc.status} />
                               </td>
                               <td className="py-3 px-2">
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-xs">
-                                    {doc.validade || "—"}
-                                  </span>
+                                <div className="flex items-center gap-2">
+                                  <span>{doc.validade || "—"}</span>
                                   <VencimentoBadge validade={doc.validade} />
                                 </div>
                               </td>
