@@ -279,27 +279,24 @@ function GraficosPainelBase({
     onQuickAction?.(map[key]);
   };
 
-  const Card = ({
-    title,
-    children,
-    className,
-  }: {
+  const Card = (props: {
     title: React.ReactNode;
     children: React.ReactNode;
     className?: string;
-  }) => (
-    <div
-      className={`relative rounded-2xl p-5 shadow-sm bg-white border border-gray-200 text-gray-800
-                 dark:bg-zinc-900/70 dark:border-zinc-700 dark:text-gray-100 ${
-                   className || ""
-                 }`}
-    >
-      <div className="mb-3 text-[15px] font-semibold flex items-center gap-2">
-        {title}
+  }) => {
+    const { title, children, className } = props;
+    return (
+      <div
+        className={`relative rounded-2xl p-5 shadow bg-white border border-gray-200 text-gray-800
+          dark:bg-[#020617] dark:border-slate-800/80 dark:text-gray-100 ${className || ""}`}
+      >
+        <div className="mb-3 text-[15px] font-semibold flex items-center gap-2">
+          {title}
+        </div>
+        {children}
       </div>
-      {children}
-    </div>
-  );
+    );
+  };
 
   const EmptyState = ({ icon, text }) => (
     <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 font-medium">
@@ -365,7 +362,12 @@ function GraficosPainelBase({
                     strokeOpacity={0.6}
                     className="dark:stroke-white/10"
                   />
-                  <XAxis dataKey="mes" tickLine={false} axisLine={false} />
+                  <XAxis
+                    dataKey="mes"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fill: "#6b7280" }}
+                  />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar
                     dataKey="obras"
@@ -425,7 +427,12 @@ function GraficosPainelBase({
                     strokeOpacity={0.6}
                     className="dark:stroke-white/10"
                   />
-                  <XAxis dataKey="mes" tickLine={false} axisLine={false} />
+                  <XAxis
+                    dataKey="mes"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fill: "#6b7280" }}
+                  />
                   <Tooltip content={<CustomTooltip />} />
                   <Area
                     type="monotone"
@@ -544,25 +551,25 @@ function GraficosPainelBase({
       </div>
 
       {/* MOBILE */}
-      <div className="md:hidden bg-white border border-gray-200 rounded-2xl shadow p-4 dark:bg-zinc-900/70 dark:border-zinc-700">
+      <div className="md:hidden bg-white border border-gray-200 rounded-2xl shadow p-4 dark:bg-[#020617] dark:border-slate-800/80">
         <div className="flex justify-center gap-2 mb-4">
           {[
             { key: "acoes", label: "Ações", icon: <Settings2 className="w-4 h-4" /> },
             { key: "obras", label: "Obras", icon: <HardHat className="w-4 h-4" /> },
             { key: "custos", label: "Custos", icon: <Euro className="w-4 h-4" /> },
-          ].map((t) => (
+          ].map((tItem) => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key as any)}
+              key={tItem.key}
+              onClick={() => setTab(tItem.key as any)}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm transition
                 ${
-                  tab === t.key
+                  tab === tItem.key
                     ? "bg-blue-600 text-white"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-800 dark:text-gray-300 dark:hover:bg-zinc-700"
                 }`}
             >
-              {t.icon}
-              {t.label}
+              {tItem.icon}
+              {tItem.label}
             </button>
           ))}
         </div>
@@ -686,6 +693,7 @@ function GraficosPainelBase({
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
+                    tick={{ fill: "#6b7280" }}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar
@@ -743,6 +751,7 @@ function GraficosPainelBase({
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
+                    tick={{ fill: "#6b7280" }}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Area

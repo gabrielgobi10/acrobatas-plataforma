@@ -98,11 +98,6 @@ export const ProfessionalDashboard = () => {
     accepted: 0,
   });
 
-  const backgroundClass =
-    theme === "dark"
-      ? "bg-gradient-to-b from-[#0b1221] to-[#101b33] text-gray-100"
-      : "bg-gradient-to-b from-[#e9eef6] to-[#f8fafc] text-gray-800";
-
   // 🌗 Tema
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -246,7 +241,11 @@ export const ProfessionalDashboard = () => {
 
   return (
     <div
-      className={`min-h-[100dvh] ${backgroundClass} transition-all duration-700 overflow-x-hidden`}
+      className={`min-h-screen transition-all duration-700 ${
+        theme === "dark"
+          ? "bg-gradient-to-b from-[#0b1221] to-[#101b33] text-gray-100"
+          : "bg-gradient-to-b from-[#e9eef6] to-[#f8fafc] text-gray-800"
+      }`}
     >
       {/* HEADER */}
       <header
@@ -438,9 +437,7 @@ export const ProfessionalDashboard = () => {
       </AnimatePresence>
 
       {/* CONTEÚDO MOBILE */}
-      <div className="md:hidden px-4 py-6 pb-[env(safe-area-inset-bottom)]">
-        {renderContent()}
-      </div>
+      <div className="md:hidden px-4 py-6">{renderContent()}</div>
     </div>
   );
 };

@@ -26,6 +26,8 @@ import {
   Users,
   CircleDot,
   Circle,
+  Folder,
+  Loader2,
 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
@@ -649,10 +651,19 @@ export default function DocumentosProfissionaisEmpresa() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  // LOADING BONITO AO ENTRAR NA PÁGINA
   if (loading) {
     return (
-      <div className="flex justify-center mt-20">
-        <FileText className="animate-pulse text-blue-500" size={28} />
+      <div className="h-[calc(100vh-120px)] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-zinc-500 dark:text-zinc-400">
+          <div className="relative">
+            <Folder className="w-10 h-10 animate-pulse" />
+            <Loader2 className="w-4 h-4 animate-spin absolute -bottom-2 -right-2" />
+          </div>
+          <span className="text-xs sm:text-sm">
+            A carregar documentos…
+          </span>
+        </div>
       </div>
     );
   }

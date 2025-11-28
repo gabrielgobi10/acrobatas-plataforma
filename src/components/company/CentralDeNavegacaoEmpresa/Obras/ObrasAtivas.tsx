@@ -12,10 +12,15 @@ import {
   FolderKanban,
   Eye,
   Loader2,
+  Calendar,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+
+/* =======================
+   Tipos
+======================= */
 
 type Obra = {
   id: string;
@@ -26,14 +31,32 @@ type Obra = {
   empresa_id: string;
   data_inicio: string | null;
   data_fim: string | null;
+  status?: string | null; // caso exista na tabela
 };
+
+type ObraDetalhada = Obra & {
+  localDisplay: string;
+  profissionais: number;
+  statusCalculado: "A iniciar" | "Em andamento" | "Concluída" | "Atrasada";
+};
+
+/* =======================
+   Utils
+======================= */
+
+function formatDate(dateStr?: string | null) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-PT");
+}
 
 export default function ObrasAtivas() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
 
-  const [obras, setObras] = useState<any[]>([]);
+  const [obras, setObras] = useState<ObraDetalhada[]>([]);
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<
     "Todos" | "A iniciar" | "Em andamento" | "Concluída" | "Atrasada"
@@ -56,7 +79,10 @@ export default function ObrasAtivas() {
     if (fromParam) {
       // limpa o param na URL para não reaplicar depois
       params.delete("novaObra");
-      navigate({ search: params.toString() ? `?${params.toString()}` : "" }, { replace: true });
+      navigate(
+        { search: params.toString() ? `?${params.toString()}` : "" },
+        { replace: true }
+      );
     }
 
     if (id) {
@@ -104,33 +130,38 @@ export default function ObrasAtivas() {
           return;
         }
 
-        const obrasComDetalhes = await Promise.all(
+        const hoje = new Date();
+
+        const obrasComDetalhes: ObraDetalhada[] = await Promise.all(
           ((obrasData as Obra[] | null) || []).map(async (obra) => {
+            // Contagem de profissionais vinculados
             const { count: tot } = await supabase
               .from("profissionais_obras")
               .select("*", { count: "exact", head: true })
               .eq("obra_id", obra.id);
 
-            const { data: rels } = await supabase
-              .from("relatorios_obras")
-              .select("progresso")
-              .eq("obra_id", obra.id);
-
-            const progresso =
-              rels && rels.length
-                ? Math.round(
-                    rels.reduce((a, r) => a + (r.progresso || 0), 0) / rels.length
-                  )
-                : 0;
-
-            const hoje = new Date();
             const inicio = obra.data_inicio ? new Date(obra.data_inicio) : null;
             const fim = obra.data_fim ? new Date(obra.data_fim) : null;
 
-            let status: "A iniciar" | "Em andamento" | "Concluída" | "Atrasada" = "A iniciar";
-            if (fim && fim < hoje && progresso < 90) status = "Atrasada";
-            else if (progresso >= 100 || (fim && fim < hoje)) status = "Concluída";
-            else if (inicio && inicio <= hoje) status = "Em andamento";
+            // Status calculado com base nas datas + status da obra (se existir)
+            let statusCalculado: "A iniciar" | "Em andamento" | "Concluída" | "Atrasada" =
+              "A iniciar";
+
+            if (fim && hoje > fim) {
+              // Se já passou da data fim:
+              if (
+                obra.status &&
+                obra.status.toLowerCase() === "concluida"
+              ) {
+                statusCalculado = "Concluída";
+              } else {
+                statusCalculado = "Atrasada";
+              }
+            } else if (inicio && hoje >= inicio) {
+              statusCalculado = "Em andamento";
+            } else {
+              statusCalculado = "A iniciar";
+            }
 
             // local para exibir (compat: cidade/endereco/local)
             const localDisplay =
@@ -143,8 +174,7 @@ export default function ObrasAtivas() {
               ...obra,
               localDisplay,
               profissionais: tot || 0,
-              progresso,
-              status,
+              statusCalculado,
             };
           })
         );
@@ -159,6 +189,7 @@ export default function ObrasAtivas() {
               new Date(a.data_inicio || 0).getTime()
             );
           });
+          obrasComDetalhes.reverse();
         }
 
         if (!cancelled) setObras(obrasComDetalhes);
@@ -175,9 +206,13 @@ export default function ObrasAtivas() {
     // Realtime para obras
     const ch = supabase
       .channel("obras_realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "obras" }, () => {
-        fetchObras();
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "obras" },
+        () => {
+          fetchObras();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -203,7 +238,10 @@ export default function ObrasAtivas() {
     return () => clearTimeout(t);
   }, [highlightId]);
 
-  // -------- Filtros / métricas --------
+  /* =======================
+     Filtros / métricas
+  ======================= */
+
   const cidades = useMemo(() => {
     return [
       "Todas",
@@ -221,8 +259,11 @@ export default function ObrasAtivas() {
     const q = busca.trim().toLowerCase();
     return obras.filter((obra) => {
       const matchNome = (obra.nome || "").toLowerCase().includes(q);
-      const matchStatus = filtroStatus === "Todos" || obra.status === filtroStatus;
-      const cidade = obra.localDisplay ? obra.localDisplay.split(",")[0].trim() : "";
+      const matchStatus =
+        filtroStatus === "Todos" || obra.statusCalculado === filtroStatus;
+      const cidade = obra.localDisplay
+        ? obra.localDisplay.split(",")[0].trim()
+        : "";
       const matchCidade = filtroCidade === "Todas" || cidade === filtroCidade;
       return matchNome && matchStatus && matchCidade;
     });
@@ -233,17 +274,20 @@ export default function ObrasAtivas() {
     (acc, o) => acc + (o.profissionais || 0),
     0
   );
-  const mediaProgresso = totalObras
-    ? Math.round(
-        obrasFiltradas.reduce((a, o) => a + (o.progresso || 0), 0) / totalObras
-      )
-    : 0;
+  const obrasEmAndamento = obrasFiltradas.filter(
+    (o) =>
+      o.statusCalculado === "Em andamento" || o.statusCalculado === "Atrasada"
+  ).length;
 
   const statusCores: Record<string, string> = {
-    "A iniciar": "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300",
-    "Em andamento": "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
-    "Concluída": "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
-    "Atrasada": "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300",
+    "A iniciar":
+      "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300",
+    "Em andamento":
+      "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+    "Concluída":
+      "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
+    Atrasada:
+      "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300",
   };
 
   // ✅ Agora passando a origem da navegação
@@ -273,7 +317,8 @@ export default function ObrasAtivas() {
               Obras
             </h1>
             <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
-              Acompanhe todas as suas obras: a iniciar, em andamento e concluídas.
+              Visualize e filtre todas as suas obras: a iniciar, em andamento,
+              concluídas e atrasadas.
             </p>
           </div>
         </div>
@@ -286,22 +331,25 @@ export default function ObrasAtivas() {
             icon: (
               <FolderKanban className="w-5 h-5 md:w-6 md:h-6 text-blue-500" />
             ),
-            label: "Total de Obras",
+            label: "Total de obras",
             valor: totalObras,
+            subtitulo: "Em qualquer estado",
           },
           {
             icon: (
-              <UserCheck className="w-5 h-5 md:w-6 md:h-6 text-green-500" />
+              <UserCheck className="w-5 h-5 md:w-6 md:h-6 text-emerald-500" />
             ),
             label: "Profissionais",
             valor: totalProfissionais,
+            subtitulo: "Somando todas as obras",
           },
           {
             icon: (
               <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-yellow-500" />
             ),
-            label: "Média de Progresso",
-            valor: `${mediaProgresso}%`,
+            label: "Obras em andamento",
+            valor: obrasEmAndamento,
+            subtitulo: "Inclui atrasadas ainda ativas",
           },
         ].map((card, i) => (
           <motion.div
@@ -310,13 +358,16 @@ export default function ObrasAtivas() {
             className="bg-white dark:bg-[#1e2a3a] border border-gray-100 dark:border-zinc-700 rounded-xl md:rounded-2xl shadow-sm p-3 md:p-5 flex items-center gap-2 md:gap-3"
           >
             {card.icon}
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] md:text-sm text-gray-500 dark:text-gray-400">
                 {card.label}
               </p>
               <h2 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-100">
                 {card.valor}
               </h2>
+              <p className="text-[10px] md:text-xs text-gray-400 dark:text-gray-500 truncate">
+                {card.subtitulo}
+              </p>
             </div>
           </motion.div>
         ))}
@@ -389,6 +440,9 @@ export default function ObrasAtivas() {
             {obrasFiltradas.map((obra) => {
               const isNew = obra.id === highlightId;
 
+              const inicioFormatado = formatDate(obra.data_inicio);
+              const fimFormatado = formatDate(obra.data_fim);
+
               return (
                 <motion.div
                   key={obra.id}
@@ -425,7 +479,7 @@ export default function ObrasAtivas() {
                         title={obra.localDisplay || ""}
                       >
                         <MapPin className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-500 flex-shrink-0" />
-                        {obra.localDisplay}
+                        {obra.localDisplay || "Local não informado"}
                       </p>
                     </div>
 
@@ -440,11 +494,11 @@ export default function ObrasAtivas() {
                   <div className="flex items-center justify-between text-gray-700 dark:text-gray-300 mb-1.5 md:mb-2">
                     <span
                       className={`text-[10px] md:text-xs font-medium px-2.5 md:px-3 py-0.5 md:py-1 rounded-full ${
-                        statusCores[obra.status] ||
+                        statusCores[obra.statusCalculado] ||
                         "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300"
                       }`}
                     >
-                      {obra.status}
+                      {obra.statusCalculado}
                     </span>
                     <div className="flex items-center gap-1.5 md:gap-2 text-[11px] md:text-sm">
                       <Users className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-500" />
@@ -452,25 +506,26 @@ export default function ObrasAtivas() {
                     </div>
                   </div>
 
-                  <div className="flex justify-between text-[10px] md:text-xs text-gray-500 dark:text-gray-400">
-                    <span>Progresso</span>
-                    <span>{obra.progresso || 0}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-zinc-700 rounded-full h-2 md:h-2.5 mt-1 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${obra.progresso || 0}%` }}
-                      transition={{ duration: 0.5 }}
-                      className={`h-2 md:h-2.5 rounded-full ${
-                        (obra.progresso || 0) > 90
-                          ? "bg-green-500"
-                          : (obra.progresso || 0) > 70
-                          ? "bg-blue-600"
-                          : (obra.progresso || 0) > 0
-                          ? "bg-yellow-400"
-                          : "bg-purple-500"
-                      }`}
-                    />
+                  {/* Datas da obra */}
+                  <div className="mt-2 md:mt-3 border-t border-gray-100 dark:border-zinc-700 pt-2 md:pt-3 flex flex-col gap-1.5 md:gap-2 text-[11px] md:text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-500" />
+                        <span className="font-medium text-gray-600 dark:text-gray-300">
+                          Início:
+                        </span>
+                      </div>
+                      <span>{inicioFormatado}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-500" />
+                        <span className="font-medium text-gray-600 dark:text-gray-300">
+                          Fim previsto:
+                        </span>
+                      </div>
+                      <span>{fimFormatado}</span>
+                    </div>
                   </div>
                 </motion.div>
               );

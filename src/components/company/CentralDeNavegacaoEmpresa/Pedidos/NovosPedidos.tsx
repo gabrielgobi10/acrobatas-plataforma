@@ -33,6 +33,8 @@ const inputBase =
   "bg-white dark:bg-[#1b2535] text-gray-800 dark:text-gray-100 " +
   "p-2 min-h-11 text-[13px] md:text-sm focus:ring-2 focus:ring-blue-500 outline-none";
 const divider = "border-t border-gray-200/70 dark:border-white/10";
+const cardBase =
+  card + " p-4 sm:p-6 md:p-6 space-y-4 md:space-y-5";
 
 /* ======================================
    Helpers
@@ -278,7 +280,7 @@ export default function NovosPedidos({
         .eq("nivel", experiencia)
         .maybeSingle();
 
-    if (error) console.error(error);
+      if (error) console.error(error);
 
       if (data) {
         const min = Number(data.valor_profissional_min ?? 0);
@@ -311,7 +313,7 @@ export default function NovosPedidos({
   }, [valorDia, duracao, quantidade]);
 
   /* ======================================
-     Salvamento (mesma lógica)
+     Salvamento
   ====================================== */
   const salvar = async (
     status: "em_analise" | "aprovado" | "recusado" | "cancelado"
@@ -428,295 +430,300 @@ export default function NovosPedidos({
      Layout
   ====================================== */
   return (
-    <div className="p-4 sm:p-6 md:p-8 max-w-6xl mx-auto space-y-6 md:space-y-8 pb-10">
-      {/* Título */}
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="text-center"
-      >
-        <h1 className="text-[22px] md:text-3xl font-bold text-gray-800 dark:text-gray-100">
-          Novo Pedido
-        </h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Preencha os dados da obra e do profissional que precisa.
-        </p>
-      </motion.div>
+    <div className="px-4 sm:px-6 md:px-8 py-6 md:py-8">
+      <div className="max-w-6xl mx-auto space-y-6 md:space-y-8 pb-10">
+        {/* HEADER FORA DO CARTÃO */}
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className="flex items-start gap-3"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+            <ClipboardPlus className="w-5 h-5" />
+          </div>
 
-      {/* CARD ÚNICO DO FORM */}
-      <div className={`${card} p-4 sm:p-6 md:p-8 space-y-8 md:space-y-10`}>
-        {/* LOCAL */}
-        <section className="space-y-3">
-          <h2 className={sectionTitle}>
-            <MapPin className="text-blue-500 w-5 h-5" />
-            Obra & Local
-          </h2>
-          <CampoLocal
-            keyId={`local-${formKey}`}
-            valor={localCidade}
-            onChange={setLocalCidade}
-            placeholder="Digite ou selecione o local da obra"
-          />
-        </section>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-[22px] md:text-3xl font-bold text-gray-800 dark:text-gray-100">
+              Novo Pedido
+            </h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400 max-w-2xl">
+              Preencha os dados da obra e do profissional que precisa.
+            </p>
+          </div>
+        </motion.div>
 
-        <div className={divider} />
+        {/* BLOCO PRINCIPAL EM CARTÕES */}
+        <div className="space-y-6 md:space-y-7">
+          {/* OBRA & LOCAL */}
+          <section className={cardBase}>
+            <h2 className={sectionTitle}>
+              <MapPin className="text-blue-500 w-5 h-5" />
+              Obra & Local
+            </h2>
+            <CampoLocal
+              keyId={`local-${formKey}`}
+              valor={localCidade}
+              onChange={setLocalCidade}
+              placeholder="Digite ou selecione o local da obra"
+            />
+          </section>
 
-        {/* PROFISSIONAIS — o componente já tem o título */}
-        <CampoProfissionais
-          key={`prof-${formKey}`}
-          tipo={tipo}
-          experiencia={experiencia}
-          quantidade={quantidade}
-          onChange={({ tipo, experiencia, quantidade }) => {
-            setTipo(tipo);
-            setExperiencia(experiencia);
-            setQuantidade(quantidade);
+          {/* GRID: PROFISSIONAIS + VALOR */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* PROFISSIONAIS (componente já tem título interno) */}
+            <section className={cardBase}>
+              <CampoProfissionais
+                key={`prof-${formKey}`}
+                tipo={tipo}
+                experiencia={experiencia}
+                quantidade={quantidade}
+                onChange={({ tipo, experiencia, quantidade }) => {
+                  setTipo(tipo);
+                  setExperiencia(experiencia);
+                  setQuantidade(quantidade);
+                }}
+              />
+            </section>
+
+            {/* VALOR E CUSTOS */}
+            <section className={cardBase}>
+              <h2 className={sectionTitle}>
+                <Euro className="w-5 h-5 text-blue-500" />
+                Valor e Custos
+              </h2>
+
+              {faixa && (
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
+                  <Lightbulb size={14} className="text-amber-400" />
+                  Faixa sugerida: {faixa.min.toFixed(2)}€ –{" "}
+                  {faixa.max.toFixed(2)}€/h (sugerido {faixa.sugerido.toFixed(2)}€)
+                </p>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 mt-1">
+                <div>
+                  <label className={label}>Valor hora (€)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={valorHora ?? ""}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setValorHora(v);
+                      setValorDia(v * 8);
+                    }}
+                    className={inputBase}
+                  />
+                </div>
+
+                <div>
+                  <label className={label}>Valor dia (€)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={valorDia ?? ""}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setValorDia(v);
+                      setValorHora(v / 8);
+                    }}
+                    className={inputBase}
+                  />
+                </div>
+
+                <div>
+                  <label className={label}>Custo total estimado (€)</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={
+                      custoTotal
+                        ? custoTotal.toLocaleString("pt-PT", {
+                            style: "currency",
+                            currency: "EUR",
+                          })
+                        : "—"
+                    }
+                    className={
+                      "mt-1 w-full rounded-xl border border-gray-200 dark:border-[#1f2a37] " +
+                      "bg-gray-50 dark:bg-[#152033] text-gray-800 dark:text-gray-100 " +
+                      "p-2 min-h-11 text-[13px] md:text-sm"
+                    }
+                  />
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* DETALHES ADICIONAIS */}
+          <section className={cardBase}>
+            <h2 className={sectionTitle}>
+              <Briefcase className="text-blue-500 w-5 h-5" />
+              Detalhes adicionais
+            </h2>
+
+            <div className="space-y-4 md:space-y-5 mt-1">
+              <div>
+                <label className={label}>Tipo de obra</label>
+                <select
+                  value={tipoObra}
+                  onChange={(e) => setTipoObra(e.target.value)}
+                  className={inputBase}
+                >
+                  <option>Residencial</option>
+                  <option>Comercial</option>
+                  <option>Infraestrutura</option>
+                  <option>Indústria</option>
+                  <option>Manutenção</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={label}>Turno de trabalho</label>
+                <select
+                  value={turno}
+                  onChange={(e) => setTurno(e.target.value)}
+                  className={inputBase}
+                >
+                  <option>Diurno (08h–17h)</option>
+                  <option>Noturno (20h–05h)</option>
+                  <option>Personalizado</option>
+                </select>
+
+                {turno === "Personalizado" && (
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <input
+                      type="time"
+                      value={horaInicio}
+                      onChange={(e) => setHoraInicio(e.target.value)}
+                      className={inputBase}
+                    />
+                    <input
+                      type="time"
+                      value={horaFim}
+                      onChange={(e) => setHoraFim(e.target.value)}
+                      className={inputBase}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 mt-2">
+                <label className="flex items-center gap-2 text-[13px] md:text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={alojamento}
+                    onChange={() => setAlojamento((v) => !v)}
+                    className="accent-blue-600"
+                  />
+                  Alojamento fornecido
+                </label>
+                <label className="flex items-center gap-2 text-[13px] md:text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={transporte}
+                    onChange={() => setTransporte((v) => !v)}
+                    className="accent-blue-600"
+                  />
+                  Transporte incluído
+                </label>
+              </div>
+            </div>
+          </section>
+
+          {/* DATAS */}
+          <section className={cardBase}>
+            <h2 className={sectionTitle}>
+              <Calendar className="w-5 h-5 text-blue-500" />
+              Datas
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 mt-1">
+              <div>
+                <label className={label}>Data de início</label>
+                <input
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
+                  className={inputBase}
+                />
+              </div>
+
+              <div>
+                <label className={label}>Data de término</label>
+                <input
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                  className={inputBase}
+                />
+              </div>
+
+              {duracao && (
+                <div className="flex items-end">
+                  <span className="text-blue-700 dark:text-blue-200 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-xl text-sm font-medium">
+                    📅 {duracao} dias
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* OBSERVAÇÕES */}
+          <section className={cardBase}>
+            <h2 className={sectionTitle}>
+              <FileText className="w-5 h-5 text-blue-500" />
+              Observações
+            </h2>
+            <textarea
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+              rows={4}
+              className={inputBase + " resize-y"}
+              placeholder="Informações adicionais (opcional)"
+            />
+          </section>
+        </div>
+
+        {/* AÇÃO */}
+        <div className="pt-4 md:pt-2 pb-4 flex flex-col md:flex-row md:justify-end">
+          <button
+            disabled={saving}
+            onClick={() => salvar("em_analise")}
+            className="w-full md:w-auto px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:opacity-90 flex items-center justify-center gap-2 shadow transition-all disabled:opacity-60"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Enviando...
+              </>
+            ) : (
+              <>
+                <ClipboardPlus className="w-5 h-5" /> Criar Pedido
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* TOAST */}
+        <ToastMensagem
+          tipo={toast.tipo as any}
+          texto={toast.texto}
+          visivel={toast.visivel}
+          onFechar={fecharToast}
+          onNovoPedido={() => {
+            setFormKey((k) => k + 1);
+            fecharToast();
+            navigate("/empresa/pedidos/novo");
+          }}
+          onVerPedidos={() => {
+            fecharToast();
+            if (typeof setSection === "function") setSection("em-avaliacao");
+            navigate("/empresa/pedidos/em-avaliacao");
+            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
         />
-
-        <div className={divider} />
-
-        {/* VALOR E CUSTOS */}
-        <section className="space-y-3">
-          <h2 className={sectionTitle}>
-            <Euro className="w-5 h-5 text-blue-500" />
-            Valor e Custos
-          </h2>
-
-          {faixa && (
-            <p className="text-xs text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
-              <Lightbulb size={14} className="text-amber-400" />
-              Faixa sugerida: {faixa.min.toFixed(2)}€ – {faixa.max.toFixed(2)}€/h (sugerido{" "}
-              {faixa.sugerido.toFixed(2)}€)
-            </p>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
-            <div>
-              <label className={label}>Valor hora (€)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={valorHora ?? ""}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setValorHora(v);
-                  setValorDia(v * 8);
-                }}
-                className={inputBase}
-              />
-            </div>
-
-            <div>
-              <label className={label}>Valor dia (€)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={valorDia ?? ""}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setValorDia(v);
-                  setValorHora(v / 8);
-                }}
-                className={inputBase}
-              />
-            </div>
-
-            <div>
-              <label className={label}>Custo total estimado (€)</label>
-              <input
-                type="text"
-                disabled
-                value={
-                  custoTotal
-                    ? custoTotal.toLocaleString("pt-PT", {
-                        style: "currency",
-                        currency: "EUR",
-                      })
-                    : "—"
-                }
-                className={
-                  "mt-1 w-full rounded-xl border border-gray-200 dark:border-[#1f2a37] " +
-                  "bg-gray-50 dark:bg-[#152033] text-gray-800 dark:text-gray-100 " +
-                  "p-2 min-h-11 text-[13px] md:text-sm"
-                }
-              />
-            </div>
-          </div>
-        </section>
-
-        <div className={divider} />
-
-        {/* DETALHES ADICIONAIS */}
-        <section className="space-y-4 md:space-y-6">
-          <h2 className={sectionTitle}>
-            <Briefcase className="text-blue-500 w-5 h-5" />
-            Detalhes adicionais
-          </h2>
-
-          <div>
-            <label className={label}>Tipo de obra</label>
-            <select
-              value={tipoObra}
-              onChange={(e) => setTipoObra(e.target.value)}
-              className={inputBase}
-            >
-              <option>Residencial</option>
-              <option>Comercial</option>
-              <option>Infraestrutura</option>
-              <option>Indústria</option>
-              <option>Manutenção</option>
-            </select>
-          </div>
-
-          <div>
-            <label className={label}>Turno de trabalho</label>
-            <select
-              value={turno}
-              onChange={(e) => setTurno(e.target.value)}
-              className={inputBase}
-            >
-              <option>Diurno (08h–17h)</option>
-              <option>Noturno (20h–05h)</option>
-              <option>Personalizado</option>
-            </select>
-
-            {turno === "Personalizado" && (
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <input
-                  type="time"
-                  value={horaInicio}
-                  onChange={(e) => setHoraInicio(e.target.value)}
-                  className={inputBase}
-                />
-                <input
-                  type="time"
-                  value={horaFim}
-                  onChange={(e) => setHoraFim(e.target.value)}
-                  className={inputBase}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 mt-2">
-            <label className="flex items-center gap-2 text-[13px] md:text-sm text-gray-700 dark:text-gray-300">
-              <input
-                type="checkbox"
-                checked={alojamento}
-                onChange={() => setAlojamento((v) => !v)}
-                className="accent-blue-600"
-              />
-              Alojamento fornecido
-            </label>
-            <label className="flex items-center gap-2 text-[13px] md:text-sm text-gray-700 dark:text-gray-300">
-              <input
-                type="checkbox"
-                checked={transporte}
-                onChange={() => setTransporte((v) => !v)}
-                className="accent-blue-600"
-              />
-              Transporte incluído
-            </label>
-          </div>
-        </section>
-
-        <div className={divider} />
-
-        {/* DATAS */}
-        <section className="space-y-3">
-          <h2 className={sectionTitle}>
-            <Calendar className="w-5 h-5 text-blue-500" />
-            Datas
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
-            <div>
-              <label className={label}>Data de início</label>
-              <input
-                type="date"
-                value={dataInicio}
-                onChange={(e) => setDataInicio(e.target.value)}
-                className={inputBase}
-              />
-            </div>
-
-            <div>
-              <label className={label}>Data de término</label>
-              <input
-                type="date"
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
-                className={inputBase}
-              />
-            </div>
-
-            {duracao && (
-              <div className="flex items-end">
-                <span className="text-blue-700 dark:text-blue-200 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-xl text-sm font-medium">
-                  📅 {duracao} dias
-                </span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <div className={divider} />
-
-        {/* OBSERVAÇÕES */}
-        <section className="space-y-3">
-          <h2 className={sectionTitle}>
-            <FileText className="w-5 h-5 text-blue-500" />
-            Observações
-          </h2>
-          <textarea
-            value={observacoes}
-            onChange={(e) => setObservacoes(e.target.value)}
-            rows={4}
-            className={inputBase + " resize-y"}
-            placeholder="Informações adicionais (opcional)"
-          />
-        </section>
       </div>
-
-      {/* AÇÃO (mesmo botão para mobile e desktop) */}
-      <div className="pt-6 pb-4 flex md:justify-end">
-        <button
-          disabled={saving}
-          onClick={() => salvar("em_analise")}
-          className="w-full md:w-auto px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:opacity-90 flex items-center justify-center gap-2 shadow transition-all disabled:opacity-60"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" /> Enviando...
-            </>
-          ) : (
-            <>
-              <ClipboardPlus className="w-5 h-5" /> Criar Pedido
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* TOAST */}
-      <ToastMensagem
-        tipo={toast.tipo as any}
-        texto={toast.texto}
-        visivel={toast.visivel}
-        onFechar={fecharToast}
-        onNovoPedido={() => {
-          setFormKey((k) => k + 1);
-          fecharToast();
-          navigate("/empresa/pedidos/novo");
-        }}
-        onVerPedidos={() => {
-          fecharToast();
-          if (typeof setSection === "function") setSection("em-avaliacao");
-          navigate("/empresa/pedidos/em-avaliacao");
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        }}
-      />
     </div>
   );
 }

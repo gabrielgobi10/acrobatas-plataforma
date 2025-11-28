@@ -1,3 +1,4 @@
+// src/components/company/CompanyDashboard.tsx
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   LogOut,
@@ -57,6 +58,9 @@ import EquipesEmCampo from "./CentralDeNavegacaoEmpresa/Profissionais/EquipesEmC
 import AdicionarProfissional from "./CentralDeNavegacaoEmpresa/Profissionais/AdicionarProfissionalPage";
 import FaltasPresencas from "./CentralDeNavegacaoEmpresa/Profissionais/FaltasPresencas";
 
+// Faturas (novo módulo)
+import FaturasEmpresa from "./CentralDeNavegacaoEmpresa/Faturas/FaturasEmpresa";
+
 type Noti = {
   id: string;
   titulo: string | null;
@@ -67,6 +71,11 @@ type Noti = {
   criado_em: string | null;
   empresa_id: string | null;
   usuario_id: string | null;
+};
+
+type EmpresaHeaderState = {
+  nome: string | null;
+  url_logo: string | null;
 };
 
 function norm(s?: string | null) {
@@ -123,20 +132,15 @@ function dedupeSort(list: Noti[]): Noti[] {
   );
 }
 
-// ===== avatar helpers =====
-function initialsFrom(name?: string | null, emailFallback?: string | null) {
-  const base =
-    (name && name.trim()) ||
-    (emailFallback || "").split("@")[0] ||
-    "User";
-  const parts = base
-    .replace(/[_\-\.]+/g, " ")
-    .split(" ")
-    .filter(Boolean);
-  const first = parts[0]?.[0] || "U";
-  const last = parts[1]?.[0] || parts[0]?.[1] || "";
+/** Mesma lógica de iniciais usada no PerfilEmpresa */
+function initialsFrom(name?: string | null) {
+  const base = (name || "").trim() || "Nome da empresa";
+  const parts = base.split(/\s+/);
+  const first = parts[0]?.[0] ?? "N";
+  const last = parts[1]?.[0] ?? parts[0]?.[1] ?? "";
   return (first + last).toUpperCase();
 }
+
 function hueFrom(text: string) {
   let h = 0;
   for (let i = 0; i < text.length; i++)
@@ -152,6 +156,8 @@ export default function CompanyDashboard() {
   const { theme, toggleTheme } = useDarkMode();
 
   const [profile, setProfile] = useState<any>(null);
+  const [empresaHeader, setEmpresaHeader] =
+    useState<EmpresaHeaderState | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [section, setSection] = useState<string>("painel");
@@ -166,14 +172,13 @@ export default function CompanyDashboard() {
   const recentNotiKeysRef = useRef<Set<string>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
 
-  // avatar dropdown
+  // avatar / menu
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const avatarRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (!avatarRef.current) return;
-      if (!avatarRef.current.contains(e.target as Node))
-        setUserMenuOpen(false);
+      if (!avatarRef.current.contains(e.target as Node)) setUserMenuOpen(false);
     };
     window.addEventListener("click", onClick);
     return () => window.removeEventListener("click", onClick);
@@ -211,8 +216,7 @@ export default function CompanyDashboard() {
   };
 
   const isInside = (base: string) =>
-    location.pathname.startsWith(base + "/") &&
-    location.pathname !== base;
+    location.pathname.startsWith(base + "/") && location.pathname !== base;
   const isProfissionaisChild = isInside("/empresa/profissionais");
   const isProfissionalDetalhe = isInside("/empresa/profissional");
   const isObrasChild = isInside("/empresa/obras");
@@ -222,18 +226,14 @@ export default function CompanyDashboard() {
     const p = location.pathname;
 
     // PEDIDOS
-    if (p.includes("/empresa/pedidos/aprovados"))
-      return setSection("aprovados");
+    if (p.includes("/empresa/pedidos/aprovados")) return setSection("aprovados");
     if (p.includes("/empresa/pedidos/em-avaliacao"))
       return setSection("em-avaliacao");
-    if (p.includes("/empresa/pedidos/novos"))
-      return setSection("novos-pedidos");
+    if (p.includes("/empresa/pedidos/novos")) return setSection("novos-pedidos");
 
     // OBRAS
-    if (p.includes("/empresa/obras/ativas"))
-      return setSection("obras-ativas");
-    if (p.includes("/empresa/obras/historico"))
-      return setSection("historico");
+    if (p.includes("/empresa/obras/ativas")) return setSection("obras-ativas");
+    if (p.includes("/empresa/obras/historico")) return setSection("historico");
     if (p.includes("/empresa/obras/adicionar"))
       return setSection("adicionar-obra");
     if (p.includes("/empresa/obras")) return setSection("obras");
@@ -245,8 +245,7 @@ export default function CompanyDashboard() {
       return setSection("adicionar-profissional");
     if (p.includes("/empresa/profissionais/faltas"))
       return setSection("faltas-presencas");
-    if (p.includes("/empresa/profissionais"))
-      return setSection("profissionais");
+    if (p.includes("/empresa/profissionais")) return setSection("profissionais");
 
     // RELATÓRIOS
     if (p.includes("/empresa/relatorios/custos"))
@@ -255,8 +254,7 @@ export default function CompanyDashboard() {
       return setSection("desempenho");
     if (p.includes("/empresa/relatorios/financeiro"))
       return setSection("financeiro");
-    if (p.includes("/empresa/relatorios"))
-      return setSection("relatorios");
+    if (p.includes("/empresa/relatorios")) return setSection("relatorios");
 
     // DOCUMENTOS
     if (p.includes("/empresa/documentos/acrobatas"))
@@ -265,8 +263,10 @@ export default function CompanyDashboard() {
       return setSection("documentos-profissionais");
     if (p.includes("/empresa/documentos/meus"))
       return setSection("documentos-meus");
-    if (p.includes("/empresa/documentos"))
-      return setSection("documentos");
+    if (p.includes("/empresa/documentos")) return setSection("documentos");
+
+    // FATURAS (novo)
+    if (p.includes("/empresa/faturas")) return setSection("faturas");
 
     // CHAT / PERFIL / NOTIFICAÇÕES
     if (p.includes("/empresa/chat")) return setSection("chat");
@@ -275,8 +275,7 @@ export default function CompanyDashboard() {
       return setSection("notificacoes");
 
     // GENÉRICO PEDIDOS
-    if (p.includes("/empresa/pedidos"))
-      return setSection("novos-pedidos");
+    if (p.includes("/empresa/pedidos")) return setSection("novos-pedidos");
 
     // DEFAULT
     return setSection("painel");
@@ -359,6 +358,11 @@ export default function CompanyDashboard() {
           navigate("/empresa/documentos/meus");
           break;
 
+        // faturas (novo)
+        case "faturas":
+          navigate("/empresa/faturas");
+          break;
+
         // outros
         case "chat":
           navigate("/empresa/chat");
@@ -379,17 +383,99 @@ export default function CompanyDashboard() {
     [navigate]
   );
 
+  // perfil do utilizador + dados básicos da empresa para o header
   useEffect(() => {
     async function fetchProfile() {
-      const { data } = await supabase
+      if (!user?.email) return;
+      const { data: usuario } = await supabase
         .from("usuarios")
         .select("id, nome, email, empresa_id")
-        .eq("email", user?.email)
+        .eq("email", user.email)
         .maybeSingle();
-      setProfile(data);
+
+      setProfile(usuario);
+
+      if (usuario?.empresa_id) {
+        const { data: empresa } = await supabase
+          .from("empresas")
+          .select("nome_legal, nome_comercial, url_logo")
+          .eq("id", usuario.empresa_id)
+          .maybeSingle();
+
+        if (empresa) {
+          const anyEmpresa = empresa as any;
+          const nomeBase =
+            anyEmpresa.nome_legal ||
+            anyEmpresa.nome_comercial ||
+            null;
+
+          setEmpresaHeader({
+            nome: nomeBase,
+            url_logo: anyEmpresa.url_logo || null,
+          });
+        } else {
+          setEmpresaHeader(null);
+        }
+      } else {
+        setEmpresaHeader(null);
+      }
     }
     fetchProfile();
   }, [user?.email]);
+
+  // ouve eventos do PerfilEmpresa (logo / nome atualizados)
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<{
+        nome?: string | null;
+        url_logo?: string | null;
+      }>;
+      const detail = custom.detail || {};
+      setEmpresaHeader((prev) => ({
+        nome:
+          detail.nome !== undefined
+            ? (detail.nome || null)
+            : prev?.nome || null,
+        url_logo:
+          detail.url_logo !== undefined
+            ? (detail.url_logo || null)
+            : prev?.url_logo || null,
+      }));
+    };
+
+    window.addEventListener("empresa-header-updated", handler as EventListener);
+    return () =>
+      window.removeEventListener(
+        "empresa-header-updated",
+        handler as EventListener
+      );
+  }, []);
+
+  // nome da empresa mostrado no topo:
+  const rawEmpresaName = useMemo(() => {
+    const n = empresaHeader?.nome?.trim();
+    if (n && n.length > 0) return n;
+    // mesmo placeholder do PerfilEmpresa
+    return "Nome da empresa";
+  }, [empresaHeader?.nome]);
+
+  // apenas a primeira palavra para não ficar gigante
+  const shortEmpresaName = useMemo(() => {
+    const base = (rawEmpresaName || "").trim();
+    const parts = base.split(/\s+/);
+    return parts[0] || "Empresa";
+  }, [rawEmpresaName]);
+
+  // avatar baseado na empresa (mesma lógica do PerfilEmpresa)
+  const avatarHue = useMemo(
+    () => hueFrom(rawEmpresaName),
+    [rawEmpresaName]
+  );
+  const avatarBg = { backgroundColor: `hsl(${avatarHue} 70% 45%)` };
+  const avatarInitials = useMemo(
+    () => initialsFrom(rawEmpresaName),
+    [rawEmpresaName]
+  );
 
   const fetchNotifications = useCallback(async () => {
     if (!profile?.empresa_id && !profile?.id) return;
@@ -399,9 +485,7 @@ export default function CompanyDashboard() {
       .select(
         "id, titulo, conteudo, icone, url_destino, lida, criado_em, empresa_id, usuario_id"
       )
-      .or(
-        `empresa_id.eq.${profile?.empresa_id},usuario_id.eq.${profile?.id}`
-      )
+      .or(`empresa_id.eq.${profile?.empresa_id},usuario_id.eq.${profile?.id}`)
       .order("criado_em", { ascending: false })
       .limit(80);
     if (data) {
@@ -459,9 +543,7 @@ export default function CompanyDashboard() {
             if (payload.eventType === "INSERT" && novo) {
               if (seenNotiIdsRef.current.has(novo.id)) return prev;
               const kNew = getNotiKey(novo as Noti);
-              const already = prev.find(
-                (x) => getNotiKey(x) === kNew
-              );
+              const already = prev.find((x) => getNotiKey(x) === kNew);
               if (already) {
                 const replaced = prev.map((x) =>
                   getNotiKey(x) === kNew ? (novo as Noti) : x
@@ -678,7 +760,9 @@ export default function CompanyDashboard() {
 
   const NotificationsOverlay = () => {
     if (!showNotifications) return null;
-    const latest = notis.slice(0, 6);
+
+    const latest = notis.filter((n) => !n.lida).slice(0, 6);
+
     const timeAgo = (iso?: string | null) => {
       if (!iso) return "";
       const d = new Date(iso);
@@ -737,7 +821,7 @@ export default function CompanyDashboard() {
               </div>
             ) : latest.length === 0 ? (
               <div className="px-4 py-6 text-sm opacity-80">
-                Sem notificações no momento.
+                Sem novas notificações.
               </div>
             ) : (
               latest.map((n) => {
@@ -797,357 +881,361 @@ export default function CompanyDashboard() {
     );
   };
 
-  const initials = initialsFrom(
-    profile?.nome,
-    profile?.email || user?.email || ""
-  );
-  const hue = hueFrom(
-    profile?.nome || profile?.email || user?.email || "A"
-  );
-  const avatarBg = { backgroundColor: `hsl(${hue} 70% 45%)` };
-
   return (
-    <div className={`safe-screen ${backgroundClass}`}>
-      <div className="flex h-full">
-        <div className="hidden md:flex">
-          <SidebarDock onSelectSection={gotoSection} />
-        </div>
+    <div className={`flex min-h-screen ${backgroundClass}`}>
+      <div className="hidden md:flex">
+        <SidebarDock
+          onSelectSection={gotoSection}
+          activeSection={section}
+        />
+      </div>
 
-        {/* MOBILE SIDEBAR */}
-        {sidebarOpen ? (
-          <>
-            <div
-              className="fixed inset-0 z-[998] bg-black/55 backdrop-blur-sm"
-              onClick={() => setSidebarOpen(false)}
-              aria-hidden="true"
+      {/* MOBILE SIDEBAR */}
+      {sidebarOpen ? (
+        <>
+          <div
+            className="fixed inset-0 z-[998] bg-black/55 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+          <div
+            className="fixed left-0 top-0 z-[999] h-full w-[304px]"
+            role="dialog"
+            aria-modal="true"
+          >
+            <SidebarDock
+              onSelectSection={gotoSection}
+              onCloseMobile={() => setSidebarOpen(false)}
+              activeSection={section}
             />
-            <div
-              className="fixed left-0 top-0 z-[999] h-full w-[304px]"
-              role="dialog"
-              aria-modal="true"
-            >
-              <SidebarDock
-                onSelectSection={gotoSection}
-                onCloseMobile={() => setSidebarOpen(false)}
-              />
+          </div>
+        </>
+      ) : null}
+
+      <div className="relative flex min-h-screen flex-1 flex-col overflow-hidden">
+        {/* HEADER */}
+        <header
+          className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
+            theme === "dark"
+              ? "bg-[#050816]/85 border-slate-800/70"
+              : "bg-white/80 border-zinc-200/80"
+          }`}
+        >
+          <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 sm:px-5 py-2.5">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="rounded-lg p-2 md:hidden hover:bg-slate-200/70 dark:hover:bg-slate-800/80"
+                aria-label="Abrir menu"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
             </div>
-          </>
-        ) : null}
 
-        <div className="relative flex min-h-full flex-1 flex-col overflow-hidden">
-          {/* HEADER */}
-          <header
-            className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
-              theme === "dark"
-                ? "bg-[#050816]/85 border-slate-800/70"
-                : "bg-white/80 border-zinc-200/80"
-            }`}
-          >
-            <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 sm:px-5 py-2.5">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="rounded-lg p-2 md:hidden hover:bg-slate-200/70 dark:hover:bg-slate-800/80"
-                  aria-label="Abrir menu"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-              </div>
-
-              <nav className="hidden gap-6 text-sm font-medium md:flex">
-                {[
-                  ["painel", "Painel"],
-                  ["obras", "Obras"],
-                  ["profissionais", "Profissionais"],
-                  ["relatorios", "Relatórios"],
-                  ["chat", "Chat"],
-                ].map(([key, label]) => {
-                  const isActive = section === key;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => gotoSection(key)}
-                      className={`relative pb-1 ${
-                        isActive
-                          ? "font-semibold text-sky-500"
-                          : "text-slate-600 hover:text-sky-500 dark:text-slate-300"
-                      }`}
-                    >
-                      {label}
-                      {isActive && (
-                        <span className="absolute -bottom-[2px] left-0 right-0 h-[2px] rounded-full bg-sky-500" />
-                      )}
-                    </button>
-                  );
-                })}
-              </nav>
-
-              <div className="relative flex items-center">
-                <button
-                  onClick={toggleTheme}
-                  className="rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  aria-label="Alternar tema"
-                >
-                  {theme === "dark" ? (
-                    <Sun className="h-5 w-5 text-amber-300" />
-                  ) : (
-                    <Moon className="h-5 w-5 text-slate-700" />
-                  )}
-                </button>
-
-                <span className="mx-2 hidden h-6 w-px md:block bg-slate-200/70 dark:bg-slate-700/70" />
-
-                <button
-                  onClick={() => {
-                    if (isMobile) {
-                      setSection("notificacoes");
-                      navigate("/empresa/notificacoes");
-                    } else {
-                      setShowNotifications((s) => !s);
-                    }
-                  }}
-                  className="relative rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  aria-label="Notificações"
-                >
-                  <Bell className="h-5 w-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -right-0 -top-0 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                      {unreadCount > 99 ? "99+" : unreadCount}
-                    </span>
-                  )}
-                </button>
-
-                <div className="relative ml-2">
-                  <button
-                    ref={avatarRef}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setUserMenuOpen((v) => !v);
-                    }}
-                    className="group flex items-center gap-3 rounded-xl px-2.5 py-1.5 hover:bg-slate-100/80 dark:hover:bg-slate-800/80"
-                    aria-haspopup="menu"
-                    aria-expanded={userMenuOpen}
-                  >
-                    <div
-                      className="h-9 w-9 rounded-full ring-1 ring-black/5 dark:ring-white/10 shadow-sm grid place-items-center text-white select-none"
-                      style={avatarBg}
-                    >
-                      <span className="text-[12px] font-semibold">
-                        {initials}
-                      </span>
-                    </div>
-                    <div className="hidden flex-col leading-tight text-left min-w-0 sm:flex">
-                      <span className="text-sm font-medium truncate">
-                        {profile?.nome ||
-                          user?.email?.split("@")[0] ||
-                          "Utilizador"}
-                      </span>
-                      <span className="text-xs opacity-70 truncate">
-                        {profile?.email || user?.email}
-                      </span>
-                    </div>
-                  </button>
-
-                  {userMenuOpen && (
-                    <div
-                      className={`absolute z-[1001] right-0 top-11 w-64 rounded-2xl border shadow-xl overflow-hidden ${
-                        theme === "dark"
-                          ? "bg-[#050819]/95 border-slate-800/70"
-                          : "bg-white/95 border-zinc-200/80"
-                      } backdrop-blur-xl`}
-                    >
-                      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-                        <div
-                          className="h-10 w-10 rounded-full grid place-items-center text-white"
-                          style={avatarBg}
-                        >
-                          <span className="text-[12px] font-semibold">
-                            {initials}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold truncate">
-                            {profile?.nome ||
-                              user?.email?.split("@")[0] ||
-                              "Utilizador"}
-                          </div>
-                          <div className="text-xs opacity-70 truncate">
-                            {profile?.email || user?.email}
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className={
-                          theme === "dark"
-                            ? "border-t border-slate-800/60"
-                            : "border-t border-zinc-200/60"
-                        }
-                      >
-                        <button
-                          onClick={() => {
-                            setUserMenuOpen(false);
-                            gotoSection("perfil-empresa");
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800/80"
-                        >
-                          <User className="h-4 w-4" /> Meu Perfil
-                        </button>
-                        <button
-                          onClick={() => {
-                            setUserMenuOpen(false);
-                            gotoSection("financeiro");
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800/80"
-                        >
-                          <Wallet className="h-4 w-4" /> Financeiro
-                        </button>
-                        <button
-                          onClick={() => {
-                            setUserMenuOpen(false);
-                            handleLogout();
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800 text-rose-500"
-                        >
-                          <LogOut className="h-4 w-4" /> Sair
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {!isMobile && <NotificationsOverlay />}
-              </div>
-            </div>
-          </header>
-
-          <main className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-400/20 max-w-[1400px] w-full mx-auto px-4 sm:px-6 md:px-8 py-5 sm:py-6 flex flex-col gap-6 md:pb-0 pb-24">
-            {(isObrasChild || isProfissionaisChild || isProfissionalDetalhe) ? (
-              <Outlet />
-            ) : (
-              (() => {
-                const map: Record<string, JSX.Element> = {
-                  painel: (
-                    <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
-                  ),
-                  obras: <Outlet />,
-                  profissionais: <Profissionais />,
-                  relatorios: <Relatorios />,
-                  chat: <ChatComEquipa />,
-
-                  // pedidos
-                  "novos-pedidos": (
-                    <NovosPedidos setSection={setSection} />
-                  ),
-                  "em-avaliacao": <EmAvaliacao />,
-                  aprovados: <Aprovados />,
-
-                  // obras
-                  "obras-ativas": <ObrasAtivas />,
-                  historico: <Historico />,
-                  "adicionar-obra": <AdicionarObra />,
-
-                  // relatórios
-                  "custos-mensais": <CustosMensais />,
-                  desempenho: <Desempenho />,
-                  financeiro: <Financeiro />,
-
-                  // documentos
-                  documentos: <Documentos />,
-                  "documentos-acrobatas": <Acrobatas />,
-                  "documentos-profissionais": <ProfissionaisDocs />,
-                  "documentos-meus": <MeusDocumentos />,
-
-                  // outros
-                  configuracoes: <Configuracoes />,
-                  notificacoes: <Notificacoes />,
-                  "perfil-empresa": <PerfilEmpresa />,
-
-                  // profissionais (sub)
-                  "equipes-em-campo": <EquipesEmCampo />,
-                  "adicionar-profissional": <AdicionarProfissional />,
-                  "faltas-presencas": <FaltasPresencas />,
-                };
-                return (
-                  map[section] || (
-                    <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
-                  )
-                );
-              })()
-            )}
-            <div className="h-10 sm:h-0" />
-          </main>
-
-          {/* Bottom nav mobile */}
-          <nav
-            className={`md:hidden fixed bottom-0 inset-x-0 z-10 border-t ${
-              theme === "dark"
-                ? "bg-[#050816]/95 border-slate-800/70"
-                : "bg-white/95 border-zinc-200/70"
-            } pb-[env(safe-area-inset-bottom)]`}
-          >
-            <div className="mx-auto max-w-[720px] px-4 py-2 flex justify-between">
+            <nav className="hidden gap-6 text-sm font-medium md:flex">
               {[
-                { key: "painel", label: "Painel", icon: LayoutDashboard },
-                { key: "obras", label: "Obras", icon: Briefcase },
-                { key: "profissionais", label: "Profissionais", icon: Users },
-                { key: "relatorios", label: "Relatórios", icon: BarChart2 },
-                { key: "chat", label: "Chat", icon: MessageCircle },
-              ].map(({ key, label, icon: Icon }) => {
+                ["painel", "Painel"],
+                ["obras", "Obras"],
+                ["profissionais", "Profissionais"],
+                ["relatorios", "Relatórios"],
+                ["chat", "Chat"],
+              ].map(([key, label]) => {
                 const isActive = section === key;
                 return (
                   <button
                     key={key}
                     onClick={() => gotoSection(key)}
-                    className={`relative flex flex-col items-center gap-0.5 text-[11px] font-medium px-2 py-1 rounded-xl ${
+                    className={`relative pb-1 ${
                       isActive
-                        ? "text-sky-400"
-                        : "text-slate-400 hover:text-sky-400"
+                        ? "font-semibold text-sky-500"
+                        : "text-slate-600 hover:text-sky-500 dark:text-slate-300"
                     }`}
                   >
-                    <Icon className="relative h-5 w-5" />
-                    <span>{label}</span>
+                    {label}
                     {isActive && (
-                      <span className="absolute -bottom-1 left-1/2 h-[2px] w-6 -translate-x-1/2 rounded-full bg-sky-400" />
+                      <span className="absolute -bottom-[2px] left-0 right-0 h-[2px] rounded-full bg-sky-500" />
                     )}
                   </button>
                 );
               })}
-            </div>
-          </nav>
-        </div>
+            </nav>
 
-        {/* Toast */}
-        {toast && (
-          <div className="fixed bottom-4 right-4 z-[1100] max-w-xs rounded-2xl border border-slate-200/70 bg-white/95 dark:border-slate-800/70 dark:bg-[#050819]/95 shadow-lg px-4 py-3 text-sm backdrop-blur-xl">
-            <div className="flex items-start gap-2">
-              {toast.icon === "x" ? (
-                <XCircle className="h-4 w-4 text-rose-500 mt-[2px]" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-[2px]" />
-              )}
-              <div className="flex-1">
-                <p className="font-semibold">{toast.titulo}</p>
-                {toast.conteudo && (
-                  <p className="mt-1 text-xs opacity-80">
-                    {toast.conteudo}
-                  </p>
+            <div className="relative flex items-center">
+              <button
+                onClick={toggleTheme}
+                className="rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Alternar tema"
+              >
+                {theme === "dark" ? (
+                  <Sun className="h-5 w-5 text-amber-300" />
+                ) : (
+                  <Moon className="h-5 w-5 text-slate-700" />
                 )}
-                {toast.url && (
-                  <button
-                    onClick={() => {
-                      setToast(null);
-                      navigate(toast.url!);
-                    }}
-                    className="mt-2 text-xs text-sky-600 underline underline-offset-2 dark:text-sky-300"
+              </button>
+
+              <span className="mx-2 hidden h-6 w-px md:block bg-slate-200/70 dark:bg-slate-700/70" />
+
+              <button
+                onClick={() => {
+                  if (isMobile) {
+                    setSection("notificacoes");
+                    navigate("/empresa/notificacoes");
+                  } else {
+                    setShowNotifications((s) => !s);
+                  }
+                }}
+                className="relative rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Notificações"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -right-0 -top-0 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              <div className="relative ml-2">
+                <button
+                  ref={avatarRef}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setUserMenuOpen((v) => !v);
+                  }}
+                  className="group flex items-center gap-3 rounded-xl px-2.5 py-1.5 hover:bg-slate-100/80 dark:hover:bg-slate-800/80"
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuOpen}
+                >
+                  <div
+                    className="h-9 w-9 rounded-full ring-1 ring-black/5 dark:ring-white/10 shadow-sm grid place-items-center text-white select-none overflow-hidden bg-slate-200"
+                    style={empresaHeader?.url_logo ? undefined : avatarBg}
                   >
-                    Ver detalhes
-                  </button>
+                    {empresaHeader?.url_logo ? (
+                      <img
+                        src={empresaHeader.url_logo}
+                        alt="Logótipo da empresa"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-[12px] font-semibold">
+                        {avatarInitials}
+                      </span>
+                    )}
+                  </div>
+                  <div className="hidden flex-col leading-tight text-left min-w-0 sm:flex">
+                    <span className="text-sm font-medium truncate">
+                      {shortEmpresaName}
+                    </span>
+                    <span className="text-xs opacity-70 truncate">
+                      {profile?.email || user?.email}
+                    </span>
+                  </div>
+                </button>
+
+                {userMenuOpen && (
+                  <div
+                    className={`absolute z-[1001] right-0 top-11 w-64 rounded-2xl border shadow-xl overflow-hidden ${
+                      theme === "dark"
+                        ? "bg-[#050819]/95 border-slate-800/70"
+                        : "bg-white/95 border-zinc-200/80"
+                    } backdrop-blur-xl`}
+                  >
+                    <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                      <div
+                        className="h-10 w-10 rounded-full grid place-items-center text-white overflow-hidden bg-slate-200"
+                        style={empresaHeader?.url_logo ? undefined : avatarBg}
+                      >
+                        {empresaHeader?.url_logo ? (
+                          <img
+                            src={empresaHeader.url_logo}
+                            alt="Logótipo da empresa"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-[12px] font-semibold">
+                            {avatarInitials}
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate">
+                          {shortEmpresaName}
+                        </div>
+                        <div className="text-xs opacity-70 truncate">
+                          {profile?.email || user?.email}
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className={
+                        theme === "dark"
+                          ? "border-t border-slate-800/60"
+                          : "border-t border-zinc-200/60"
+                      }
+                    >
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          gotoSection("perfil-empresa");
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800/80"
+                      >
+                        <User className="h-4 w-4" /> Meu Perfil
+                      </button>
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          gotoSection("financeiro");
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800/80"
+                      >
+                        <Wallet className="h-4 w-4" /> Financeiro
+                      </button>
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-100/70 dark:hover:bg-slate-800 text-rose-500"
+                      >
+                        <LogOut className="h-4 w-4" /> Sair
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
+
+              {!isMobile && <NotificationsOverlay />}
             </div>
           </div>
-        )}
+        </header>
+
+        <main className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-400/20 max-w-[1400px] w-full mx-auto px-4 sm:px-6 md:px-8 py-5 sm:py-6 min-h-[calc(100vh-5rem)] flex flex-col gap-6 md:pb-0 pb-24">
+          {(isObrasChild || isProfissionaisChild || isProfissionalDetalhe) ? (
+            <Outlet />
+          ) : (
+            (() => {
+              const map: Record<string, JSX.Element> = {
+                painel: (
+                  <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
+                ),
+                obras: <Outlet />,
+                profissionais: <Profissionais />,
+                relatorios: <Relatorios />,
+                chat: <ChatComEquipa />,
+
+                // pedidos
+                "novos-pedidos": <NovosPedidos setSection={setSection} />,
+                "em-avaliacao": <EmAvaliacao />,
+                aprovados: <Aprovados />,
+
+                // obras
+                "obras-ativas": <ObrasAtivas />,
+                historico: <Historico />,
+                "adicionar-obra": <AdicionarObra />,
+
+                // relatórios
+                "custos-mensais": <CustosMensais />,
+                desempenho: <Desempenho />,
+                financeiro: <Financeiro />,
+
+                // documentos
+                documentos: <Documentos />,
+                "documentos-acrobatas": <Acrobatas />,
+                "documentos-profissionais": <ProfissionaisDocs />,
+                "documentos-meus": <MeusDocumentos />,
+
+                // faturas
+                faturas: <FaturasEmpresa />,
+
+                // outros
+                configuracoes: <Configuracoes />,
+                notificacoes: <Notificacoes />,
+                "perfil-empresa": <PerfilEmpresa />,
+
+                // profissionais (sub)
+                "equipes-em-campo": <EquipesEmCampo />,
+                "adicionar-profissional": <AdicionarProfissional />,
+                "faltas-presencas": <FaltasPresencas />,
+              };
+              return (
+                map[section] || (
+                  <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
+                )
+              );
+            })()
+          )}
+          <div className="h-10 sm:h-0" />
+        </main>
+
+        {/* Bottom nav mobile */}
+        <nav
+          className={`md:hidden fixed bottom-0 inset-x-0 z-10 border-t ${
+            theme === "dark"
+              ? "bg-[#050816]/95 border-slate-800/70"
+              : "bg-white/95 border-zinc-200/70"
+          } pb-[env(safe-area-inset-bottom)]`}
+        >
+          <div className="mx-auto max-w-[720px] px-4 py-2 flex justify-between">
+            {[
+              { key: "painel", label: "Painel", icon: LayoutDashboard },
+              { key: "obras", label: "Obras", icon: Briefcase },
+              { key: "profissionais", label: "Profissionais", icon: Users },
+              { key: "relatorios", label: "Relatórios", icon: BarChart2 },
+              { key: "chat", label: "Chat", icon: MessageCircle },
+            ].map(({ key, label, icon: Icon }) => {
+              const isActive = section === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => gotoSection(key)}
+                  className={`relative flex flex-col items-center gap-0.5 text-[11px] font-medium px-2 py-1 rounded-xl ${
+                    isActive
+                      ? "text-sky-400"
+                      : "text-slate-400 hover:text-sky-400"
+                  }`}
+                >
+                  <Icon className="relative h-5 w-5" />
+                  <span>{label}</span>
+                  {isActive && (
+                    <span className="absolute -bottom-1 left-1/2 h-[2px] w-6 -translate-x-1/2 rounded-full bg-sky-400" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-[1100] max-w-xs rounded-2xl border border-slate-200/70 bg-white/95 dark:border-slate-800/70 dark:bg-[#050819]/95 shadow-lg px-4 py-3 text-sm backdrop-blur-xl">
+          <div className="flex items-start gap-2">
+            {toast.icon === "x" ? (
+              <XCircle className="h-4 w-4 text-rose-500 mt-[2px]" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-[2px]" />
+            )}
+            <div className="flex-1">
+              <p className="font-semibold">{toast.titulo}</p>
+              {toast.conteudo && (
+                <p className="mt-1 text-xs opacity-80">{toast.conteudo}</p>
+              )}
+              {toast.url && (
+                <button
+                  onClick={() => {
+                    setToast(null);
+                    navigate(toast.url!);
+                  }}
+                  className="mt-2 text-xs text-sky-600 underline underline-offset-2 dark:text-sky-300"
+                >
+                  Ver detalhes
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

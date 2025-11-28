@@ -21,7 +21,15 @@ import {
   TrendingUp,
   ChevronDown,
   Users,
+  Download,
 } from "lucide-react";
+
+import { PDFDownloadLink } from "@react-pdf/renderer";
+import { CustosMensaisReportPDF } from "./CustosMensaisReportPDF";
+import {
+  CustosMensaisCSVButton,
+  type CustosMensaisCsvRow,
+} from "./CustosMensaisCSV";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -211,6 +219,9 @@ export default function CustosMensais() {
   >([]);
   const [loadingProfissionais, setLoadingProfissionais] = useState(false);
 
+  // linhas para o CSV (todas as obras / filtro atual)
+  const [csvLinhas, setCsvLinhas] = useState<CustosMensaisCsvRow[]>([]);
+
   // evita warnings do Recharts (width/height -1)
   const [chartReady, setChartReady] = useState(false);
   useEffect(() => {
@@ -309,6 +320,7 @@ export default function CustosMensais() {
     setLoadingData(true);
     setError(null);
 
+    // --- agregados por obra (cards, gráfico, tabela principal) ---
     let query = supabase
       .from("empresa_custos_mensais")
       .select("*")
@@ -343,6 +355,54 @@ export default function CustosMensais() {
       setData(normalised);
     }
 
+    // --- linhas para CSV: detalhe por profissional (todas as obras do filtro) ---
+    let csvQuery = supabase
+      .from("empresa_custos_mensais_profissionais_detalhe")
+      .select("*")
+      .eq("empresa_id", empresaId)
+      .eq("mes_referencia", mesReferencia);
+
+    if (selectedObraId !== "all") {
+      csvQuery = csvQuery.eq("obra_id", selectedObraId);
+    }
+
+    const { data: csvData, error: csvError } = await csvQuery;
+
+    if (csvError) {
+      console.error("[CustosMensais] Erro ao carregar linhas de CSV:", csvError);
+      setCsvLinhas([]);
+    } else {
+      const linhas: CustosMensaisCsvRow[] =
+        csvData?.map((row: any) => {
+          const hNormais =
+            row.horas_normais !== null ? Number(row.horas_normais) : 0;
+          const hExtra =
+            row.horas_extras !== null ? Number(row.horas_extras) : 0;
+          const totalHoras =
+            row.horas_totais !== null
+              ? Number(row.horas_totais)
+              : hNormais + hExtra;
+
+          const obraNome =
+            obras.find((o) => o.id === row.obra_id)?.nome ?? "Obra";
+
+          return {
+            obra: obraNome,
+            profissional: row.profissional_nome ?? "Profissional",
+            funcao: row.funcao ?? null,
+            horasNormais: hNormais,
+            horasExtra: hExtra,
+            horasTotais: totalHoras,
+            valorHora:
+              row.valor_hora !== null ? Number(row.valor_hora) : null,
+            custoMes:
+              row.custo_total !== null ? Number(row.custo_total) : 0,
+          };
+        }) ?? [];
+
+      setCsvLinhas(linhas);
+    }
+
     // ao mudar filtro/mês, limpamos detalhe de profissionais
     setObraDetalheId(null);
     setProfissionaisObra([]);
@@ -354,10 +414,10 @@ export default function CustosMensais() {
     if (!empresaId) return;
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empresaId, mesReferencia, selectedObraId]);
+  }, [empresaId, mesReferencia, selectedObraId, obras]);
 
   /* =======================
-     Buscar profissionais por obra (view *detalhe*)
+     Buscar profissionais por obra (view *detalhe* para UI)
   ======================== */
 
   async function loadProfissionaisObra(obraId: string) {
@@ -506,6 +566,43 @@ export default function CustosMensais() {
     };
   }, [profissionaisObra]);
 
+  /* ===== dados para o PDF ===== */
+
+  const monthLabel = useMemo(
+    () =>
+      MESES[selectedMonth].charAt(0).toUpperCase() +
+      MESES[selectedMonth].slice(1),
+    [selectedMonth]
+  );
+
+  const linhasTabela = useMemo(
+    () =>
+      data.map((row) => {
+        const horas = row.horas_totais ?? 0;
+        const custo = row.custo_total ?? 0;
+        const custoMedio = horas > 0 ? custo / horas : 0;
+        const obraName =
+          obras.find((o) => o.id === row.obra_id)?.nome ?? "Obra";
+        const profissionais = row.profissionais_distintos ?? 0;
+
+        return {
+          obra: obraName,
+          horas,
+          custoTotal: custo,
+          custoMedioHora: custoMedio,
+          profissionais,
+        };
+      }),
+    [data, obras]
+  );
+
+  const obraFilterLabel = useMemo(() => {
+    if (selectedObraId === "all") return "Todas as obras";
+    return (
+      obras.find((o) => o.id === selectedObraId)?.nome ?? "Obra selecionada"
+    );
+  }, [selectedObraId, obras]);
+
   /* =======================
      Render
   ======================== */
@@ -514,13 +611,59 @@ export default function CustosMensais() {
     <div className="flex flex-col gap-6 p-4 sm:p-6">
       {/* Header */}
       <div className="flex flex-col gap-2">
-        <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
-          Relatórios ▸ Custos Mensais
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Visão dos custos de mão de obra da equipa Acrobatas por obra, no
-          período selecionado.
-        </p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
+              Relatórios ▸ Custos Mensais
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Visão dos custos de mão de obra da equipa Acrobatas por obra, no
+              período selecionado.
+            </p>
+          </div>
+
+          {/* Botões de exportação */}
+          {data.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <PDFDownloadLink
+                document={
+                  <CustosMensaisReportPDF
+                    mesLabel={monthLabel}
+                    ano={selectedYear}
+                    resumo={{
+                      custoTotalMes: metrics.totalCusto,
+                      horasTotais: metrics.totalHoras,
+                      obrasComEquipe: metrics.obrasComEquipe,
+                      custoMedioHora: metrics.custoMedioHora,
+                    }}
+                    linhas={linhasTabela}
+                    obraLabel={obraFilterLabel}
+                  />
+                }
+                fileName={`Relatorio_CustosMensais_${monthLabel}_${selectedYear}.pdf`}
+              >
+                {({ loading }) => (
+                  <button
+                    type="button"
+                    disabled={loading || isLoading}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-800 disabled:opacity-60"
+                  >
+                    <Download className="w-4 h-4" />
+                    {loading ? "A gerar PDF…" : "Exportar PDF"}
+                  </button>
+                )}
+              </PDFDownloadLink>
+
+              {/* CSV de todos os profissionais do período/filtro atual */}
+              <CustosMensaisCSVButton
+                mesLabel={monthLabel}
+                ano={selectedYear}
+                linhas={csvLinhas}
+                disabled={isLoading}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Filtros */}

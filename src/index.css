@@ -5,25 +5,58 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ====== 🎨 Cores globais da App ====== */
+:root {
+  /* modo claro */
+  --app-bg: #f3f4f6;      /* fundo geral (por trás de tudo)  */
+  --app-card: #ffffff;    /* fundo dos cards / caixas        */
+  --app-border: #e5e7eb;  /* borda padrão clara              */
+}
+
+.dark {
+  /* modo escuro */
+  --app-bg: #020617;      /* fundo geral (body + layout)     */
+  --app-card: #161d27;    /* cards / caixas principais       */
+  --app-border: #1f2a37;  /* bordas no dark                  */
+}
+
+/* Utilitários para usar nos componentes */
+@layer utilities {
+  .bg-app {
+    background-color: var(--app-bg);
+  }
+
+  .bg-app-card {
+    background-color: var(--app-card);
+  }
+
+  .border-app {
+    border-color: var(--app-border);
+  }
+}
+
 /* ====== 🌍 Base global ====== */
 
 /* html controla comportamento geral de scroll */
 html {
   scroll-behavior: auto !important;
   overflow-y: auto;
-  height: 100%;
+  /* height: 100%;  🔥 não usar, causa faixa/listra em alguns casos */
 }
 
 /* Corpo base da aplicação */
 body {
-  @apply bg-gray-50 text-gray-900;
+  /* fundo geral controlado por variável (muda light/dark de uma vez) */
+  background-color: var(--app-bg);
+  @apply text-gray-900 dark:text-slate-50;
+
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   margin: 0;
   padding: 0;
 
   /* altura dinâmica em mobile (melhor que 100vh) */
   min-height: 100dvh;
-  height: 100%;
+  /* height: 100%; 🔥 removido */
 
   /* bloqueia scroll lateral e overscroll estranho */
   overflow-x: hidden;
@@ -39,8 +72,30 @@ body {
 
 /* Root ocupa a tela toda */
 #root {
-  min-height: 100%;
-  height: 100%;
+  min-height: 100dvh;
+  /* height: 100%; 🔥 removido */
+}
+
+/* ===== Scrollbar GLOBAL – some com a “linha” da direita ===== */
+
+/* Firefox: esconde scrollbar mas mantém scroll funcional */
+html,
+body {
+  scrollbar-width: none;          /* 🔥 sem calha fixa */
+}
+
+/* Chrome / Edge / Safari */
+body::-webkit-scrollbar {
+  width: 0px;                     /* 🔥 remove a barrinha */
+  height: 0px;
+}
+
+body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body::-webkit-scrollbar-thumb {
+  background: transparent;
 }
 
 /* Impede zoom automático em inputs menores que 16px */
@@ -119,7 +174,7 @@ html.no-anim *::after {
 /* Use esta classe no container que rola: ex.: <div className="flex-1 min-h-0 overflow-y-auto pr-1 card-scroll"> */
 .card-scroll {
   -webkit-overflow-scrolling: touch; /* iOS/Android */
-  scrollbar-width: none !important; /* Firefox   */
+  scrollbar-width: none !important;  /* Firefox   */
   -ms-overflow-style: none !important; /* IE/Edge   */
 }
 .card-scroll::-webkit-scrollbar {
@@ -131,16 +186,8 @@ html.no-anim *::after {
   background: transparent !important;
 }
 
-/* ====== Scrollbar estável sem “pulo” e sem calha à esquerda ====== */
-@supports (scrollbar-gutter: stable) {
-  @media (min-width: 768px) {
-    :root,
-    html,
-    body {
-      scrollbar-gutter: stable;
-    }
-  }
-}
+/* ====== ⚠️ Removido o scrollbar-gutter para não reservar calha ====== */
+/* (não usamos mais aquele bloco de @supports scrollbar-gutter: stable) */
 
 /* ====== Shell genérico para páginas full-screen (login, dashboards mobile, etc.) ====== */
 .app-shell {

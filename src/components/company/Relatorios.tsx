@@ -1,676 +1,949 @@
-// src/components/company/Relatorios.tsx
+// src/components/company/CentralDeNavegacaoEmpresa/Relatorios/RelatorioGeral.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+
 import {
-  FileText,
-  TrendingUp,
-  DollarSign,
-  PieChart as PieIcon,
-  BarChart3,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Building2,
-  RefreshCcw,
-  Download,
-  Percent,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  Tooltip,
-  CartesianGrid,
-  Pie,
-  PieChart as PieChartRecharts,
-  Cell,
   Bar,
   BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
-import { useTranslation } from "react-i18next";
+
+import {
+  Calendar,
+  Factory,
+  Loader2,
+  RefreshCcw,
+  ChevronDown,
+  Users,
+  Activity,
+  Clock,
+  Euro,
+} from "lucide-react";
+
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 
-/* ===========================
-   Paleta neutra p/ gráficos
-   =========================== */
-const COLOR_PRIMARY = "#3b82f6"; // blue-500
-const COLOR_SECONDARY = "#64748b"; // slate-500
-const COLOR_SUCCESS = "#10b981"; // emerald-500
-const GRID_LIGHT = "#eef2f7";
-const GRID_DARK = "rgba(148,163,184,0.15)";
+/* =======================
+   Tipos
+======================= */
 
-const fmtEUR = new Intl.NumberFormat("pt-PT", {
+type EmpresaCustosMensaisRow = {
+  empresa_id: string;
+  obra_id: string;
+  mes_referencia: string;
+  horas_totais: number | null;
+  custo_total: number | null;
+  profissionais_distintos: number | null;
+};
+
+type ObraOption = {
+  id: string;
+  nome: string;
+};
+
+type ProfissionalDetalheRow = {
+  empresa_id: string;
+  obra_id: string;
+  profissional_id: string;
+  profissional_nome: string | null;
+  funcao: string | null;
+  mes_referencia: string;
+  horas_normais: number | null;
+  horas_extras: number | null;
+  horas_totais: number | null;
+  valor_hora: number | null;
+  custo_total: number | null;
+};
+
+/* =======================
+   Helpers
+======================= */
+
+const MESES = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+const currency = new Intl.NumberFormat("pt-PT", {
   style: "currency",
   currency: "EUR",
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 2,
 });
 
-export default function Relatorios() {
-  const { t } = useTranslation();
+function formatCurrency(value: number | null | undefined) {
+  if (!value || Number.isNaN(value)) return "€ 0,00";
+  return currency.format(value);
+}
+
+function formatHours(value: number | null | undefined) {
+  if (!value || Number.isNaN(value)) return "0h";
+  return `${value.toFixed(1).replace(".", ",")}h`;
+}
+
+function getMonthStart(year: number, monthIndex: number) {
+  return new Date(Date.UTC(year, monthIndex, 1)).toISOString().slice(0, 10);
+}
+
+/* =======================
+   RPC helper
+======================= */
+
+async function getMinhaEmpresaId(): Promise<string | null> {
+  const { data, error } = await supabase.rpc("minha_empresa_id");
+
+  if (error) {
+    console.error("[RelatorioGeral] minha_empresa_id ->", error.message || error);
+    return null;
+  }
+
+  return (data as string) ?? null;
+}
+
+/* =======================
+   SimpleSelect
+======================= */
+
+type SimpleSelectOption = { value: string | number; label: string };
+
+type SimpleSelectProps = {
+  value: string | number;
+  options: SimpleSelectOption[];
+  onChange: (value: string | number) => void;
+  leftIcon?: ReactNode;
+};
+
+function SimpleSelect({ value, options, onChange, leftIcon }: SimpleSelectProps) {
+  const [open, setOpen] = useState(false);
+
+  const selected = useMemo(
+    () => options.find((o) => o.value === value) ?? options[0],
+    [options, value]
+  );
+
+  function handleSelect(v: string | number) {
+    onChange(v);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex items-center gap-2 w-full border rounded-lg px-3 py-2 bg-slate-50 dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+      >
+        {leftIcon && (
+          <span className="text-slate-400 dark:text-slate-300">{leftIcon}</span>
+        )}
+        <span className="flex-1 text-left truncate">{selected?.label}</span>
+        <ChevronDown className="w-4 h-4 text-slate-400" />
+      </button>
+
+      {open && (
+        <div
+          className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg"
+          onMouseLeave={() => setOpen(false)}
+        >
+          {options.map((opt) => (
+            <button
+              key={String(opt.value)}
+              type="button"
+              onClick={() => handleSelect(opt.value)}
+              className={`w-full text-left px-3 py-2 text-sm truncate transition ${
+                opt.value === value
+                  ? "bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-200"
+                  : "text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =======================
+   Componente principal
+======================= */
+
+export default function RelatorioGeral() {
   const { user } = useAuth();
 
-  const [slide, setSlide] = useState(0);
-  const [faturamentoTotal, setFaturamentoTotal] = useState(0);
-  const [custoPercent, setCustoPercent] = useState<number>(0);
+  const today = new Date();
+  const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
+  const [selectedObraId, setSelectedObraId] = useState<string>("all");
+
   const [empresaId, setEmpresaId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [obras, setObras] = useState<ObraOption[]>([]);
+  const [custosData, setCustosData] = useState<EmpresaCustosMensaisRow[]>([]);
+  const [profissionaisDetalhe, setProfissionaisDetalhe] = useState<
+    ProfissionalDetalheRow[]
+  >([]);
 
-  /* ==========================
-   *   BUSCA DE DADOS
-   * ========================== */
+  const [loadingEmpresa, setLoadingEmpresa] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [chartReady, setChartReady] = useState(false);
   useEffect(() => {
-    async function fetchData() {
-      if (!user?.id) return;
-      setLoading(true);
+    setChartReady(true);
+  }, []);
 
-      try {
-        // Empresa (id + custo_operacional_percent)
-        const { data: empresa } = await supabase
-          .from("empresas")
-          .select("id, custo_operacional_percent")
-          .eq("auth_id", user.id)
-          .single();
+  /* ========= empresa via RPC ========= */
 
-        if (empresa) {
-          setEmpresaId(empresa.id);
-          setCustoPercent(Number(empresa.custo_operacional_percent || 0));
-        }
-
-        // Faturamento total (somatório dos custos das obras da empresa)
-        const { data: obras } = await supabase
-          .from("obras")
-          .select("custo_total")
-          .eq("empresa_id", empresa?.id);
-
-        const total = obras?.reduce(
-          (sum: number, item: any) => sum + Number(item.custo_total || 0),
-          0
-        );
-
-        setFaturamentoTotal(total || 0);
-      } catch (err) {
-        console.error("Erro ao buscar dados:", err);
-      } finally {
-        setLoading(false);
-      }
+  useEffect(() => {
+    if (!user?.id) {
+      setEmpresaId(null);
+      return;
     }
-    fetchData();
+
+    let cancelled = false;
+
+    async function fetchEmpresa() {
+      setLoadingEmpresa(true);
+      setError(null);
+
+      const id = await getMinhaEmpresaId();
+
+      if (cancelled) return;
+
+      if (!id) {
+        setEmpresaId(null);
+        setError("Nenhuma empresa associada ao utilizador.");
+      } else {
+        setEmpresaId(id);
+      }
+
+      setLoadingEmpresa(false);
+    }
+
+    fetchEmpresa();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
-  /* ==========================
-   *   CÁLCULOS
-   * ========================== */
-  const custosOperacionais = useMemo(
-    () => faturamentoTotal * (custoPercent / 100),
-    [faturamentoTotal, custoPercent]
-  );
-  const lucroLiquido = useMemo(
-    () => faturamentoTotal - custosOperacionais,
-    [faturamentoTotal, custosOperacionais]
+  /* ========= obras ========= */
+
+  useEffect(() => {
+    if (!empresaId) {
+      setObras([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchObras() {
+      const { data, error } = await supabase
+        .from("obras")
+        .select("id, nome")
+        .eq("empresa_id", empresaId)
+        .order("nome", { ascending: true });
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("[RelatorioGeral] Erro ao buscar obras:", error);
+      } else if (data) {
+        setObras(
+          data.map((o: any) => ({
+            id: o.id,
+            nome: o.nome ?? "Obra sem nome",
+          }))
+        );
+      }
+    }
+
+    fetchObras();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [empresaId]);
+
+  /* ========= dados do mês ========= */
+
+  const mesReferencia = useMemo(
+    () => getMonthStart(selectedYear, selectedMonth),
+    [selectedYear, selectedMonth]
   );
 
-  async function handleSalvarPercent() {
+  async function loadData() {
     if (!empresaId) return;
+
+    setLoadingData(true);
+    setError(null);
+
     try {
-      await supabase
-        .from("empresas")
-        .update({ custo_operacional_percent: custoPercent })
-        .eq("id", empresaId);
-      alert("Percentual atualizado com sucesso!");
-    } catch {
-      alert("Erro ao salvar percentual.");
+      // custos por obra
+      let custosQuery = supabase
+        .from("empresa_custos_mensais")
+        .select("*")
+        .eq("empresa_id", empresaId)
+        .eq("mes_referencia", mesReferencia);
+
+      if (selectedObraId !== "all") {
+        custosQuery = custosQuery.eq("obra_id", selectedObraId);
+      }
+
+      const { data: custos, error: custosError } = await custosQuery;
+
+      if (custosError) {
+        console.error("[RelatorioGeral] Erro custos:", custosError);
+        throw new Error("Não foi possível carregar os custos deste período.");
+      }
+
+      const normalisedCustos: EmpresaCustosMensaisRow[] =
+        custos?.map((row: any) => ({
+          empresa_id: row.empresa_id,
+          obra_id: row.obra_id,
+          mes_referencia: row.mes_referencia,
+          horas_totais:
+            row.horas_totais !== null ? Number(row.horas_totais) : 0,
+          custo_total: row.custo_total !== null ? Number(row.custo_total) : 0,
+          profissionais_distintos:
+            row.profissionais_distintos !== null
+              ? Number(row.profissionais_distintos)
+              : 0,
+        })) ?? [];
+
+      setCustosData(normalisedCustos);
+
+      // detalhe profissionais
+      let profQuery = supabase
+        .from("empresa_custos_mensais_profissionais_detalhe")
+        .select("*")
+        .eq("empresa_id", empresaId)
+        .eq("mes_referencia", mesReferencia);
+
+      if (selectedObraId !== "all") {
+        profQuery = profQuery.eq("obra_id", selectedObraId);
+      }
+
+      const { data: detalhe, error: profError } = await profQuery;
+
+      if (profError) {
+        console.error("[RelatorioGeral] Erro detalhe profissionais:", profError);
+        throw new Error("Não foi possível carregar o detalhe de profissionais.");
+      }
+
+      const normalisedDetalhe: ProfissionalDetalheRow[] =
+        detalhe?.map((row: any) => ({
+          empresa_id: row.empresa_id,
+          obra_id: row.obra_id,
+          profissional_id: row.profissional_id,
+          profissional_nome: row.profissional_nome ?? null,
+          funcao: row.funcao ?? null,
+          mes_referencia: row.mes_referencia,
+          horas_normais:
+            row.horas_normais !== null ? Number(row.horas_normais) : 0,
+          horas_extras:
+            row.horas_extras !== null ? Number(row.horas_extras) : 0,
+          horas_totais:
+            row.horas_totais !== null ? Number(row.horas_totais) : null,
+          valor_hora:
+            row.valor_hora !== null ? Number(row.valor_hora) : null,
+          custo_total:
+            row.custo_total !== null ? Number(row.custo_total) : 0,
+        })) ?? [];
+
+      setProfissionaisDetalhe(normalisedDetalhe);
+    } catch (err: any) {
+      setError(err?.message || "Erro ao carregar dados.");
+      setCustosData([]);
+      setProfissionaisDetalhe([]);
+    } finally {
+      setLoadingData(false);
     }
   }
 
-  /* ==========================
-   *   MOCKS & GRÁFICOS
-   * ========================== */
-  const pieColors = [COLOR_PRIMARY, COLOR_SECONDARY];
+  useEffect(() => {
+    if (!empresaId) return;
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId, mesReferencia, selectedObraId]);
 
-  const dadosFinanceiros = [
-    { mes: "Jan", faturamento: 75000, custos: 52000, lucro: 23000 },
-    { mes: "Fev", faturamento: 82000, custos: 58000, lucro: 24000 },
-    { mes: "Mar", faturamento: 91000, custos: 61000, lucro: 30000 },
-    { mes: "Abr", faturamento: 102000, custos: 72000, lucro: 30000 },
-    { mes: "Mai", faturamento: 125000, custos: 78500, lucro: 46500 },
-  ];
+  /* ========= métricas gerais ========= */
 
-  const dadosCustos = [
-    { name: "Custos Operacionais", value: Math.max(custosOperacionais, 0) },
-    { name: "Lucro Líquido", value: Math.max(lucroLiquido, 0) },
-  ];
+  const metrics = useMemo(() => {
+    if (!custosData.length) {
+      return {
+        totalCusto: 0,
+        totalHoras: 0,
+        obrasComEquipe: 0,
+        custoMedioHora: 0,
+        horasExtrasTotais: 0,
+        profissionaisDistintos: 0,
+      };
+    }
 
-  const dadosProdutividade = [
-    { nome: "Equipa A", produtividade: 92 },
-    { nome: "Equipa B", produtividade: 85 },
-    { nome: "Equipa C", produtividade: 78 },
-    { nome: "Equipa D", produtividade: 88 },
-  ];
-
-  const obrasTop = [
-    { nome: "Residencial Porto Alto", lucro: 18500, avaliacao: 4.8 },
-    { nome: "Hotel da Serra", lucro: 16200, avaliacao: 4.9 },
-    { nome: "Condomínio Vale Verde", lucro: 15000, avaliacao: 4.5 },
-  ];
-
-  const profissionaisTop = [
-    { nome: "André Sousa", funcao: "Canalizador", avaliacao: 4.9 },
-    { nome: "Ricardo Alves", funcao: "Eletricista", avaliacao: 4.8 },
-    { nome: "Marcos Silva", funcao: "Pintor", avaliacao: 4.7 },
-  ];
-
-  /* ==========================
-   *   LAYOUT
-   * ========================== */
-  return (
-    <div className="min-h-screen p-4 sm:p-6 space-y-6 sm:space-y-8">
-      {/* HEADER — instantâneo; sem bloquear a renderização */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724] shadow-sm"
-      >
-        <div className="p-4 sm:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
-            <div className="sm:col-span-2">
-              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                Relatórios e Desempenho Geral
-              </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Acompanhe métricas financeiras, produtividade e desempenho global da empresa.
-              </p>
-            </div>
-
-            <div className="flex sm:justify-end gap-2">
-              <button
-                onClick={() => window.location.reload()}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111827] hover:bg-gray-50 dark:hover:bg-[#0b1220] text-gray-700 dark:text-gray-200 px-4 py-2.5 rounded-xl"
-              >
-                <RefreshCcw className="w-4 h-4" />
-                {loading ? "Atualizando…" : "Atualizar"}
-              </button>
-              <button
-                disabled={loading || faturamentoTotal === 0}
-                className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-[#0b1a33] text-blue-700 dark:text-blue-300 px-4 py-2.5 rounded-xl ${
-                  loading || faturamentoTotal === 0
-                    ? "opacity-60 cursor-not-allowed"
-                    : "hover:bg-blue-100 dark:hover:bg-[#0e2242]"
-                }`}
-              >
-                <Download className="w-4 h-4" />
-                Exportar PDF
-              </button>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* ================= DESKTOP ================= */}
-      <div className="hidden md:block space-y-10">
-        {/* KPIs */}
-        <div className="grid grid-cols-5 gap-4">
-          <CardIndicador
-            titulo="Faturamento Total"
-            valor={fmtEUR.format(faturamentoTotal)}
-            icone={<DollarSign className="w-5 h-5" />}
-            hint="+12%"
-          />
-          <CardIndicador
-            titulo="Custos Operacionais"
-            valor={fmtEUR.format(custosOperacionais)}
-            icone={<ArrowDownCircle className="w-5 h-5" />}
-            hint={`${custoPercent}%`}
-          />
-          <CardLucroLiquido
-            valor={fmtEUR.format(lucroLiquido)}
-            custoPercent={custoPercent}
-            setCustoPercent={setCustoPercent}
-            onSalvar={handleSalvarPercent}
-          />
-          <CardIndicador
-            titulo="Produtividade Média"
-            valor="87%"
-            icone={<TrendingUp className="w-5 h-5" />}
-            hint="Estável"
-          />
-          <CardIndicador
-            titulo="Pontualidade"
-            valor="93%"
-            icone={<Building2 className="w-5 h-5" />}
-            hint="Boa"
-          />
-        </div>
-
-        {/* Gráficos */}
-        <div className="grid grid-cols-3 gap-6">
-          <GraficoCard
-            titulo="Evolução Financeira (€)"
-            icone={<TrendingUp className="text-blue-600 dark:text-blue-400" />}
-          >
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={dadosFinanceiros}>
-                <CartesianGrid strokeDasharray="2 4" stroke={GRID_LIGHT} />
-                <XAxis dataKey="mes" stroke="#9ca3af" />
-                <Tooltip />
-                <Line type="monotone" dataKey="faturamento" stroke={COLOR_PRIMARY} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="custos" stroke={COLOR_SECONDARY} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="lucro" stroke={COLOR_SUCCESS} strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </GraficoCard>
-
-          <GraficoCard
-            titulo="Custos x Lucro"
-            icone={<PieIcon className="text-blue-600 dark:text-blue-400" />}
-          >
-            {faturamentoTotal > 0 ? (
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChartRecharts>
-                  <Pie
-                    data={dadosCustos}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={95}
-                    label
-                  >
-                    {dadosCustos.map((_, i) => (
-                      <Cell key={i} fill={pieColors[i % pieColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChartRecharts>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState height={260} />
-            )}
-          </GraficoCard>
-
-          <GraficoCard
-            titulo="Produtividade por Equipe"
-            icone={<BarChart3 className="text-blue-600 dark:text-blue-400" />}
-          >
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={dadosProdutividade}>
-                <XAxis dataKey="nome" stroke="#9ca3af" />
-                <Tooltip />
-                <Bar dataKey="produtividade" fill={COLOR_PRIMARY} radius={[10, 10, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </GraficoCard>
-        </div>
-
-        {/* Rankings */}
-        <div className="grid grid-cols-2 gap-6">
-          <RankingCard titulo="Obras com Melhor Lucro" dados={obrasTop} />
-          <RankingCard titulo="Profissionais Destaque" dados={profissionaisTop} />
-        </div>
-      </div>
-
-      {/* ================= MOBILE ================= */}
-      <div className="md:hidden space-y-6">
-        {/* KPIs */}
-        <section aria-label="Indicadores">
-          <div className="grid grid-cols-2 gap-3">
-            <KpiMobile
-              titulo="Faturamento"
-              valor={fmtEUR.format(faturamentoTotal)}
-              icone={<DollarSign className="w-4 h-4" />}
-            />
-            <KpiMobile
-              titulo="Custos"
-              valor={fmtEUR.format(custosOperacionais)}
-              icone={<ArrowDownCircle className="w-4 h-4" />}
-            />
-            <KpiMobile
-              titulo="Lucro"
-              valor={fmtEUR.format(lucroLiquido)}
-              icone={<ArrowUpCircle className="w-4 h-4" />}
-            />
-            <KpiMobile
-              titulo="Produtividade"
-              valor="87%"
-              icone={<TrendingUp className="w-4 h-4" />}
-            />
-          </div>
-        </section>
-
-        {/* Percentual de Custo Operacional */}
-        <section
-          aria-label="Percentual de Custo Operacional"
-          className="rounded-2xl p-4 shadow-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724]"
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Percent className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <h3 className="font-semibold text-sm text-gray-800 dark:text-gray-100">
-              Percentual de Custo Operacional
-            </h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <button
-                aria-label="Diminuir percentual"
-                onClick={() => setCustoPercent((v) => Math.max(0, v - 1))}
-                className="px-3 py-2 text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-[#111827] active:scale-[0.98]"
-              >
-                –
-              </button>
-              <input
-                type="number"
-                value={custoPercent}
-                onChange={(e) => setCustoPercent(Number(e.target.value))}
-                className="bg-white dark:bg-[#0f1724] text-gray-900 dark:text-gray-100 px-3 py-2 w-20 text-center outline-none"
-              />
-              <button
-                aria-label="Aumentar percentual"
-                onClick={() => setCustoPercent((v) => Math.min(100, v + 1))}
-                className="px-3 py-2 text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-[#111827] active:scale-[0.98]"
-              >
-                +
-              </button>
-            </div>
-
-            <button
-              onClick={handleSalvarPercent}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white transition-all py-2.5 rounded-lg text-sm"
-            >
-              Salvar
-            </button>
-          </div>
-        </section>
-
-        {/* Carrossel */}
-        <section
-          aria-label="Gráficos"
-          className="rounded-2xl p-3 border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724]"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-              {slide === 0 ? "Evolução Financeira (€)" : slide === 1 ? "Custos x Lucro" : "Produtividade"}
-            </h3>
-            <div className="flex items-center gap-2">
-              <NavBtn onClick={() => setSlide((slide + 2) % 3)} ariaLabel="Anterior">
-                <ChevronLeft className="w-4 h-4" />
-              </NavBtn>
-              <NavBtn onClick={() => setSlide((slide + 1) % 3)} ariaLabel="Próximo">
-                <ChevronRight className="w-4 h-4" />
-              </NavBtn>
-            </div>
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={slide}
-              initial={{ opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.22 }}
-            >
-              {slide === 0 && (
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={dadosFinanceiros}>
-                    <CartesianGrid strokeDasharray="2 4" stroke={GRID_DARK} />
-                    <XAxis dataKey="mes" stroke="#94a3b8" tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="faturamento" stroke={COLOR_PRIMARY} strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="custos" stroke={COLOR_SECONDARY} strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="lucro" stroke={COLOR_SUCCESS} strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-              {slide === 1 && (
-                faturamentoTotal > 0 ? (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChartRecharts>
-                      <Pie
-                        data={dadosCustos}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={85}
-                        label
-                      >
-                        {dadosCustos.map((_, i) => (
-                          <Cell key={i} fill={pieColors[i % pieColors.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChartRecharts>
-                  </ResponsiveContainer>
-                ) : (
-                  <EmptyState height={220} />
-                )
-              )}
-              {slide === 2 && (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={dadosProdutividade}>
-                    <XAxis dataKey="nome" stroke="#94a3b8" tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="produtividade" fill={COLOR_PRIMARY} radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </motion.div>
-          </AnimatePresence>
-
-          <div className="flex justify-center gap-2 mt-3">
-            {[0, 1, 2].map((i) => (
-              <button
-                key={i}
-                onClick={() => setSlide(i)}
-                className={`h-3.5 px-2 rounded-full transition ${
-                  slide === i ? "bg-blue-600 dark:bg-blue-400" : "bg-gray-300 dark:bg-gray-600"
-                }`}
-                aria-label={`Ir para slide ${i + 1}`}
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* Rankings */}
-        <section className="space-y-4">
-          <RankingCard titulo="Obras com Melhor Lucro" dados={obrasTop} />
-          <RankingCard titulo="Profissionais Destaque" dados={profissionaisTop} />
-        </section>
-      </div>
-    </div>
-  );
-}
-
-/* ===== COMPONENTES ===== */
-
-function NavBtn({
-  onClick,
-  ariaLabel,
-  children,
-}: {
-  onClick: () => void;
-  ariaLabel: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={ariaLabel}
-      className="w-9 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200 active:scale-[0.98]"
-    >
-      {children}
-    </button>
-  );
-}
-
-/** Card KPI neutro, com ícone em badge consistente */
-function CardIndicador({
-  titulo,
-  valor,
-  icone,
-  hint,
-}: {
-  titulo: string;
-  valor: string;
-  icone: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <motion.div
-      whileHover={{ scale: 1.015 }}
-      className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724] p-5 shadow-sm"
-    >
-      <div className="flex items-start justify-between">
-        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{titulo}</span>
-        <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 dark:bg-[#0b1a33] dark:text-blue-300">
-          {icone}
-        </div>
-      </div>
-      <h3 className="text-2xl font-semibold mt-2 text-gray-900 dark:text-gray-100">{valor}</h3>
-      {hint && <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 inline-block">{hint}</span>}
-    </motion.div>
-  );
-}
-
-/** Card de lucro com input % — visual neutro */
-function CardLucroLiquido({
-  valor,
-  custoPercent,
-  setCustoPercent,
-  onSalvar,
-}: {
-  valor: string;
-  custoPercent: number;
-  setCustoPercent: (n: number) => void;
-  onSalvar: () => void;
-}) {
-  return (
-    <motion.div
-      whileHover={{ scale: 1.015 }}
-      className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724] p-5 shadow-sm"
-    >
-      <div className="flex items-start justify-between">
-        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Lucro Líquido</span>
-        <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-          <ArrowUpCircle className="w-5 h-5" />
-        </div>
-      </div>
-      <h3 className="text-2xl font-semibold mt-2 text-gray-900 dark:text-gray-100">{valor}</h3>
-
-      <div className="flex items-center gap-2 mt-3">
-        <input
-          type="number"
-          value={custoPercent}
-          onChange={(e) => setCustoPercent(Number(e.target.value))}
-          className="bg-gray-50 dark:bg-[#111827] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 px-2.5 py-2 rounded-lg w-20 text-center focus:outline-none"
-        />
-        <button
-          onClick={onSalvar}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-2 rounded-lg transition"
-        >
-          Salvar
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-/** KPI compacto (mobile) com ícone e altura uniforme */
-function KpiMobile({
-  titulo,
-  valor,
-  icone,
-}: {
-  titulo: string;
-  valor: string;
-  icone?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl p-3 shadow-sm h-[92px] flex flex-col justify-between border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1724]">
-      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-        {icone && <span className="text-blue-600 dark:text-blue-400">{icone}</span>}
-        <span className="text-[11px] leading-tight">{titulo}</span>
-      </div>
-      <strong className="text-lg leading-none text-gray-900 dark:text-gray-100">{valor}</strong>
-    </div>
-  );
-}
-
-/** Cartão de gráfico */
-function GraficoCard({
-  titulo,
-  icone,
-  children,
-}: {
-  titulo: string;
-  icone?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-white dark:bg-[#0f1724] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm">
-      <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-        {icone} {titulo}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-/** Ranking de obras/profissionais */
-function RankingCard({ titulo, dados }: any) {
-  if (!dados || dados.length === 0) {
-    return (
-      <div className="bg-white dark:bg-[#0f1724] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 h-[180px]">
-        <p>Nenhum dado disponível ainda.</p>
-      </div>
+    const totalCusto = custosData.reduce(
+      (acc, row) => acc + (row.custo_total ?? 0),
+      0
     );
-  }
+    const totalHoras = custosData.reduce(
+      (acc, row) => acc + (row.horas_totais ?? 0),
+      0
+    );
+    const obrasComEquipe = custosData.length;
+    const custoMedioHora = totalHoras > 0 ? totalCusto / totalHoras : 0;
+
+    const horasExtrasTotais = profissionaisDetalhe.reduce(
+      (acc, row) => acc + (row.horas_extras ?? 0),
+      0
+    );
+
+    const profIds = new Set(
+      profissionaisDetalhe.map((row) => row.profissional_id)
+    );
+
+    return {
+      totalCusto,
+      totalHoras,
+      obrasComEquipe,
+      custoMedioHora,
+      horasExtrasTotais,
+      profissionaisDistintos: profIds.size,
+    };
+  }, [custosData, profissionaisDetalhe]);
+
+  /* ========= dados por obra (tabela + gráfico) ========= */
+
+  const obrasResumo = useMemo(
+    () =>
+      custosData.map((row) => {
+        const obraName =
+          obras.find((o) => o.id === row.obra_id)?.nome ?? "Obra";
+
+        const horas = row.horas_totais ?? 0;
+        const custo = row.custo_total ?? 0;
+        const custoMedio = horas > 0 ? custo / horas : 0;
+        const profissionais = row.profissionais_distintos ?? 0;
+
+        const horasExtraObra = profissionaisDetalhe
+          .filter((p) => p.obra_id === row.obra_id)
+          .reduce((acc, p) => acc + (p.horas_extras ?? 0), 0);
+
+        return {
+          obraId: row.obra_id,
+          obra: obraName,
+          horas,
+          custo,
+          custoMedio,
+          profissionais,
+          horasExtra: horasExtraObra,
+        };
+      }),
+    [custosData, obras, profissionaisDetalhe]
+  );
+
+  const chartObras = useMemo(
+    () =>
+      obrasResumo.map((o) => ({
+        name: o.obra,
+        custo: o.custo,
+        horas: o.horas,
+      })),
+    [obrasResumo]
+  );
+
+  /* ========= top profissionais ========= */
+
+  const topProfissionais = useMemo(() => {
+    if (!profissionaisDetalhe.length) return [];
+
+    const mapa = new Map<
+      string,
+      {
+        profissional_id: string;
+        nome: string;
+        funcao: string | null;
+        horasTotais: number;
+        horasExtras: number;
+        custoTotal: number;
+      }
+    >();
+
+    for (const row of profissionaisDetalhe) {
+      const id = row.profissional_id;
+      if (!id) continue;
+
+      const atual = mapa.get(id) ?? {
+        profissional_id: id,
+        nome: row.profissional_nome ?? "Profissional",
+        funcao: row.funcao ?? null,
+        horasTotais: 0,
+        horasExtras: 0,
+        custoTotal: 0,
+      };
+
+      const hNormais = row.horas_normais ?? 0;
+      const hExtras = row.horas_extras ?? 0;
+      const totalHoras = row.horas_totais ?? hNormais + hExtras;
+
+      atual.horasTotais += totalHoras;
+      atual.horasExtras += hExtras;
+      atual.custoTotal += row.custo_total ?? 0;
+
+      mapa.set(id, atual);
+    }
+
+    return Array.from(mapa.values())
+      .sort((a, b) => b.horasTotais - a.horasTotais)
+      .slice(0, 5);
+  }, [profissionaisDetalhe]);
+
+  const chartProfissionais = useMemo(
+    () =>
+      topProfissionais.map((p) => ({
+        name: p.nome,
+        horas: p.horasTotais,
+      })),
+    [topProfissionais]
+  );
+
+  /* ========= label mês ========= */
+
+  const monthLabel = useMemo(
+    () =>
+      MESES[selectedMonth].charAt(0).toUpperCase() +
+      MESES[selectedMonth].slice(1),
+    [selectedMonth]
+  );
+
+  const monthOptions: SimpleSelectOption[] = MESES.map((m, idx) => ({
+    value: idx,
+    label: m.charAt(0).toUpperCase() + m.slice(1) + ".",
+  }));
+
+  const obraOptions: SimpleSelectOption[] = [
+    { value: "all", label: "Todas as obras" },
+    ...obras.map((o) => ({ value: o.id, label: o.nome })),
+  ];
+
+  const isLoading = loadingEmpresa || loadingData;
+
+  /* =======================
+     Render
+  ======================== */
 
   return (
-    <div className="bg-white dark:bg-[#0f1724] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 sm:p-5 shadow-sm">
-      <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">
-        {titulo}
-      </h2>
-      <div className="space-y-2 sm:space-y-3">
-        {dados.map((item: any, i: number) => (
-          <div
-            key={i}
-            className="flex justify-between items-center bg-gray-50 dark:bg-[#111827] hover:bg-gray-100 dark:hover:bg-[#0b1220] px-3 py-2 sm:p-3 rounded-lg transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700"
-          >
-            <div>
-              <p className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">
-                {item.nome}
-              </p>
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                {item.subtitulo || `⭐ ${item.avaliacao}`}
-              </p>
-            </div>
-            <p className="font-medium text-blue-600 dark:text-blue-400 text-sm sm:text-base">
-              {item.valor ||
-                (item.lucro
-                  ? fmtEUR.format(item.lucro)
-                  : item.funcao || "-")}
+    <div className="flex flex-col gap-6 p-3 sm:p-6">
+      {/* Header */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3">
+          <div>
+            <h1 className="text-lg sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
+              Relatórios ▸ Geral
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              Visão consolidada de custos e desempenho das obras no período
+              selecionado.
             </p>
           </div>
-        ))}
+        </div>
       </div>
-    </div>
-  );
-}
 
-/** Placeholder elegante para gráficos sem dados */
-function EmptyState({ height = 220 }: { height?: number }) {
-  return (
-    <div
-      className="flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 rounded-xl border border-dashed border-gray-200 dark:border-gray-700"
-      style={{ height }}
-    >
-      <div className="text-sm">Sem dados suficientes.</div>
-      <div className="text-xs">Registe custos ou faturamento para visualizar.</div>
+      {/* Filtros */}
+      <div className="flex flex-col md:flex-row md:items-end gap-3 md:gap-4 bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 dark:bg-slate-900 dark:border-slate-700">
+        <div className="flex-1 flex flex-col gap-1">
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-300">
+            Mês
+          </label>
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <SimpleSelect
+                value={selectedMonth}
+                options={monthOptions}
+                onChange={(v) => setSelectedMonth(Number(v))}
+                leftIcon={<Calendar className="w-4 h-4" />}
+              />
+            </div>
+            <input
+              type="number"
+              className="w-20 sm:w-24 border rounded-lg px-2 py-2 text-sm bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 text-right"
+              value={selectedYear}
+              onChange={(e) =>
+                setSelectedYear(Number(e.target.value || today.getFullYear()))
+              }
+              min={2020}
+              max={2100}
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col gap-1">
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-300">
+            Obra
+          </label>
+          <SimpleSelect
+            value={selectedObraId}
+            options={obraOptions}
+            onChange={(v) => setSelectedObraId(String(v))}
+          />
+        </div>
+
+        <div className="flex gap-2 md:self-auto">
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-60 w-full md:w-auto"
+            onClick={loadData}
+            disabled={isLoading || !empresaId}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Atualizando…
+              </>
+            ) : (
+              <>
+                <RefreshCcw className="w-4 h-4" />
+                Aplicar
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Erro */}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs sm:text-sm text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200">
+          {error}
+        </div>
+      )}
+
+      {/* Sem dados */}
+      {!isLoading && !custosData.length && (
+        <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-10 sm:py-12 dark:bg-slate-900/40 dark:border-slate-700">
+          <div className="flex flex-col items-center gap-2 text-slate-500 text-xs sm:text-sm text-center max-w-md dark:text-slate-300">
+            <span className="font-medium">
+              Ainda não há registos para este período.
+            </span>
+            <span>
+              Assim que a equipa começar a marcar presenças e custos nas obras,
+              o resumo geral vai aparecer aqui.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Conteúdo */}
+      {custosData.length > 0 && (
+        <>
+          {/* KPIs principais */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 flex flex-col gap-1.5 dark:bg-slate-900 dark:border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wide">
+                  Custo total do mês
+                </span>
+                <Euro className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-50">
+                {formatCurrency(metrics.totalCusto)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 flex flex-col gap-1.5 dark:bg-slate-900 dark:border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wide">
+                  Horas totais
+                </span>
+                <Clock className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-50">
+                {formatHours(metrics.totalHoras)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 flex flex-col gap-1.5 dark:bg-slate-900 dark:border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wide">
+                  Horas extra (total)
+                </span>
+                <Activity className="w-4 h-4 text-orange-500" />
+              </div>
+              <div className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-50">
+                {formatHours(metrics.horasExtrasTotais)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 flex flex-col gap-1.5 dark:bg-slate-900 dark:border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wide">
+                  Custo médio por hora
+                </span>
+                <Euro className="w-4 h-4 text-purple-500" />
+              </div>
+              <div className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-50">
+                {formatCurrency(metrics.custoMedioHora)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 flex flex-col gap-1.5 dark:bg-slate-900 dark:border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wide">
+                  Obras com equipa
+                </span>
+                <Factory className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-50">
+                {metrics.obrasComEquipe}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 flex flex-col gap-1.5 dark:bg-slate-900 dark:border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wide">
+                  Nº de profissionais
+                </span>
+                <Users className="w-4 h-4 text-sky-500" />
+              </div>
+              <div className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-50">
+                {metrics.profissionaisDistintos}
+              </div>
+            </div>
+          </div>
+
+          {/* Gráficos principais */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 dark:bg-slate-900 dark:border-slate-700">
+              <h2 className="text-sm font-medium text-slate-800 dark:text-slate-100 mb-2 sm:mb-3">
+                Custo por obra — {monthLabel} {selectedYear}
+              </h2>
+              <div className="w-full h-56 sm:h-72">
+                {chartReady && (
+                  <ResponsiveContainer>
+                    <BarChart
+                      data={chartObras}
+                      margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient
+                          id="custoGeralGradient"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop offset="0%" stopColor="#38bdf8" />
+                          <stop offset="100%" stopColor="#1d4ed8" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        tickLine={false}
+                        axisLine={false}
+                        height={50}
+                        tick={{ fontSize: 10, angle: 0 }}
+                      />
+                      <YAxis
+                        tickFormatter={(v) =>
+                          currency.format(v).replace("€", "").trim()
+                        }
+                        width={60}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 10 }}
+                      />
+                      <Tooltip
+                        formatter={(value: any, name: any) => {
+                          if (name === "custo")
+                            return [formatCurrency(value), "Custo"];
+                          if (name === "horas")
+                            return [formatHours(value), "Horas"];
+                          return [value, name];
+                        }}
+                      />
+                      <Bar
+                        dataKey="custo"
+                        radius={[8, 8, 0, 0]}
+                        fill="url(#custoGeralGradient)"
+                        maxBarSize={80}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 dark:bg-slate-900 dark:border-slate-700">
+              <h2 className="text-sm font-medium text-slate-800 dark:text-slate-100 mb-2 sm:mb-3">
+                Horas por profissional (Top 5)
+              </h2>
+              <div className="w-full h-56 sm:h-72">
+                {chartReady && (
+                  <ResponsiveContainer>
+                    <BarChart
+                      data={chartProfissionais}
+                      margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        tickLine={false}
+                        axisLine={false}
+                        height={50}
+                        tick={{ fontSize: 10 }}
+                      />
+                      <YAxis
+                        tickFormatter={(v) =>
+                          `${Number(v).toFixed(1).replace(".", ",")}h`
+                        }
+                        width={60}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 10 }}
+                      />
+                      <Tooltip
+                        formatter={(value: any) => [formatHours(value), "Horas"]}
+                      />
+                      <Bar
+                        dataKey="horas"
+                        radius={[8, 8, 0, 0]}
+                        fill="#22c55e"
+                        maxBarSize={80}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabela por obra */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 dark:bg-slate-900 dark:border-slate-700">
+            <h2 className="text-sm font-medium text-slate-800 dark:text-slate-100 mb-2 sm:mb-3">
+              Resumo por obra
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="text-left text-[10px] sm:text-xs uppercase tracking-wide text-slate-500 border-b border-slate-100 dark:text-slate-300 dark:border-slate-700">
+                    <th className="py-2 pr-3 sm:pr-4">Obra</th>
+                    <th className="py-2 px-3 sm:px-4">Horas</th>
+                    <th className="py-2 px-3 sm:px-4 hidden sm:table-cell">
+                      Horas extra
+                    </th>
+                    <th className="py-2 px-3 sm:px-4">Custo total</th>
+                    <th className="py-2 px-3 sm:px-4 hidden sm:table-cell">
+                      Custo médio/hora
+                    </th>
+                    <th className="py-2 px-3 sm:px-4 text-right">
+                      Profissionais
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {obrasResumo.map((row) => (
+                    <tr
+                      key={row.obraId}
+                      className="border-b border-slate-50 last:border-0 dark:border-slate-800"
+                    >
+                      <td className="py-2 pr-3 sm:pr-4 whitespace-nowrap dark:text-slate-100">
+                        {row.obra}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 dark:text-slate-100">
+                        {formatHours(row.horas)}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 dark:text-slate-100 hidden sm:table-cell">
+                        {formatHours(row.horasExtra)}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 dark:text-slate-100">
+                        {formatCurrency(row.custo)}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 dark:text-slate-100 hidden sm:table-cell">
+                        {formatCurrency(row.custoMedio)}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 text-right dark:text-slate-100">
+                        {row.profissionais}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Tabela Top profissionais */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 dark:bg-slate-900 dark:border-slate-700">
+            <h2 className="text-sm font-medium text-slate-800 dark:text-slate-100 mb-2 sm:mb-3">
+              Detalhe — Top profissionais no período
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="text-left text-[10px] sm:text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-100 dark:text-slate-300 dark:border-slate-700">
+                    <th className="py-2 pr-3 sm:pr-4">Profissional</th>
+                    <th className="py-2 px-3 sm:px-4">Função</th>
+                    <th className="py-2 px-3 sm:px-4">Horas totais</th>
+                    <th className="py-2 px-3 sm:px-4 hidden sm:table-cell">
+                      Horas extra
+                    </th>
+                    <th className="py-2 px-3 sm:px-4">Custo total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topProfissionais.map((row) => (
+                    <tr
+                      key={row.profissional_id}
+                      className="border-b border-slate-50 last:border-0 dark:border-slate-800"
+                    >
+                      <td className="py-2 pr-3 sm:pr-4 whitespace-nowrap dark:text-slate-100">
+                        {row.nome}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 whitespace-nowrap dark:text-slate-100">
+                        {row.funcao ?? "—"}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 dark:text-slate-100">
+                        {formatHours(row.horasTotais)}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 dark:text-slate-100 hidden sm:table-cell">
+                        {formatHours(row.horasExtras)}
+                      </td>
+                      <td className="py-2 px-3 sm:px-4 dark:text-slate-100">
+                        {formatCurrency(row.custoTotal)}
+                      </td>
+                    </tr>
+                  ))}
+                  {!topProfissionais.length && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="py-4 text-center text-slate-500 dark:text-slate-300 text-xs sm:text-sm"
+                      >
+                        Ainda não há registos suficientes para calcular o
+                        ranking de profissionais.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -106,7 +106,6 @@ export default function AdicionarObra() {
     }
     setField("codigo_postal", v);
 
-    // quando estiver no formato 0000-000, tentamos completar concelho/distrito/freguesia
     if (/^\d{4}-\d{3}$/.test(v)) {
       preencherEnderecoPorCodigoPostal(v);
     }
@@ -141,7 +140,6 @@ export default function AdicionarObra() {
 
       setForm((prev) => ({
         ...prev,
-        // só preenche se ainda estiver vazio (para não pisar coisas que o utilizador já escreveu)
         concelho:
           prev.concelho ||
           addr.city ||
@@ -166,15 +164,12 @@ export default function AdicionarObra() {
   };
 
   // ===================== AUTO-COMPLETE DA RUA =====================
-  // Quando o utilizador começa a digitar a rua (>=3 caracteres) disparamos uma pesquisa,
-  // limitada pelo código-postal (se tiver) e Portugal.
   useEffect(() => {
     if (!form.rua || form.rua.trim().length < 3) {
       setRuaSugestoes([]);
       return;
     }
 
-    // debounce para não spammar a API a cada keypress
     if (ruaDebounce.current) {
       window.clearTimeout(ruaDebounce.current);
     }
@@ -232,7 +227,6 @@ export default function AdicionarObra() {
     setForm((prev) => ({
       ...prev,
       rua: nomeRua,
-      // se a API devolveu nº da porta, já deixa no campo
       numero: prev.numero || addr.house_number || "",
       codigo_postal: prev.codigo_postal || addr.postcode || "",
       concelho:
@@ -400,7 +394,7 @@ export default function AdicionarObra() {
     }
   };
 
-  // ====== CLASSES BASE PARA INPUTS / TEXTAREA (modo claro + escuro) ======
+  // ====== CLASSES BASE PARA INPUTS / TEXTAREA ======
   const inputBase =
     "w-full rounded-xl border px-3 py-2.5 text-sm md:text-[15px] " +
     "bg-white/90 border-slate-200 text-slate-900 placeholder:text-slate-400 " +
@@ -415,16 +409,20 @@ export default function AdicionarObra() {
     "dark:bg-slate-900/70 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 " +
     "transition-colors";
 
+  const cardBase =
+    "bg-white/80 dark:bg-slate-950/70 border border-slate-200/70 dark:border-slate-800/80 " +
+    "rounded-2xl shadow-sm md:shadow-md p-4 md:p-6 space-y-4";
+
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto relative pb-14">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="bg-white/80 dark:bg-slate-950/70 border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm md:shadow-md px-4 md:px-8 py-6 md:py-8 space-y-6 md:space-y-8"
-      >
-        {/* ===================== HEADER ===================== */}
-        <div className="flex items-start gap-3">
+    <div className="px-4 md:px-8 py-6 md:py-8">
+      <div className="max-w-6xl mx-auto space-y-6 md:space-y-8 pb-16">
+        {/* HEADER FORA DO CARTÃO */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className="flex items-start gap-3"
+        >
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
             <Building2 className="w-5 h-5" />
           </div>
@@ -433,217 +431,214 @@ export default function AdicionarObra() {
             <h1 className="text-xl md:text-2xl font-semibold text-slate-900 dark:text-slate-50">
               Adicionar Obra
             </h1>
-
             <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
-              Preencha a morada completa. A localização (lat/lon) é obtida
-              automaticamente ao salvar, para facilitar a gestão das equipas em
-              campo.
+              Registe uma nova obra com os dados principais e o endereço
+              completo para facilitar a gestão das equipas em campo.
             </p>
           </div>
-        </div>
+        </motion.div>
 
-        {/* ================= FORM ================= */}
+        {/* FORM EM GRID DE CARTÕES */}
         <motion.form
           onSubmit={handleSubmit}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-          className="space-y-7 md:space-y-9"
+          transition={{ duration: 0.3 }}
+          className="space-y-6 md:space-y-7"
         >
-          {/* IDENTIFICAÇÃO */}
-          <section className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
-                <FileText className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
-                  Identificação
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Dados principais da obra e da empresa responsável.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                  Nome da Obra
-                </label>
-                <input
-                  type="text"
-                  value={form.nomeObra}
-                  onChange={onInput("nomeObra")}
-                  placeholder="Ex: Remodelação Apartamento"
-                  required
-                  className={inputBase}
-                />
+          {/* IDENTIFICAÇÃO + ENDEREÇO EM DUAS COLUNAS */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* IDENTIFICAÇÃO */}
+            <section className={cardBase}>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
+                    Identificação
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Dados principais da obra e da empresa responsável.
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                  Empresa
-                </label>
-                <input
-                  type="text"
-                  value={form.empresa}
-                  readOnly
-                  className={`${inputBase} bg-slate-50/90 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 cursor-not-allowed`}
-                />
-              </div>
-            </div>
-          </section>
-
-          <div className="h-px bg-slate-200/80 dark:bg-slate-800/80" />
-
-          {/* ENDEREÇO */}
-          <section className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
-                <MapPin className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
-                  Endereço
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Morada completa para gerar a localização automática da obra.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-              <div className="col-span-2 md:col-span-2">
-                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                  Código-postal *
-                </label>
-                <div className="relative">
+              <div className="grid grid-cols-1 gap-4 mt-2">
+                <div>
+                  <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                    Nome da Obra
+                  </label>
                   <input
                     type="text"
-                    inputMode="numeric"
-                    value={form.codigo_postal}
-                    onChange={onCodigoPostal}
-                    placeholder="Ex: 1200-123"
+                    value={form.nomeObra}
+                    onChange={onInput("nomeObra")}
+                    placeholder="Ex: Remodelação Apartamento"
                     required
                     className={inputBase}
                   />
-                  {cpLoading && (
-                    <Loader2 className="w-4 h-4 animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                    Empresa
+                  </label>
+                  <input
+                    type="text"
+                    value={form.empresa}
+                    readOnly
+                    className={`${inputBase} bg-slate-50/90 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 cursor-not-allowed`}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* ENDEREÇO */}
+            <section className={cardBase}>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
+                    Endereço
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    A morada completa permite gerar automaticamente a
+                    localização (lat/lon) da obra.
+                  </p>
                 </div>
               </div>
 
-              <div className="col-span-2 md:col-span-2">
-                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                  Nº da Porta *
-                </label>
-                <input
-                  type="text"
-                  value={form.numero}
-                  onChange={onInput("numero")}
-                  placeholder="Ex: 245"
-                  required
-                  className={inputBase}
-                />
-              </div>
-            </div>
-
-            <div className="relative">
-              <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                Rua
-              </label>
-              <input
-                type="text"
-                value={form.rua}
-                onChange={onInput("rua")}
-                placeholder="Ex: Rua da Prata"
-                className={inputBase}
-                autoComplete="off"
-              />
-
-              {/* Sugestões de rua */}
-              {ruaSugestoes.length > 0 && (
-                <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg text-sm dark:bg-slate-900 dark:border-slate-700">
-                  {ruaSugestoes.map((s, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => escolherSugestaoRua(s)}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-slate-800"
-                    >
-                      {s.display_name}
-                    </button>
-                  ))}
-                  {ruaLoading && (
-                    <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      A carregar sugestões…
-                    </div>
-                  )}
+              <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mt-2">
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                    Código-postal *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.codigo_postal}
+                      onChange={onCodigoPostal}
+                      placeholder="Ex: 1200-123"
+                      required
+                      className={inputBase}
+                    />
+                    {cpLoading && (
+                      <Loader2 className="w-4 h-4 animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                    Nº da Porta *
+                  </label>
+                  <input
+                    type="text"
+                    value={form.numero}
+                    onChange={onInput("numero")}
+                    placeholder="Ex: 245"
+                    required
+                    className={inputBase}
+                  />
+                </div>
+              </div>
+
+              <div className="relative mt-3">
                 <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                  Concelho
+                  Rua
                 </label>
                 <input
                   type="text"
-                  value={form.concelho}
-                  onChange={onInput("concelho")}
-                  placeholder="Ex: Lisboa"
+                  value={form.rua}
+                  onChange={onInput("rua")}
+                  placeholder="Ex: Rua da Prata"
                   className={inputBase}
+                  autoComplete="off"
                 />
+
+                {ruaSugestoes.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg text-sm dark:bg-slate-900 dark:border-slate-700">
+                    {ruaSugestoes.map((s, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => escolherSugestaoRua(s)}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-slate-800"
+                      >
+                        {s.display_name}
+                      </button>
+                    ))}
+                    {ruaLoading && (
+                      <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        A carregar sugestões…
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+                <div>
+                  <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                    Concelho
+                  </label>
+                  <input
+                    type="text"
+                    value={form.concelho}
+                    onChange={onInput("concelho")}
+                    placeholder="Ex: Lisboa"
+                    className={inputBase}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                    Distrito
+                  </label>
+                  <input
+                    type="text"
+                    value={form.distrito}
+                    onChange={onInput("distrito")}
+                    placeholder="Ex: Lisboa"
+                    className={inputBase}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
+                    Freguesia
+                  </label>
+                  <input
+                    type="text"
+                    value={form.freguesia}
+                    onChange={onInput("freguesia")}
+                    placeholder="Ex: Santa Maria Maior"
+                    className={inputBase}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
                 <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                  Distrito
+                  Local (livre)
                 </label>
                 <input
                   type="text"
-                  value={form.distrito}
-                  onChange={onInput("distrito")}
-                  placeholder="Ex: Lisboa"
+                  value={form.local}
+                  onChange={onInput("local")}
+                  placeholder="Ex: Almada, Setúbal"
                   className={inputBase}
                 />
               </div>
-
-              <div>
-                <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                  Freguesia
-                </label>
-                <input
-                  type="text"
-                  value={form.freguesia}
-                  onChange={onInput("freguesia")}
-                  placeholder="Ex: Santa Maria Maior"
-                  className={inputBase}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
-                Local (livre)
-              </label>
-              <input
-                type="text"
-                value={form.local}
-                onChange={onInput("local")}
-                placeholder="Ex: Almada, Setúbal"
-                className={inputBase}
-              />
-            </div>
-          </section>
-
-          <div className="h-px bg-slate-200/80 dark:bg-slate-800/80" />
+            </section>
+          </div>
 
           {/* DATAS & EQUIPE */}
-          <section className="space-y-4">
+          <section className={cardBase}>
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
                 <Calendar className="w-4 h-4" />
@@ -658,7 +653,7 @@ export default function AdicionarObra() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
               <div>
                 <label className="block text-xs md:text-sm font-medium mb-1 text-slate-700 dark:text-slate-200">
                   Data de Início
@@ -704,15 +699,13 @@ export default function AdicionarObra() {
             </div>
           </section>
 
-          <div className="h-px bg-slate-200/80 dark:bg-slate-800/80" />
-
           {/* DESCRIÇÃO */}
-          <section className="space-y-3">
+          <section className={cardBase}>
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
                 <FileText className="w-4 h-4" />
               </div>
-              <div>
+            <div>
                 <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
                   Descrição / Observações
                 </h2>
@@ -731,8 +724,8 @@ export default function AdicionarObra() {
             />
           </section>
 
-          {/* BOTÃO */}
-          <div className="flex justify-end pt-2">
+          {/* FOOTER / BOTÃO */}
+          <div className="flex justify-end pt-1">
             <motion.button
               whileTap={{ scale: 0.97 }}
               type="submit"
@@ -756,7 +749,7 @@ export default function AdicionarObra() {
             </motion.button>
           </div>
         </motion.form>
-      </motion.div>
+      </div>
     </div>
   );
 }

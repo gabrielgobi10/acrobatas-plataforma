@@ -28,16 +28,27 @@ type ObraBase = {
 
 type Relatorio = { obra_id: string; progresso?: number | null };
 type Vinculo = { obra_id: string; status?: string | null };
-type CustoObra = { obra_id: string; valor?: number | null; data?: string | null; mes?: string | null };
+type CustoObra = {
+  obra_id: string;
+  valor?: number | null;
+  data?: string | null;
+  mes?: string | null;
+};
 
 // ===== Helpers =====
 function formatEUR(v: number) {
   return v.toLocaleString("pt-PT", { style: "currency", currency: "EUR" });
 }
+
 function ym(dt?: string | null) {
   if (!dt) return "—";
-  try { return new Date(dt).toISOString().slice(0, 7); } catch { return "—"; }
+  try {
+    return new Date(dt).toISOString().slice(0, 7);
+  } catch {
+    return "—";
+  }
 }
+
 function serieMinima(base: Record<string, number>, meses = 3) {
   const map = new Map(Object.entries(base));
   const now = new Date();
@@ -83,23 +94,40 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
   const [obrasMes, setObrasMes] = useState<{ mes: string; obras: number }[]>([]);
   const [custosMes, setCustosMes] = useState<{ mes: string; custo: number }[]>([]);
   const [obrasAtivas, setObrasAtivas] = useState<
-    (ObraBase & { profissionais: number; custo: number; progresso: number; status: string })[]
+    (ObraBase & {
+      profissionais: number;
+      custo: number;
+      progresso: number;
+      status: string;
+    })[]
   >([]);
 
   const [graficoIndex, setGraficoIndex] = useState(0);
   const graficosMobile = ["Ações", "Obras", "Custos"];
 
-  // ✅ Handler mobile-safe: navega + dispara callback do pai
-  const handleQuick = useCallback((section: QuickSection) => {
-    switch (section) {
-      case "novos-pedidos":            navigate("/empresa/pedidos/novos"); break;
-      case "obras-ativas":             navigate("/empresa/obras/ativas"); break;
-      case "documentos-profissionais": navigate("/empresa/documentos/profissionais"); break;
-      case "equipes-em-campo":         navigate("/empresa/profissionais/equipes"); break;
-      default: break;
-    }
-    onQuickAction?.(section);
-  }, [navigate, onQuickAction]);
+  // navegação rápida
+  const handleQuick = useCallback(
+    (section: QuickSection) => {
+      switch (section) {
+        case "novos-pedidos":
+          navigate("/empresa/pedidos/novos");
+          break;
+        case "obras-ativas":
+          navigate("/empresa/obras/ativas");
+          break;
+        case "documentos-profissionais":
+          navigate("/empresa/documentos/profissionais");
+          break;
+        case "equipes-em-campo":
+          navigate("/empresa/profissionais/equipes");
+          break;
+        default:
+          break;
+      }
+      onQuickAction?.(section);
+    },
+    [navigate, onQuickAction]
+  );
 
   useEffect(() => {
     (async () => {
@@ -109,8 +137,17 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       if (!rpc.error) empresaId = (rpc.data as string) ?? null;
       if (!empresaId) empresaId = (user?.user_metadata?.empresa_id as string) || null;
       if (!empresaId) {
-        setStats({ obrasAtivas: 0, profissionais: 0, custoTotal: 0, entregasPrazo: 0, obrasAtrasadas: 0 });
-        setObrasAtivas([]); setObrasMes([]); setCustosMes([]); return;
+        setStats({
+          obrasAtivas: 0,
+          profissionais: 0,
+          custoTotal: 0,
+          entregasPrazo: 0,
+          obrasAtrasadas: 0,
+        });
+        setObrasAtivas([]);
+        setObrasMes([]);
+        setCustosMes([]);
+        return;
       }
 
       // 2) Obras da empresa
@@ -183,7 +220,10 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
 
         const base: Record<string, number> = {};
         mapaCustoMes.forEach((v, k) => (base[k] = v));
-        const serie = serieMinima(base, 3).map(({ mes }) => ({ mes, custo: base[mes] ?? 0 }));
+        const serie = serieMinima(base, 3).map(({ mes }) => ({
+          mes,
+          custo: base[mes] ?? 0,
+        }));
         setCustosMes(serie);
       } else {
         setCustosMes([]);
@@ -208,7 +248,9 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       const totalProfsAtivos = ativas.reduce((a, o) => a + (o.profissionais || 0), 0);
       const totalObras = linhas.length;
       const atrasadas = linhas.filter((l) => l.status === "Atrasada").length;
-      const eficiencia = totalObras ? Math.round(((totalObras - atrasadas) / totalObras) * 100) : 0;
+      const eficiencia = totalObras
+        ? Math.round(((totalObras - atrasadas) / totalObras) * 100)
+        : 0;
 
       setStats({
         obrasAtivas: ativas.length,
@@ -226,7 +268,10 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       });
       const baseObras: Record<string, number> = {};
       mapaObrasMes.forEach((v, k) => (baseObras[k] = v));
-      const serieObras = serieMinima(baseObras, 3).map(({ mes }) => ({ mes, obras: baseObras[mes] ?? 0 }));
+      const serieObras = serieMinima(baseObras, 3).map(({ mes }) => ({
+        mes,
+        obras: baseObras[mes] ?? 0,
+      }));
       setObrasMes(serieObras);
     })();
   }, [user?.id, navigate, onQuickAction]);
@@ -237,10 +282,38 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
     t("empresaPainel.nomePadrao");
 
   const KPIs = [
-    { label: "Obras Ativas", value: stats.obrasAtivas, icon: Building2, color: "from-blue-500 to-cyan-500", sub: "Total em execução", link: "/empresa/obras" },
-    { label: "Equipe em Campo", value: stats.profissionais, icon: Users, color: "from-green-500 to-emerald-500", sub: "Profissionais ativos", link: "/empresa/profissionais" },
-    { label: "Custos Totais", value: formatEUR(stats.custoTotal), icon: DollarSign, color: "from-indigo-500 to-purple-500", sub: "Mês atual", link: "/empresa/relatorios" },
-    { label: "Eficiência", value: `${stats.entregasPrazo}%`, icon: CheckCircle2, color: "from-yellow-500 to-orange-500", sub: "Entregas no prazo", link: "/empresa/relatorios" },
+    {
+      label: "Obras Ativas",
+      value: stats.obrasAtivas,
+      icon: Building2,
+      color: "from-blue-500 to-cyan-500",
+      sub: "Total em execução",
+      link: "/empresa/obras",
+    },
+    {
+      label: "Equipe em Campo",
+      value: stats.profissionais,
+      icon: Users,
+      color: "from-emerald-500 to-green-400",
+      sub: "Profissionais ativos",
+      link: "/empresa/profissionais",
+    },
+    {
+      label: "Custos Totais",
+      value: formatEUR(stats.custoTotal),
+      icon: DollarSign,
+      color: "from-indigo-500 to-purple-500",
+      sub: "Mês atual",
+      link: "/empresa/relatorios",
+    },
+    {
+      label: "Eficiência",
+      value: `${stats.entregasPrazo}%`,
+      icon: CheckCircle2,
+      color: "from-amber-400 to-orange-500",
+      sub: "Entregas no prazo",
+      link: "/empresa/relatorios",
+    },
   ];
 
   const MAX_OBRAS = 5;
@@ -249,17 +322,18 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
 
   return (
     <div className="w-full mx-auto px-6 flex flex-col gap-6 max-w-[1180px] 2xl:max-w-[1200px]">
-      {/* HEADER */}
-      <div className="bg-white dark:bg-[#161d27] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-[#1f2a37]">
+      {/* HEADER - mesma cor do sidebar no dark */}
+      <div className="bg-white dark:bg-[#020617] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-slate-800/80">
         <h2 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
           👋 Bem-vindo, {nomeEmpresa}.
         </h2>
         <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
-          {t("empresaPainel.mensagemIntro") || "Acompanhe o desempenho da sua empresa em tempo real."}
+          {t("empresaPainel.mensagemIntro") ||
+            "Acompanhe o desempenho da sua empresa em tempo real."}
         </p>
       </div>
 
-      {/* KPIs MOBILE */}
+      {/* KPIs MOBILE - gradiente, ícone menor */}
       <div className="sm:hidden grid grid-cols-2 gap-3">
         {KPIs.map((kpi, i) => (
           <motion.div
@@ -280,7 +354,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         ))}
       </div>
 
-      {/* KPIs DESKTOP */}
+      {/* KPIs DESKTOP - gradiente como antes */}
       <section className="hidden sm:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-5">
         {KPIs.map((kpi, i) => (
           <motion.div
@@ -290,13 +364,17 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
             className={`cursor-pointer rounded-2xl p-5 sm:p-6 text-white shadow-md bg-gradient-to-br ${kpi.color} relative overflow-hidden hover:shadow-lg transition-all`}
           >
             <div className="absolute inset-0 bg-white/10 dark:bg-white/5 backdrop-blur-[1px]" />
-            <div className="flex justify-between items-start relative z-10">
+            <div className="flex justify-between items-start relative z-10 gap-3">
               <div>
                 <p className="text-xs sm:text-sm opacity-90">{kpi.label}</p>
-                <h2 className="text-xl sm:text-3xl font-bold mt-1 leading-tight">{kpi.value}</h2>
-                <p className="text-[11px] sm:text-xs opacity-80 mt-1">{kpi.sub}</p>
+                <h2 className="text-xl sm:text-3xl font-bold mt-1 leading-tight">
+                  {kpi.value}
+                </h2>
+                <p className="text-[11px] sm:text-xs opacity-80 mt-1">
+                  {kpi.sub}
+                </p>
               </div>
-              <kpi.icon className="w-6 h-6 sm:w-8 sm:h-8 opacity-80" />
+              <kpi.icon className="w-6 h-6 sm:w-8 sm:h-8 opacity-90" />
             </div>
           </motion.div>
         ))}
@@ -304,7 +382,11 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
 
       {/* GRÁFICOS DESKTOP */}
       <div className="hidden sm:block overflow-x-hidden">
-        <GraficosPainel obrasMes={obrasMes} custosMes={custosMes} onQuickAction={handleQuick} />
+        <GraficosPainel
+          obrasMes={obrasMes}
+          custosMes={custosMes}
+          onQuickAction={handleQuick}
+        />
       </div>
 
       {/* GRÁFICOS MOBILE */}
@@ -315,13 +397,25 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         <div className="w-full relative flex items-center justify-center min-h-[240px] overflow-hidden">
           <div className="w-full">
             {graficoIndex === 0 && (
-              <GraficosPainel obrasMes={obrasMes} custosMes={[]} onQuickAction={handleQuick} />
+              <GraficosPainel
+                obrasMes={obrasMes}
+                custosMes={[]}
+                onQuickAction={handleQuick}
+              />
             )}
             {graficoIndex === 1 && (
-              <GraficosPainel obrasMes={[]} custosMes={custosMes} onQuickAction={handleQuick} />
+              <GraficosPainel
+                obrasMes={[]}
+                custosMes={custosMes}
+                onQuickAction={handleQuick}
+              />
             )}
             {graficoIndex === 2 && (
-              <GraficosPainel obrasMes={[]} custosMes={[]} onQuickAction={handleQuick} />
+              <GraficosPainel
+                obrasMes={[]}
+                custosMes={[]}
+                onQuickAction={handleQuick}
+              />
             )}
           </div>
         </div>
@@ -331,15 +425,17 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
               key={idx}
               onClick={() => setGraficoIndex(idx)}
               className={`w-2.5 h-2.5 rounded-full transition-all ${
-                graficoIndex === idx ? "bg-blue-500 scale-110" : "bg-gray-300 dark:bg-gray-600 hover:bg-blue-400"
+                graficoIndex === idx
+                  ? "bg-blue-500 scale-110"
+                  : "bg-gray-300 dark:bg-gray-600 hover:bg-blue-400"
               }`}
             />
           ))}
         </div>
       </div>
 
-      {/* OBRAS ATIVAS */}
-      <div className="bg-white dark:bg-[#161d27] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-[#1f2a37]">
+      {/* OBRAS ATIVAS - mesma cor do sidebar no dark */}
+      <div className="bg-white dark:bg-[#020617] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-slate-800/80">
         <h3 className="font-semibold mb-4 text-gray-700 dark:text-gray-200 flex items-center gap-2 text-base sm:text-lg">
           <Building2 className="w-5 h-5 text-blue-500" /> Obras Ativas
         </h3>
@@ -347,18 +443,27 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         {/* Mobile: cards (máx. 5) */}
         <div className="sm:hidden space-y-3">
           {obrasVisiveis.map((obra) => (
-            <div key={obra.id} className="rounded-xl border border-gray-200 dark:border-[#1f2a37] bg-white/70 dark:bg-[#0f1520] p-3">
+            <div
+              key={obra.id}
+              className="rounded-xl border border-gray-200 dark:border-slate-800/80 bg-white/70 dark:bg-[#0f1520] p-3"
+            >
               <div className="flex items-center justify-between">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">{obra.nome || "—"}</p>
+                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                  {obra.nome || "—"}
+                </p>
                 <span className="px-2 py-0.5 rounded-full text-[11px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
                   {obra.status}
                 </span>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {obra.local || "—"} · {obra.profissionais} prof · {formatEUR(obra.custo || 0)}
+                {obra.local || "—"} · {obra.profissionais} prof ·{" "}
+                {formatEUR(obra.custo || 0)}
               </p>
-              <div className="mt-2 w-full bg-gray-200 dark:bg-[#1f2a37] h-2 rounded-full overflow-hidden">
-                <div className="h-2 bg-blue-500" style={{ width: `${obra.progresso || 0}%` }} />
+              <div className="mt-2 w-full bg-gray-200 dark:bg-slate-800/80 h-2 rounded-full overflow-hidden">
+                <div
+                  className="h-2 bg-blue-500"
+                  style={{ width: `${obra.progresso || 0}%` }}
+                />
               </div>
               <button
                 onClick={() => navigate(`/empresa/obras/${obra.id}`)}
@@ -374,8 +479,8 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         {obrasAtivas.length > 0 && (
           <div className="hidden sm:block md:overflow-x-visible">
             <table className="w-full text-sm border-b mb-2">
-              <thead className="sticky top-0 bg-white dark:bg-[#161d27]">
-                <tr className="text-left text-gray-500 dark:text-gray-400 border-b dark:border-[#1f2a37]">
+              <thead className="sticky top-0 bg-white dark:bg-[#020617]">
+                <tr className="text-left text-gray-500 dark:text-gray-400 border-b dark:border-slate-800/80">
                   <th className="pb-2 font-medium">Obra</th>
                   <th className="pb-2 font-medium">Local</th>
                   <th className="pb-2 font-medium">Profissionais</th>
@@ -387,14 +492,29 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
               </thead>
               <tbody>
                 {obrasVisiveis.map((obra) => (
-                  <motion.tr key={obra.id} whileHover={{ backgroundColor: "rgba(59,130,246,0.05)" }} className="border-b last:border-none dark:border-[#1f2a37]">
-                    <td className="py-3 font-medium text-gray-800 dark:text-gray-100">{obra.nome || "—"}</td>
-                    <td className="text-gray-700 dark:text-gray-300">{obra.local || "—"}</td>
-                    <td className="text-gray-700 dark:text-gray-300">{obra.profissionais}</td>
-                    <td className="text-gray-700 dark:text-gray-300 tabular-nums">{formatEUR(obra.custo || 0)}</td>
+                  <motion.tr
+                    key={obra.id}
+                    whileHover={{ backgroundColor: "rgba(59,130,246,0.05)" }}
+                    className="border-b last:border-none dark:border-slate-800/80"
+                  >
+                    <td className="py-3 font-medium text-gray-800 dark:text-gray-100">
+                      {obra.nome || "—"}
+                    </td>
+                    <td className="text-gray-700 dark:text-gray-300">
+                      {obra.local || "—"}
+                    </td>
+                    <td className="text-gray-700 dark:text-gray-300">
+                      {obra.profissionais}
+                    </td>
+                    <td className="text-gray-700 dark:text-gray-300 tabular-nums">
+                      {formatEUR(obra.custo || 0)}
+                    </td>
                     <td>
-                      <div className="w-28 lg:w-36 bg-gray-200 dark:bg-[#1f2a37] h-2 rounded-full overflow-hidden">
-                        <div className="h-2 bg-blue-500" style={{ width: `${obra.progresso || 0}%` }} />
+                      <div className="w-28 lg:w-36 bg-gray-200 dark:bg-slate-800/80 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="h-2 bg-blue-500"
+                          style={{ width: `${obra.progresso || 0}%` }}
+                        />
                       </div>
                     </td>
                     <td>
@@ -423,7 +543,6 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
           </p>
         )}
 
-        {/* Botão "Ver todas" quando há mais de 5 */}
         {temMaisQueMax && (
           <div className="mt-3 flex justify-center">
             <button

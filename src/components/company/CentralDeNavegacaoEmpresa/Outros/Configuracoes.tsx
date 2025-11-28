@@ -1,574 +1,463 @@
-// src/pages/Outros/ConfiguracoesConta.tsx
-import { useEffect, useMemo, useState } from "react";
+// src/components/company/CentralDeNavegacaoEmpresa/Outros/ConfiguracoesConta.tsx
+"use client";
+
+import { useEffect, useState } from "react";
 import {
-  Save, ShieldCheck, Moon, Sun, Languages, Bell, Lock, Eye, EyeOff,
-  Smartphone, LogOut, User, MonitorCog, KeyRound, AlertCircle
+  Shield,
+  Lock,
+  Globe2,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
+
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 
-/** ========== Tipos ========== */
-type Theme = "claro" | "escuro" | "auto";
-type Size = "compacto" | "padrao" | "amplo";
+/* =========================
+   Tipos
+========================= */
 
-type Prefs = {
-  idioma: "pt" | "en" | "es";
-  tema: Theme;
-  tamanho: Size;
-  notificacoesEmail: boolean;
-  notificacoesSistema: boolean;
-  somNotificacoes: boolean;
-  resumoDiario: boolean;
-  animacoesUI: boolean;
-  layoutCompacto: boolean;
-  dicasAtivas: boolean;
-  doisFatores: boolean;
+type PasswordState = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
 };
 
-type UserProfile = { nome: string; email: string; cargo: string; };
-
-type SessionInfo = {
-  id: string;
-  dispositivo: string;
-  local: string;
-  ultimoAcesso: string;
-  atual?: boolean;
+type Feedback = {
+  type: "success" | "error" | null;
+  message: string;
 };
 
-/** ========== UI helpers ========== */
-function Card({
-  title, subtitle, icon, children,
-}: { title: string; subtitle?: string; icon?: JSX.Element; children: React.ReactNode }) {
-  return (
-    <div
-      className="
-        rounded-2xl border shadow-sm p-5
-        bg-white/90 border-slate-200
-        dark:bg-slate-900/70 dark:border-slate-700 backdrop-blur-[2px]
-      "
-    >
-      <div className="flex items-center gap-3 mb-3">
-        {icon}
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">{title}</h2>
-          {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
+/* =========================
+   Componente principal
+========================= */
 
-function SectionRow({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>;
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-      {children}
-    </label>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  const { className = "", ...rest } = props;
-  return (
-    <input
-      {...rest}
-      className={[
-        "w-full rounded-lg px-3 py-2 text-sm outline-none",
-        "border bg-white text-slate-900",
-        "focus:ring-2 focus:ring-blue-500/30",
-        "border-slate-300",
-        "dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700",
-        "placeholder:text-slate-400 dark:placeholder:text-slate-500",
-        className,
-      ].join(" ")}
-    />
-  );
-}
-
-function Select({
-  children, className = "", ...rest
-}: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      {...rest}
-      className={[
-        "w-full rounded-lg px-3 py-2 text-sm outline-none",
-        "border bg-white text-slate-900",
-        "focus:ring-2 focus:ring-blue-500/30",
-        "border-slate-300",
-        "dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700",
-        className,
-      ].join(" ")}
-    >
-      {children}
-    </select>
-  );
-}
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={checked}
-      onClick={() => onChange(!checked)}
-      className={[
-        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-        checked ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-600",
-      ].join(" ")}
-    >
-      <span
-        className={[
-          "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
-          checked ? "translate-x-6" : "translate-x-1",
-        ].join(" ")}
-      />
-    </button>
-  );
-}
-
-/** ========== Página ========== */
 export default function ConfiguracoesConta() {
-  // Perfil
-  const [perfil, setPerfil] = useState<UserProfile>({ nome: "", email: "", cargo: "" });
+  const { user } = useAuth();
+  const { i18n } = useTranslation();
 
-  // Preferências
-  const [pref, setPref] = useState<Prefs>({
-    idioma: "pt",
-    tema: "auto",
-    tamanho: "padrao",
-    notificacoesEmail: true,
-    notificacoesSistema: true,
-    somNotificacoes: false,
-    resumoDiario: false,
-    animacoesUI: true,
-    layoutCompacto: false,
-    dicasAtivas: true,
-    doisFatores: false,
+  const [passwordForm, setPasswordForm] = useState<PasswordState>({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState<Feedback>({
+    type: null,
+    message: "",
   });
 
-  // Segurança
-  const [pwdOpen, setPwdOpen] = useState(false);
-  const [pwd, setPwd] = useState({ atual: "", nova: "", confirmar: "" });
-  const [pwdShow, setPwdShow] = useState({ atual: false, nova: false, confirmar: false });
-  const [saving, setSaving] = useState(false);
+  const [language, setLanguage] = useState<"pt-PT" | "en">("pt-PT");
+  const [langLoading, setLangLoading] = useState(false);
+  const [langFeedback, setLangFeedback] = useState<Feedback>({
+    type: null,
+    message: "",
+  });
 
-  // Sessões (mock)
-  const [sessoes] = useState<SessionInfo[]>([
-    { id: "s1", dispositivo: "Windows • Chrome", local: "Lisboa, PT", ultimoAcesso: "Hoje 16:22", atual: true },
-    { id: "s2", dispositivo: "iPhone • Safari", local: "Porto, PT", ultimoAcesso: "Ontem 11:05" },
-  ]);
+  /* =========================
+     Efeito: carregar idioma salvo
+  ========================= */
 
-  /** ====== Carregar dados existentes (Supabase) ====== */
   useEffect(() => {
-    (async () => {
-      try {
-        const u = (await supabase.auth.getUser()).data.user;
-        if (u) {
-          setPerfil({
-            nome: (u.user_metadata as any)?.full_name ?? "",
-            email: u.email ?? "",
-            cargo: (u.user_metadata as any)?.role ?? "",
-          });
-        }
-        const { data } = await supabase.from("user_prefs").select("*").single();
-        if (data) setPref((p) => ({ ...p, ...data }));
-      } catch {
-        // ignora se tabela não existir no ambiente local
-      }
-    })();
-  }, []);
-
-  /** ====== Aplicar tema (e escutar mudanças do sistema) ====== */
-  useEffect(() => {
-    const root = document.documentElement;
-    const mm = window.matchMedia?.("(prefers-color-scheme: dark)");
-
-    const apply = (dark: boolean) => {
-      if (dark) root.classList.add("dark");
-      else root.classList.remove("dark");
-    };
-
-    if (pref.tema === "auto") apply(!!mm?.matches);
-    else apply(pref.tema === "escuro");
-
-    const listener = (e: MediaQueryListEvent) => {
-      if (pref.tema === "auto") apply(e.matches);
-    };
-    mm?.addEventListener?.("change", listener);
-    return () => mm?.removeEventListener?.("change", listener);
-  }, [pref.tema]);
-
-  /** ====== Handlers ====== */
-  const handlePref = <K extends keyof Prefs>(k: K, v: Prefs[K]) => setPref((p) => ({ ...p, [k]: v }));
-  const handlePerfil = <K extends keyof UserProfile>(k: K, v: UserProfile[K]) => setPerfil((p) => ({ ...p, [k]: v }));
-
-  const progressoConfiguracao = useMemo(() => {
-    let filled = 0;
-    if (perfil.nome) filled++;
-    if (perfil.cargo) filled++;
-    if (pref.idioma) filled++;
-    if (pref.tema) filled++;
-    const total = 4;
-    return Math.round((filled / total) * 100);
-  }, [perfil, pref]);
-
-  async function salvarTudo() {
-    setSaving(true);
     try {
-      const userRes = await supabase.auth.getUser();
-      if (userRes.data.user) {
-        await supabase.auth.updateUser({ data: { full_name: perfil.nome, role: perfil.cargo } });
+      const stored = window.localStorage.getItem(
+        "acrobatas_idioma_empresa"
+      ) as "pt-PT" | "en" | null;
+      if (stored === "pt-PT" || stored === "en") {
+        setLanguage(stored);
+        i18n.changeLanguage(stored === "pt-PT" ? "pt" : "en");
       }
-      await supabase.from("user_prefs").upsert({
-        idioma: pref.idioma,
-        tema: pref.tema,
-        tamanho: pref.tamanho,
-        notificacoesEmail: pref.notificacoesEmail,
-        notificacoesSistema: pref.notificacoesSistema,
-        somNotificacoes: pref.somNotificacoes,
-        resumoDiario: pref.resumoDiario,
-        animacoesUI: pref.animacoesUI,
-        layoutCompacto: pref.layoutCompacto,
-        dicasAtivas: pref.dicasAtivas,
-        doisFatores: pref.doisFatores,
-      });
-      alert("Configurações salvas ✅");
-    } catch (e: any) {
-      alert("Erro ao salvar: " + e.message);
-    } finally {
-      setSaving(false);
+    } catch {
+      // se der erro, ignora
     }
+  }, [i18n]);
+
+  /* =========================
+     Handlers — Password
+  ========================= */
+
+  function handlePasswordChange(
+    field: keyof PasswordState,
+    value: string
+  ) {
+    setPasswordForm((prev) => ({ ...prev, [field]: value }));
+    setPasswordFeedback({ type: null, message: "" });
   }
 
-  async function alterarSenha() {
-    if (!pwd.nova || pwd.nova !== pwd.confirmar) {
-      alert("A nova palavra-passe não confere.");
+  async function handleSubmitPassword(e: React.FormEvent) {
+    e.preventDefault();
+
+    setPasswordFeedback({ type: null, message: "" });
+
+    const { currentPassword, newPassword, confirmPassword } = passwordForm;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordFeedback({
+        type: "error",
+        message: "Preenche todos os campos.",
+      });
       return;
     }
+
+    if (newPassword.length < 8) {
+      setPasswordFeedback({
+        type: "error",
+        message: "A nova palavra-passe deve ter pelo menos 8 caracteres.",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordFeedback({
+        type: "error",
+        message: "A confirmação não coincide com a nova palavra-passe.",
+      });
+      return;
+    }
+
+    if (!user?.email) {
+      setPasswordFeedback({
+        type: "error",
+        message:
+          "Não foi possível identificar o utilizador. Tenta fazer login novamente.",
+      });
+      return;
+    }
+
+    setPasswordLoading(true);
+
     try {
-      await supabase.auth.updateUser({ password: pwd.nova });
-      setPwd({ atual: "", nova: "", confirmar: "" });
-      setPwdOpen(false);
-      alert("Palavra-passe alterada ✅");
-    } catch (e: any) {
-      alert("Erro ao alterar: " + e.message);
+      // 1) Revalidar palavra-passe atual
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        setPasswordFeedback({
+          type: "error",
+          message: "A palavra-passe atual está incorreta.",
+        });
+        setPasswordLoading(false);
+        return;
+      }
+
+      // 2) Atualizar palavra-passe
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        setPasswordFeedback({
+          type: "error",
+          message:
+            "Não foi possível atualizar a palavra-passe. Tenta novamente.",
+        });
+        setPasswordLoading(false);
+        return;
+      }
+
+      setPasswordFeedback({
+        type: "success",
+        message: "Palavra-passe atualizada com sucesso.",
+      });
+
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+    } catch (err) {
+      setPasswordFeedback({
+        type: "error",
+        message:
+          "Ocorreu um erro inesperado ao atualizar a palavra-passe.",
+      });
+    } finally {
+      setPasswordLoading(false);
     }
   }
 
-  async function encerrarTodasSessoes() {
+  /* =========================
+     Handlers — Idioma
+  ========================= */
+
+  async function handleChangeLanguage(
+    newLang: "pt-PT" | "en"
+  ) {
+    if (newLang === language) return;
+
+    setLangFeedback({ type: null, message: "" });
+    setLangLoading(true);
+
     try {
-      // @ts-ignore
-      await supabase.auth.signOut({ scope: "global" });
-      alert("Todas as sessões foram encerradas.");
-    } catch {
-      alert("Não foi possível encerrar agora.");
+      i18n.changeLanguage(newLang === "pt-PT" ? "pt" : "en");
+
+      window.localStorage.setItem(
+        "acrobatas_idioma_empresa",
+        newLang
+      );
+
+      // OPCIONAL: persistir no Supabase (ajusta para o teu schema real)
+      if (user?.id) {
+        await supabase
+          .from("usuarios_empresa")
+          .update({ idioma_preferido: newLang })
+          .eq("user_id", user.id);
+      }
+
+      setLanguage(newLang);
+      setLangFeedback({
+        type: "success",
+        message: "Idioma atualizado com sucesso.",
+      });
+    } catch (err) {
+      setLangFeedback({
+        type: "error",
+        message:
+          "Não foi possível atualizar o idioma. Tenta novamente.",
+      });
+    } finally {
+      setLangLoading(false);
     }
   }
+
+  /* =========================
+     UI Helpers
+  ========================== */
+
+  function renderFeedbackBox(feedback: Feedback) {
+    if (!feedback.type || !feedback.message) return null;
+
+    const isSuccess = feedback.type === "success";
+
+    return (
+      <div
+        className={`
+          mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm
+          ${
+            isSuccess
+              ? "border-emerald-500/40 bg-emerald-500/5 text-emerald-600 dark:border-emerald-400/40 dark:bg-emerald-400/5 dark:text-emerald-300"
+              : "border-rose-500/40 bg-rose-500/5 text-rose-600 dark:border-rose-400/40 dark:bg-rose-400/5 dark:text-rose-300"
+          }
+        `}
+      >
+        {isSuccess ? (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+        ) : (
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        )}
+        <p>{feedback.message}</p>
+      </div>
+    );
+  }
+
+  /* =========================
+     Render
+  ========================== */
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Título + progresso */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
-          ⚙️ Configurações da Conta
-        </h1>
-        <div className="mt-3">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Configuração geral da experiência do utilizador.
+    <div className="px-4 py-6 md:px-8 md:py-8 space-y-6">
+      {/* Título */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="flex items-center gap-2 text-lg md:text-2xl font-semibold text-gray-900 dark:text-gray-50">
+            <Shield className="h-5 w-5 md:h-6 md:w-6 text-blue-500 dark:text-blue-400" />
+            Segurança & Idioma
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Gere a segurança da sua conta e as preferências de idioma.
           </p>
-          <div className="mt-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden">
-            <div
-              className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
-              style={{ width: `${progressoConfiguracao}%` }}
-            />
-          </div>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {progressoConfiguracao}% concluído
-          </span>
         </div>
       </div>
 
-      <div className="flex flex-col gap-6">
-        {/* Perfil */}
-        <Card
-          title="Dados do Utilizador"
-          subtitle="Informações básicas do responsável pela conta."
-          icon={<User className="text-blue-500" />}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Card: Alterar palavra-passe */}
+        <motion.div
+          layout
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-gray-200/70 bg-white shadow-sm dark:border-white/10 dark:bg-[#020617] p-4 md:p-5 flex flex-col"
         >
-          <SectionRow>
-            <div>
-              <Label>Nome completo</Label>
-              <Input
-                value={perfil.nome}
-                onChange={(e) => handlePerfil("nome", e.target.value)}
-                placeholder="Ex.: João Silva"
-              />
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">
+              <Lock className="h-4 w-4" />
             </div>
             <div>
-              <Label>E-mail</Label>
-              <Input value={perfil.email} readOnly disabled className="opacity-70" />
-            </div>
-            <div>
-              <Label>Cargo / Função</Label>
-              <Input
-                value={perfil.cargo}
-                onChange={(e) => handlePerfil("cargo", e.target.value)}
-                placeholder="Engenheiro, Diretor, RH…"
-              />
-            </div>
-          </SectionRow>
-        </Card>
-
-        {/* Preferências */}
-        <Card
-          title="Preferências de Interface"
-          subtitle="Idioma, tema e usabilidade do painel."
-          icon={<MonitorCog className="text-blue-500" />}
-        >
-          <SectionRow>
-            <div>
-              <Label><Languages className="inline w-4 h-4 mr-1" /> Idioma do sistema</Label>
-              <Select
-                value={pref.idioma}
-                onChange={(e) => handlePref("idioma", e.target.value as Prefs["idioma"])}
-              >
-                <option value="pt">Português</option>
-                <option value="en">English</option>
-                <option value="es">Español</option>
-              </Select>
-            </div>
-            <div>
-              <Label><Sun className="inline w-4 h-4 mr-1" /> Tema da interface</Label>
-              <Select
-                value={pref.tema}
-                onChange={(e) => handlePref("tema", e.target.value as Theme)}
-              >
-                <option value="auto">Automático (seguir o sistema)</option>
-                <option value="claro">Claro</option>
-                <option value="escuro">Escuro</option>
-              </Select>
-            </div>
-            <div>
-              <Label><Moon className="inline w-4 h-4 mr-1" /> Tamanho / densidade</Label>
-              <Select
-                value={pref.tamanho}
-                onChange={(e) => handlePref("tamanho", e.target.value as Size)}
-              >
-                <option value="compacto">Compacto</option>
-                <option value="padrao">Padrão</option>
-                <option value="amplo">Amplo</option>
-              </Select>
-            </div>
-          </SectionRow>
-
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <ToggleItem label="Animações de interface" checked={pref.animacoesUI}
-              onChange={(v) => handlePref("animacoesUI", v)} />
-            <ToggleItem label="Layout compacto" checked={pref.layoutCompacto}
-              onChange={(v) => handlePref("layoutCompacto", v)} />
-            <ToggleItem label="Mostrar dicas no sistema" checked={pref.dicasAtivas}
-              onChange={(v) => handlePref("dicasAtivas", v)} />
-          </div>
-        </Card>
-
-        {/* Notificações */}
-        <Card title="Notificações" subtitle="Escolha como quer ser avisado." icon={<Bell className="text-blue-500" />}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <ToggleItem label="Receber notificações por e-mail" checked={pref.notificacoesEmail}
-              onChange={(v) => handlePref("notificacoesEmail", v)} />
-            <ToggleItem label="Receber notificações dentro do sistema" checked={pref.notificacoesSistema}
-              onChange={(v) => handlePref("notificacoesSistema", v)} />
-            <ToggleItem label="Som de alertas" checked={pref.somNotificacoes}
-              onChange={(v) => handlePref("somNotificacoes", v)} />
-            <ToggleItem label="Resumo diário de atividades" checked={pref.resumoDiario}
-              onChange={(v) => handlePref("resumoDiario", v)} />
-          </div>
-        </Card>
-
-        {/* Segurança */}
-        <Card title="Segurança da Conta" subtitle="Proteja o acesso e gerencie sessões."
-          icon={<ShieldCheck className="text-blue-500" />}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl border p-4 border-slate-200 dark:border-slate-700">
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">
-                <KeyRound className="inline w-4 h-4 mr-1" /> Palavra-passe
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-                Use pelo menos 8 caracteres.
-              </p>
-              <button
-                onClick={() => setPwdOpen(true)}
-                className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-              >
+              <h2 className="text-sm md:text-base font-semibold text-gray-900 dark:text-gray-50">
                 Alterar palavra-passe
+              </h2>
+              <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
+                Atualiza regularmente para manter a sua conta segura.
+              </p>
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleSubmitPassword}
+            className="mt-2 space-y-3"
+          >
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                Palavra-passe atual
+              </label>
+              <input
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={(e) =>
+                  handlePasswordChange(
+                    "currentPassword",
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-[#020617] dark:text-gray-50"
+                autoComplete="current-password"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                Nova palavra-passe
+              </label>
+              <input
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) =>
+                  handlePasswordChange(
+                    "newPassword",
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-[#020617] dark:text-gray-50"
+                autoComplete="new-password"
+              />
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                Mínimo de 8 caracteres. Use uma combinação de letras e
+                números.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                Confirmar nova palavra-passe
+              </label>
+              <input
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) =>
+                  handlePasswordChange(
+                    "confirmPassword",
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-[#020617] dark:text-gray-50"
+                autoComplete="new-password"
+              />
+            </div>
+
+            {renderFeedbackBox(passwordFeedback)}
+
+            <div className="pt-1">
+              <button
+                type="submit"
+                disabled={passwordLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:hover:bg-blue-400"
+              >
+                {passwordLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    A atualizar…
+                  </>
+                ) : (
+                  "Guardar nova palavra-passe"
+                )}
               </button>
             </div>
+          </form>
+        </motion.div>
 
-            <div className="rounded-xl border p-4 border-slate-200 dark:border-slate-700">
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">
-                <Smartphone className="inline w-4 h-4 mr-1" /> Verificação em 2 passos (2FA)
+        {/* Card: Idioma */}
+        <motion.div
+          layout
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-gray-200/70 bg-white shadow-sm dark:border-white/10 dark:bg-[#020617] p-4 md:p-5 flex flex-col"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">
+              <Globe2 className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm md:text-base font-semibold text-gray-900 dark:text-gray-50">
+                Idioma do painel
+              </h2>
+              <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
+                Escolhe o idioma preferido para a interface.
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-                Ative uma etapa extra no login. *A aplicação efetiva é no backend.*
-              </p>
-              <Toggle checked={pref.doisFatores} onChange={(v) => handlePref("doisFatores", v)} />
             </div>
           </div>
 
-          <div className="mt-4 rounded-xl border p-4 border-slate-200 dark:border-slate-700">
-            <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">
-              <Lock className="inline w-4 h-4 mr-1" /> Sessões ativas
-            </p>
-            <div className="space-y-2">
-              {sessoes.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between text-sm bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3"
+          <div className="space-y-3 mt-1">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                Idioma
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleChangeLanguage("pt-PT")}
+                  disabled={langLoading}
+                  className={`flex flex-col items-start rounded-xl border px-3 py-2.5 text-left text-xs md:text-sm transition ${
+                    language === "pt-PT"
+                      ? "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-500/10 dark:text-blue-200"
+                      : "border-gray-200 bg-gray-50 text-gray-700 hover:border-blue-300 hover:bg-blue-50/70 dark:border-white/10 dark:bg-[#020617] dark:text-gray-200 dark:hover:border-blue-400/60 dark:hover:bg-blue-500/5"
+                  }`}
                 >
-                  <div className="text-slate-700 dark:text-slate-300">
-                    <span className="font-medium">{s.dispositivo}</span> • {s.local}
-                    <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
-                      Último acesso: {s.ultimoAcesso}
-                    </span>
-                    {s.atual && (
-                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-blue-600 text-white">
-                        Atual
-                      </span>
-                    )}
-                  </div>
-                  {!s.atual && <button className="text-rose-500 hover:underline text-xs">Encerrar</button>}
-                </div>
-              ))}
+                  <span className="font-semibold">
+                    Português (Portugal)
+                  </span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                    Recomendado
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleChangeLanguage("en")}
+                  disabled={langLoading}
+                  className={`flex flex-col items-start rounded-xl border px-3 py-2.5 text-left text-xs md:text-sm transition ${
+                    language === "en"
+                      ? "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-500/10 dark:text-blue-200"
+                      : "border-gray-200 bg-gray-50 text-gray-700 hover:border-blue-300 hover:bg-blue-50/70 dark:border-white/10 dark:bg-[#020617] dark:text-gray-200 dark:hover:border-blue-400/60 dark:hover:bg-blue-500/5"
+                  }`}
+                >
+                  <span className="font-semibold">English</span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                    Interface em inglês
+                  </span>
+                </button>
+              </div>
             </div>
-            <button onClick={encerrarTodasSessoes} className="mt-3 inline-flex items-center gap-2 text-sm text-rose-500">
-              <LogOut className="w-4 h-4" /> Encerrar todas as sessões
-            </button>
+
+            {renderFeedbackBox(langFeedback)}
+
+            {langLoading && (
+              <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                A guardar preferências de idioma…
+              </div>
+            )}
+
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+              O idioma afeta apenas a interface da plataforma, não o
+              conteúdo das obras ou documentos enviados.
+            </p>
           </div>
-        </Card>
-
-        {/* Ações */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={salvarTudo}
-            disabled={saving}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg transition disabled:opacity-70"
-          >
-            <Save className="w-4 h-4" />
-            {saving ? "Salvando…" : "Salvar alterações"}
-          </button>
-          <button onClick={() => window.location.reload()} className="text-sm text-slate-600 dark:text-slate-300 hover:underline">
-            Restaurar padrão
-          </button>
-        </div>
+        </motion.div>
       </div>
-
-      {/* Modal Alterar Senha */}
-      <AnimatePresence>
-        {pwdOpen && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[90] grid place-items-center p-4"
-          >
-            <motion.div
-              initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
-              className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5"
-            >
-              <h3 className="text-lg font-semibold text-white mb-1">Alterar palavra-passe</h3>
-              <p className="text-xs text-slate-400 mb-4 flex items-center gap-1">
-                <AlertCircle className="w-4 h-4" /> A nova palavra-passe deve ter pelo menos 8 caracteres.
-              </p>
-
-              <div className="space-y-3">
-                <div>
-                  <Label>Palavra-passe atual</Label>
-                  <div className="relative">
-                    <Input
-                      type={pwdShow.atual ? "text" : "password"}
-                      value={pwd.atual}
-                      onChange={(e) => setPwd({ ...pwd, atual: e.target.value })}
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setPwdShow((s) => ({ ...s, atual: !s.atual }))}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
-                    >
-                      {pwdShow.atual ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <Label>Nova palavra-passe</Label>
-                  <div className="relative">
-                    <Input
-                      type={pwdShow.nova ? "text" : "password"}
-                      value={pwd.nova}
-                      onChange={(e) => setPwd({ ...pwd, nova: e.target.value })}
-                      placeholder="********"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setPwdShow((s) => ({ ...s, nova: !s.nova }))}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
-                    >
-                      {pwdShow.nova ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <Label>Confirmar nova palavra-passe</Label>
-                  <div className="relative">
-                    <Input
-                      type={pwdShow.confirmar ? "text" : "password"}
-                      value={pwd.confirmar}
-                      onChange={(e) => setPwd({ ...pwd, confirmar: e.target.value })}
-                      placeholder="********"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setPwdShow((s) => ({ ...s, confirmar: !s.confirmar }))}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
-                    >
-                      {pwdShow.confirmar ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 flex items-center justify-end gap-2">
-                <button onClick={() => setPwdOpen(false)} className="px-3 py-2 rounded-lg bg-white/10 text-slate-200">
-                  Cancelar
-                </button>
-                <button onClick={alterarSenha} className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
-                  Salvar nova senha
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/** ========== Itens com toggle ========== */
-function ToggleItem({
-  label, checked, onChange,
-}: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div
-      className="
-        flex items-center justify-between rounded-xl px-4 py-3
-        border bg-slate-50/80 border-slate-200
-        dark:bg-slate-800/60 dark:border-slate-700
-      "
-    >
-      <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
-      <Toggle checked={checked} onChange={onChange} />
     </div>
   );
 }

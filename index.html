@@ -6,10 +6,6 @@
     <!-- 🔹 Ícone -->
     <link rel="icon" type="image/png" href="/Design sem nome (40).png" />
 
-    <!-- 🔹 Manifest PWA -->
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#1d4ed8" />
-
     <!-- 🔹 Viewport travado + notch safe -->
     <meta
       name="viewport"
@@ -23,7 +19,7 @@
     />
 
     <!-- 🔹 Cor da barra do navegador (Android/iOS Safari) -->
-    <meta name="theme-color" content="#1d4ed8" />
+    <meta name="theme-color" content="#0f172a" />
 
     <!-- 🔹 Ajuste extra para iPhone fullscreen -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -33,60 +29,46 @@
     <title>Acrobatas Workforce - Conectando Profissionais e Empresas</title>
 
     <style>
-      html,
-      body {
+      html, body {
         margin: 0;
         padding: 0;
-
-        /* 👉 importante: altura dinâmica em vez de 100% */
-        min-height: 100dvh;
-
-        /* mesma cor do fundo base que colocámos no CSS global */
-        background-color: #1d4ed8;
-
-        overflow-x: hidden;
-        overscroll-behavior-x: none;
+        height: 100%;
+        background-color: #0f172a;
+        overflow-x: hidden;            /* 🔒 sem scroll lateral */
+        overscroll-behavior-x: none;   /* 🔒 evita navegação por overscroll */
         font-family: "Inter", sans-serif;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
 
+        /* ⚠️ isto permite só gestos "tap/scroll", evita duplo toque virar zoom */
         touch-action: pan-y;
         -webkit-text-size-adjust: 100%;
       }
 
+      /* 🔹 rolagem vertical normal com inércia no iOS */
       body {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
       }
 
-      /* root ocupando a tela toda */
+      /* 🔹 root ocupando a tela toda */
       #root {
-        min-height: 100dvh;
+        height: 100%;
         isolation: isolate;
-        background-color: transparent; /* quem pinta é o React (gradients) */
       }
 
-      /* Impede zoom automático em inputs < 16px */
-      input,
-      select,
-      textarea,
-      button {
-        font-size: 16px !important;
-      }
+      /* 🔹 Impede zoom automático em inputs < 16px */
+      input, select, textarea, button { font-size: 16px !important; }
+
+      /* ❗ Recomendo NÃO desabilitar seleção globalmente.
+         Se ainda quiser, aplique só onde precisa. */
+      /* -webkit-user-select: none; user-select: none; */
     </style>
 
     <!-- 🔒 Impede pinch e duplo toque no Safari -->
     <script>
-      document.addEventListener(
-        "gesturestart",
-        (e) => e.preventDefault(),
-        { passive: false }
-      );
-      document.addEventListener(
-        "dblclick",
-        (e) => e.preventDefault(),
-        { passive: false }
-      );
+      document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
+      document.addEventListener("dblclick",     (e) => e.preventDefault(), { passive: false });
     </script>
   </head>
 
@@ -98,6 +80,7 @@
       (function () {
         const isIOS = /iP(ad|hone|od)/.test(navigator.userAgent);
 
+        // 1) Edge-guard: captura swipe a partir da borda esquerda
         const edge = document.createElement("div");
         edge.id = "edge-guard";
         Object.assign(edge.style, {
@@ -105,7 +88,7 @@
           left: "0",
           top: "0",
           bottom: "0",
-          width: "16px",
+          width: "16px",        // pode subir p/ 20–24px se ainda escapar
           zIndex: "9999",
           background: "transparent",
           pointerEvents: "auto",
@@ -114,16 +97,13 @@
         document.body.appendChild(edge);
 
         let startX = 0;
-        const onStart = (e) => {
-          startX = e.touches[0].clientX;
-        };
-        const onMove = (e) => {
-          if (startX < 16) e.preventDefault();
-        };
+        const onStart = (e) => { startX = e.touches[0].clientX; };
+        const onMove  = (e) => { if (startX < 16) e.preventDefault(); };
 
         edge.addEventListener("touchstart", onStart, { passive: false });
-        edge.addEventListener("touchmove", onMove, { passive: false });
+        edge.addEventListener("touchmove",  onMove,  { passive: false });
 
+        // 2) Trava de histórico (opcional, mas eficaz no dashboard)
         if (isIOS && "pushState" in history) {
           const relock = () => history.pushState(null, "", location.href);
           window.addEventListener("load", relock);

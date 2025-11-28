@@ -85,7 +85,8 @@ export default function Notificacoes() {
   const [profile, setProfile] = useState<{ id: string; empresa_id: string | null } | null>(null);
   const [notis, setNotis] = useState<Noti[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [tab, setTab] = useState<TabKey>("todos");
+  // abre por padrão em "Não lidas"
+  const [tab, setTab] = useState<TabKey>("nao_lidas");
 
   /* Perfil mínimo */
   useEffect(() => {
@@ -181,8 +182,8 @@ export default function Notificacoes() {
         transition={{ type: "tween", duration: 0.25 }}
         className="relative mx-auto w-full max-w-[1000px]"
       >
-        {/** STICKY SÓ NO MOBILE; NO DESKTOP É STATIC (não sobrepõe a lista) */}
-        <div className="sticky top-12 sm:top-14 md:static z-20 bg-transparent">
+        {/* HEADER + TABS (agora estático, não fica por cima da lista no mobile) */}
+        <div className="bg-transparent mb-1">
           {/* BLOCO 1 — TÍTULO */}
           <div className="px-4 sm:px-6 pt-2 pb-3 flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
@@ -216,6 +217,7 @@ export default function Notificacoes() {
           </div>
 
           {/* BLOCO 2 — FILTROS */}
+
           {/* Mobile: segmentado 3 colunas com larguras iguais */}
           <div className="px-4 sm:px-6 pb-2 md:hidden">
             <div className="rounded-full p-1 bg-slate-500/10 dark:bg-slate-800/60 flex gap-1">
@@ -224,8 +226,9 @@ export default function Notificacoes() {
                   key={t.key}
                   onClick={() => setTab(t.key)}
                   className={`flex-1 appearance-none text-center text-sm py-2 rounded-full transition
-                    ${tab === t.key ? "bg-sky-600 text-white shadow-sm"
-                                     : "bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-500/10"}`}
+                    ${tab === t.key
+                      ? "bg-sky-600 text-white shadow-sm"
+                      : "bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-500/10"}`}
                   aria-pressed={tab === t.key}
                 >
                   {t.label}
@@ -252,9 +255,6 @@ export default function Notificacoes() {
           </div>
         </div>
 
-        {/* Espaço mínimo pós-header (garante folga no mobile quando sticky) */}
-        <div className="mt-2 md:mt-0" />
-
         {/* Lista */}
         {loading ? (
           <div className="flex items-center gap-2 px-4 py-6 text-sm opacity-80">
@@ -262,7 +262,11 @@ export default function Notificacoes() {
             Carregando…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="px-4 py-10 text-sm opacity-70">Nenhuma notificação encontrada.</div>
+          <div className="px-4 py-10 text-sm opacity-70">
+            {tab === "nao_lidas"
+              ? "Sem novas notificações. Tudo em dia ✅"
+              : "Nenhuma notificação encontrada."}
+          </div>
         ) : (
           <ul className="divide-y dark:divide-slate-800/60 divide-zinc-200/60">
             {filtered.map((n) => {

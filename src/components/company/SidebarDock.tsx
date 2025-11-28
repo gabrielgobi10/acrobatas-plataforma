@@ -19,6 +19,7 @@ type Props = {
   onSelectSection: (section: string) => void;
   onCloseMobile?: () => void;
   logoSrc?: string;
+  activeSection?: string;
 };
 
 const LOGO_SRC = "/Design sem nome (44).png";
@@ -27,6 +28,7 @@ export default function SidebarDock({
   onSelectSection,
   onCloseMobile,
   logoSrc,
+  activeSection,
 }: Props) {
   const { t, i18n } = useTranslation();
   const { logout } = useAuth();
@@ -45,13 +47,13 @@ export default function SidebarDock({
     return () => window.removeEventListener("resize", handle);
   }, []);
 
-  // Nenhum grupo abre automaticamente
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     pedidos: false,
     obras: false,
     profissionais: false,
     relatorios: false,
     documentos: false,
+    faturas: false, // 👈 NOVO GRUPO
   });
 
   const toggleGroup = useCallback(
@@ -60,7 +62,6 @@ export default function SidebarDock({
     []
   );
 
-  // helper i18n com fallback
   const tt = useCallback(
     (keys: any, fallback: string) => {
       const list = Array.isArray(keys) ? keys : [keys];
@@ -125,6 +126,15 @@ export default function SidebarDock({
           { label: "Meus Documentos", section: "documentos-meus" },
         ],
       },
+      // 👇 NOVO BLOCO: FATURAS
+      {
+        id: "faturas",
+        icon: FileText,
+        title: "Faturas",
+        items: [
+          { label: "Faturas", section: "faturas" }, // vai chamar FaturasEmpresa no container
+        ],
+      },
     ],
     [tt]
   );
@@ -137,11 +147,11 @@ export default function SidebarDock({
       className={`fixed top-0 z-[9999] ${
         isRTL ? "right-0" : "left-0"
       } h-[100dvh] flex flex-col
-        bg-white dark:bg-[#020617]
-        border-r border-slate-200/80 dark:border-slate-800/80`}
+        bg-slate-50 dark:bg-[#020617]
+        border-r border-slate-200/80 dark:border-slate-900`}
     >
-      {/* TOPO: LOGO CENTRALIZADA, BEM CLEAN */}
-      <div className="shrink-0 border-b border-slate-200/70 dark:border-slate-800/80">
+      {/* TOPO: LOGO */}
+      <div className="shrink-0 border-b border-slate-200/70 dark:border-slate-900">
         <div className="h-16 flex items-center justify-center px-4">
           <img
             src={logoSrc || LOGO_SRC}
@@ -164,32 +174,31 @@ export default function SidebarDock({
                 aria-expanded={isOpen}
                 aria-controls={`group-${s.id}`}
                 className={`flex items-center justify-between w-full px-2.5 py-2.5 rounded-xl
-                  text-left
-                  transition-colors duration-150
+                  text-left transition-colors duration-150
                   ${
                     isOpen
-                      ? "bg-slate-100/90 dark:bg-slate-900"
+                      ? "bg-slate-100/90 dark:bg-[#050816]"
                       : "bg-transparent"
                   }
-                  hover:bg-slate-100/80 dark:hover:bg-slate-900`}
+                  hover:bg-slate-100/80 dark:hover:bg-[#050816]`}
               >
                 <div className="flex items-center gap-3">
                   <span
                     className="flex h-8 w-8 items-center justify-center rounded-full
-                    bg-slate-100 dark:bg-slate-900
-                    border border-slate-200/80 dark:border-slate-700"
+                    bg-slate-100 dark:bg-[#050816]
+                    border border-slate-200/80 dark:border-slate-800"
                   >
-                    <s.icon className="w-4 h-4 text-slate-700 dark:text-slate-200" />
+                    <s.icon className="w-4 h-4 text-slate-700 dark:text-sky-300" />
                   </span>
-                  <span className="font-medium text-[14px] text-slate-800 dark:text-slate-100">
+                  <span className="font-medium text-[14px] text-slate-800 dark:text-slate-50">
                     {s.title}
                   </span>
                 </div>
 
                 {isOpen ? (
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                  <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                 ) : (
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                  <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                 )}
               </button>
 
@@ -204,22 +213,29 @@ export default function SidebarDock({
                     transition={{ duration: 0.16, ease: "easeOut" }}
                     className="mt-1 space-y-0.5 overflow-hidden pl-11"
                   >
-                    {s.items.map((item) => (
-                      <li key={item.section}>
-                        <button
-                          onClick={() => {
-                            onSelectSection(item.section);
-                            if (isMobile) onCloseMobile?.();
-                          }}
-                          className="w-full text-left text-[13px] py-1.5 rounded-md px-2
-                            text-slate-600 hover:text-sky-600 hover:bg-slate-100
-                            dark:text-slate-400 dark:hover:text-sky-300 dark:hover:bg-slate-900
-                            transition-colors duration-120"
-                        >
-                          {item.label}
-                        </button>
-                      </li>
-                    ))}
+                    {s.items.map((item) => {
+                      const isActive = item.section === activeSection;
+
+                      return (
+                        <li key={item.section}>
+                          <button
+                            onClick={() => {
+                              onSelectSection(item.section);
+                              if (isMobile) onCloseMobile?.();
+                            }}
+                            className={`w-full text-left text-[13px] py-1.5 rounded-md px-2
+                              transition-colors duration-120
+                              ${
+                                isActive
+                                  ? "bg-sky-50 text-sky-700 font-medium shadow-sm dark:bg-sky-500/15 dark:text-sky-100 dark:border dark:border-sky-500/40"
+                                  : "text-slate-600 hover:text-sky-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-sky-200 dark:hover:bg-[#050816]"
+                              }`}
+                          >
+                            {item.label}
+                          </button>
+                        </li>
+                      );
+                    })}
                   </motion.ul>
                 )}
               </AnimatePresence>
@@ -229,7 +245,7 @@ export default function SidebarDock({
       </div>
 
       {/* RODAPÉ */}
-      <div className="border-t border-slate-200/80 dark:border-slate-800/80 px-3 py-3 mt-auto">
+      <div className="border-t border-slate-200/80 dark:border-slate-900 px-3 py-3 mt-auto">
         <div className="flex flex-col gap-1.5">
           <button
             onClick={() => {
@@ -239,7 +255,7 @@ export default function SidebarDock({
             className="flex items-center gap-2 text-[13px]
               rounded-lg px-3 py-2
               text-slate-700 dark:text-slate-200
-              hover:bg-slate-100 dark:hover:bg-slate-900
+              hover:bg-slate-100 dark:hover:bg-[#050816]
               transition-colors duration-120"
           >
             <Settings className="w-4 h-4" />
