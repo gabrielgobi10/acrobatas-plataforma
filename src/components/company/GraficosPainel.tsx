@@ -250,7 +250,37 @@ function GraficosPainelBase({
     [custosData, filtroMes]
   );
 
-  // só mostra “nenhum dado” se tiver pelo menos 1 ponto e todos forem 0
+  // ---------- ghost data (primeira vez, sem nenhum registo) ----------
+  const ghostMeses = useMemo(
+    () => selMeses.map((idx) => MESES[idx]),
+    [selMeses]
+  );
+
+  const ghostObrasData = useMemo(
+    () =>
+      ghostMeses.map((mes, idx) => ({
+        mes,
+        obras: idx + 1, // 1,2,3 (só para dar forma ao gráfico)
+      })),
+    [ghostMeses]
+  );
+
+  const ghostCustosData = useMemo(
+    () =>
+      ghostMeses.map((mes, idx) => ({
+        mes,
+        custo: (idx + 1) * 1000, // 1000, 2000, 3000
+      })),
+    [ghostMeses]
+  );
+
+  const isEmptyObras = obrasFiltradas.length === 0;
+  const isEmptyCustos = custosFiltrados.length === 0;
+
+  const chartObrasData = isEmptyObras ? ghostObrasData : obrasFiltradas;
+  const chartCustosData = isEmptyCustos ? ghostCustosData : custosFiltrados;
+
+  // só mostra “nenhum dado” se tiver pelo menos 1 ponto real e todos forem 0
   const nenhumDadoObras =
     obrasFiltradas.length > 0 && obrasFiltradas.every((x) => x.obras === 0);
   const nenhumDadoCustos =
@@ -298,12 +328,20 @@ function GraficosPainelBase({
     );
   };
 
-  const EmptyState = ({ icon, text }) => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 font-medium">
+  const EmptyState = ({
+    icon,
+    text,
+  }: {
+    icon: React.ReactNode;
+    text: string;
+  }) => (
+    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 font-medium pointer-events-none">
       <div className="rounded-full p-2 bg-gray-50 border border-gray-200 mb-2 dark:bg-white/5 dark:border-white/10">
         {icon}
       </div>
-      <span className="text-gray-500 dark:text-gray-400 text-xs">{text}</span>
+      <span className="text-gray-500 dark:text-gray-400 text-xs text-center max-w-[180px]">
+        {text}
+      </span>
     </div>
   );
 
@@ -332,9 +370,13 @@ function GraficosPainelBase({
               </>
             }
           >
-            <div className="h-[220px] w-full overflow-hidden relative">
+            <div
+              className={`h-[220px] w-full overflow-hidden relative ${
+                isEmptyObras ? "opacity-60" : ""
+              }`}
+            >
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={obrasFiltradas} barCategoryGap="20%">
+                <BarChart data={chartObrasData} barCategoryGap="20%">
                   <defs>
                     <linearGradient
                       id={gradIdObras}
@@ -368,22 +410,28 @@ function GraficosPainelBase({
                     axisLine={false}
                     tick={{ fill: "#6b7280" }}
                   />
-                  <Tooltip content={<CustomTooltip />} />
+                  {!isEmptyObras && <Tooltip content={<CustomTooltip />} />}
                   <Bar
                     dataKey="obras"
                     fill={`url(#${gradIdObras})`}
                     radius={[12, 12, 10, 10]}
-                    isAnimationActive={!obrasAnimouRef.current}
+                    isAnimationActive={
+                      !obrasAnimouRef.current && !isEmptyObras
+                    }
                   />
                 </BarChart>
               </ResponsiveContainer>
 
-              {nenhumDadoObras && (
+              {(isEmptyObras || nenhumDadoObras) && (
                 <EmptyState
                   icon={
                     <Sparkles className="w-5 h-5 text-blue-500 dark:text-blue-400" />
                   }
-                  text="Nenhuma obra registada ainda."
+                  text={
+                    isEmptyObras
+                      ? "Assim que criar obras, este gráfico será atualizado automaticamente."
+                      : "Nenhuma obra registada ainda."
+                  }
                 />
               )}
             </div>
@@ -398,9 +446,13 @@ function GraficosPainelBase({
               </>
             }
           >
-            <div className="h-[220px] w-full overflow-hidden relative">
+            <div
+              className={`h-[220px] w-full overflow-hidden relative ${
+                isEmptyCustos ? "opacity-60" : ""
+              }`}
+            >
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={custosFiltrados}>
+                <AreaChart data={chartCustosData}>
                   <defs>
                     <linearGradient
                       id={gradIdCustos}
@@ -433,7 +485,7 @@ function GraficosPainelBase({
                     axisLine={false}
                     tick={{ fill: "#6b7280" }}
                   />
-                  <Tooltip content={<CustomTooltip />} />
+                  {!isEmptyCustos && <Tooltip content={<CustomTooltip />} />}
                   <Area
                     type="monotone"
                     dataKey="custo"
@@ -444,17 +496,23 @@ function GraficosPainelBase({
                     dot={false}
                     activeDot={{ r: 3 }}
                     fill={`url(#${gradIdCustos})`}
-                    isAnimationActive={!custosAnimouRef.current}
+                    isAnimationActive={
+                      !custosAnimouRef.current && !isEmptyCustos
+                    }
                   />
                 </AreaChart>
               </ResponsiveContainer>
 
-              {nenhumDadoCustos && (
+              {(isEmptyCustos || nenhumDadoCustos) && (
                 <EmptyState
                   icon={
                     <Sparkles className="w-5 h-5 text-purple-500 dark:text-purple-400" />
                   }
-                  text="Nenhum custo registado ainda."
+                  text={
+                    isEmptyCustos
+                      ? "Quando registrar custos das obras, verá a evolução aqui."
+                      : "Nenhum custo registado ainda."
+                  }
                 />
               )}
             </div>
@@ -658,9 +716,13 @@ function GraficosPainelBase({
           )}
 
           {tab === "obras" && (
-            <div className="h-[200px] w-full overflow-hidden relative">
+            <div
+              className={`h-[200px] w-full overflow-hidden relative ${
+                isEmptyObras ? "opacity-60" : ""
+              }`}
+            >
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={obrasFiltradas} barCategoryGap="22%">
+                <BarChart data={chartObrasData} barCategoryGap="22%">
                   <defs>
                     <linearGradient
                       id={`${gradIdObras}-m`}
@@ -695,31 +757,41 @@ function GraficosPainelBase({
                     axisLine={false}
                     tick={{ fill: "#6b7280" }}
                   />
-                  <Tooltip content={<CustomTooltip />} />
+                  {!isEmptyObras && <Tooltip content={<CustomTooltip />} />}
                   <Bar
                     dataKey="obras"
                     fill={`url(#${gradIdObras}-m)`}
                     radius={[8, 8, 6, 6]}
-                    isAnimationActive={!obrasAnimouRef.current}
+                    isAnimationActive={
+                      !obrasAnimouRef.current && !isEmptyObras
+                    }
                   />
                 </BarChart>
               </ResponsiveContainer>
 
-              {nenhumDadoObras && (
+              {(isEmptyObras || nenhumDadoObras) && (
                 <EmptyState
                   icon={
                     <Sparkles className="w-5 h-5 text-blue-500 dark:text-blue-400" />
                   }
-                  text="Nenhuma obra registada ainda."
+                  text={
+                    isEmptyObras
+                      ? "Crie a primeira obra para ver este gráfico ganhar vida."
+                      : "Nenhuma obra registada ainda."
+                  }
                 />
               )}
             </div>
           )}
 
           {tab === "custos" && (
-            <div className="h-[200px] w-full overflow-hidden relative">
+            <div
+              className={`h-[200px] w-full overflow-hidden relative ${
+                isEmptyCustos ? "opacity-60" : ""
+              }`}
+            >
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={custosFiltrados}>
+                <AreaChart data={chartCustosData}>
                   <defs>
                     <linearGradient
                       id={`${gradIdCustos}-m`}
@@ -753,7 +825,7 @@ function GraficosPainelBase({
                     axisLine={false}
                     tick={{ fill: "#6b7280" }}
                   />
-                  <Tooltip content={<CustomTooltip />} />
+                  {!isEmptyCustos && <Tooltip content={<CustomTooltip />} />}
                   <Area
                     type="monotone"
                     dataKey="custo"
@@ -764,17 +836,23 @@ function GraficosPainelBase({
                     dot={false}
                     activeDot={{ r: 3 }}
                     fill={`url(#${gradIdCustos}-m)`}
-                    isAnimationActive={!custosAnimouRef.current}
+                    isAnimationActive={
+                      !custosAnimouRef.current && !isEmptyCustos
+                    }
                   />
                 </AreaChart>
               </ResponsiveContainer>
 
-              {nenhumDadoCustos && (
+              {(isEmptyCustos || nenhumDadoCustos) && (
                 <EmptyState
                   icon={
                     <Sparkles className="w-5 h-5 text-purple-500 dark:text-purple-400" />
                   }
-                  text="Nenhum custo registado ainda."
+                  text={
+                    isEmptyCustos
+                      ? "Quando começar a lançar custos, este gráfico mostrará a evolução mês a mês."
+                      : "Nenhum custo registado ainda."
+                  }
                 />
               )}
             </div>

@@ -15,7 +15,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 import SidebarProfissional from "./SidebarProfissional";
 import PainelProfissional from "./PainelProfissional";
@@ -79,13 +79,20 @@ try {
 export const ProfessionalDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [profile, setProfile] = useState<any>(null);
   const [theme, setTheme] = useState<"light" | "dark">(
     (typeof window !== "undefined" &&
       (localStorage.getItem("theme") as "light" | "dark")) || "dark"
   );
-  const [activePage, setActivePage] = useState<string>("painel");
+  const [activePage, setActivePage] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("prof_active_page");
+      return stored || "painel";
+    }
+    return "painel";
+  });
   const [showNotifications, setShowNotifications] = useState(false);
   const [profissionalId, setProfissionalId] = useState<string | null>(null);
   const [perfilCompleto, setPerfilCompleto] = useState<boolean>(true);
@@ -146,6 +153,38 @@ export const ProfessionalDashboard = () => {
     fetchProfissional();
   }, [user]);
 
+  // 🔁 Sincronizar aba com URL **só se ainda não existir página salva**
+  useEffect(() => {
+    const path = location.pathname || "";
+
+    let hasStored = false;
+    try {
+      if (typeof window !== "undefined") {
+        hasStored = !!localStorage.getItem("prof_active_page");
+      }
+    } catch {
+      hasStored = false;
+    }
+
+    if (hasStored) return; // já estamos confiando no localStorage
+
+    let pageFromPath: string | null = null;
+    if (path.includes("vagas-disponiveis")) {
+      pageFromPath = "vagas";
+    } else if (path.includes("candidaturas")) {
+      pageFromPath = "candidaturas";
+    }
+
+    if (pageFromPath) {
+      setActivePage(pageFromPath);
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("prof_active_page", pageFromPath);
+        }
+      } catch {}
+    }
+  }, [location.pathname]);
+
   // 🔔 Fechar dropdown de notificações
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -159,6 +198,11 @@ export const ProfessionalDashboard = () => {
   }, []);
 
   const handleLogout = () => {
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("prof_active_page");
+      }
+    } catch {}
     logout();
     navigate("/");
   };
@@ -166,6 +210,11 @@ export const ProfessionalDashboard = () => {
   const safeSetActivePage = (page: string) => {
     setActivePage(page);
     setIsMobileMenuOpen(false);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("prof_active_page", page);
+      }
+    } catch {}
   };
 
   const renderContent = () => {
@@ -180,11 +229,17 @@ export const ProfessionalDashboard = () => {
           />
         );
       case "obras_ativas":
-        return <ObrasAtivas />;
+        return (
+          <ObrasAtivas onIrParaVagas={() => safeSetActivePage("vagas")} />
+        );
       case "obras_relatorios":
         return <RelatoriosDoDia />;
       case "obras_presencas":
-        return <FaltasPresencas />;
+        return (
+          <FaltasPresencas
+            onIrParaObrasAtivas={() => safeSetActivePage("obras_ativas")}
+          />
+        );
       case "obras_historico":
         return <HistoricoObras />;
       case "financeiro_ganhos":
@@ -241,7 +296,7 @@ export const ProfessionalDashboard = () => {
 
   return (
     <div
-      className={`min-h-screen transition-all duration-700 ${
+      className={`flex flex-col min-h-[100dvh] transition-all duration-700 ${
         theme === "dark"
           ? "bg-gradient-to-b from-[#0b1221] to-[#101b33] text-gray-100"
           : "bg-gradient-to-b from-[#e9eef6] to-[#f8fafc] text-gray-800"
@@ -275,7 +330,7 @@ export const ProfessionalDashboard = () => {
             </div>
           </div>
 
-          {/* Navegação desktop */}
+          {/* Navegação desktop (topo) */}
           <nav className="hidden md:flex gap-6 text-sm font-medium">
             {[
               ["painel", "Painel"],
@@ -337,56 +392,69 @@ export const ProfessionalDashboard = () => {
         </div>
       </header>
 
-      {/* NAV MOBILE (tabs inferiores) */}
-      <motion.div
-        initial={{ y: -10, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.4 }}
-        className={`md:hidden flex justify-between px-3 py-2 border-b backdrop-blur-md ${
-          theme === "dark"
-            ? "bg-slate-900/70 border-slate-800/50"
-            : "bg-white/70 border-gray-200/70"
-        }`}
-      >
-        {[
-          { key: "painel", label: "Painel", icon: LayoutDashboard },
-          { key: "vagas", label: "Vagas", icon: Briefcase },
-          { key: "candidaturas", label: "Candidaturas", icon: FileText },
-          { key: "perfil", label: "Perfil", icon: User },
-          { key: "batepapo", label: "Chat", icon: MessageSquare },
-        ].map(({ key, label, icon: Icon }) => {
-          const isActive = activePage === key;
-          return (
-            <button
-              key={key}
-              onClick={() => safeSetActivePage(key)}
-              className={`relative flex flex-col items-center text-[11px] font-medium transition ${
-                isActive ? "text-sky-400" : "text-gray-400 hover:text-blue-400"
-              }`}
-            >
-              {isActive && (
-                <motion.span
-                  layoutId="activeNavPill"
-                  className="absolute inset-0 bg-sky-400/10 rounded-xl"
-                  transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                />
-              )}
-              <Icon className="w-5 h-5 mb-0.5 relative z-10" />
-              <span className="relative z-10">{label}</span>
-            </button>
-          );
-        })}
-      </motion.div>
+      {/* ÁREA PRINCIPAL (desktop + mobile) */}
+      <div className="flex-1 w-full">
+        {/* DESKTOP */}
+        <div className="hidden md:flex h-full">
+          <SidebarProfissional
+            onSelectSection={safeSetActivePage}
+            activeSection={activePage}
+          />
+          <main className="flex-1 px-6 py-8 flex justify-center ml-64 transition-all">
+            <div className="w-full max-w-7xl space-y-8">{renderContent()}</div>
+          </main>
+        </div>
 
-      {/* DESKTOP */}
-      <div className="hidden md:flex">
-        <SidebarProfissional
-          onSelectSection={safeSetActivePage}
-          activeSection={activePage}
-        />
-        <main className="flex-1 px-6 py-8 flex justify-center ml-64 transition-all">
-          <div className="w-full max-w-7xl space-y-8">{renderContent()}</div>
-        </main>
+        {/* MOBILE */}
+        <div className="md:hidden flex flex-col h-full">
+          {/* Conteúdo scrollável (tipo app) */}
+          <div className="flex-1 px-4 py-4 overflow-y-auto">
+            {renderContent()}
+          </div>
+
+          {/* NAV MOBILE (tabs inferiores) */}
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className={`flex justify-between px-3 py-2 border-t backdrop-blur-md safe-bottom ${
+              theme === "dark"
+                ? "bg-slate-950/90 border-slate-800/70"
+                : "bg-white/90 border-gray-200/80"
+            }`}
+          >
+            {[
+              { key: "painel", label: "Painel", icon: LayoutDashboard },
+              { key: "vagas", label: "Vagas", icon: Briefcase },
+              { key: "candidaturas", label: "Candidaturas", icon: FileText },
+              { key: "perfil", label: "Perfil", icon: User },
+              { key: "batepapo", label: "Chat", icon: MessageSquare },
+            ].map(({ key, label, icon: Icon }) => {
+              const isActive = activePage === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => safeSetActivePage(key)}
+                  className={`relative flex flex-col items-center text-[11px] font-medium transition ${
+                    isActive
+                      ? "text-sky-400"
+                      : "text-gray-400 hover:text-blue-400"
+                  }`}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="activeNavPill"
+                      className="absolute inset-0 bg-sky-400/10 rounded-xl"
+                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    />
+                  )}
+                  <Icon className="w-5 h-5 mb-0.5 relative z-10" />
+                  <span className="relative z-10">{label}</span>
+                </button>
+              );
+            })}
+          </motion.div>
+        </div>
       </div>
 
       {/* MOBILE MENU (drawer lateral) */}
@@ -435,9 +503,6 @@ export const ProfessionalDashboard = () => {
           </>
         )}
       </AnimatePresence>
-
-      {/* CONTEÚDO MOBILE */}
-      <div className="md:hidden px-4 py-6">{renderContent()}</div>
     </div>
   );
 };

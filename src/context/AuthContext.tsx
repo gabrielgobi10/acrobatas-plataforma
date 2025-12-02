@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
       if (loginError || !loginData.user)
-        throw new Error("E-mail ou senha incorretos.");
+        throw new Error(loginError?.message || "E-mail ou senha incorretos.");
 
       const authUser = loginData.user;
 
@@ -104,24 +104,72 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!nome || !email || !senha)
         throw new Error("Preencha todos os campos obrigatórios.");
 
+      const tipoNormalizado = normalizarTipo(tipo);
+
+      // 1) Criar utilizador no Supabase Auth
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password: senha.trim(),
         options: {
           data: {
             nome: nome.trim(),
-            tipo: tipo.trim().toLowerCase(),
+            tipo: tipoNormalizado,
           },
         },
       });
 
-      if (authErr || !authData.user)
-        throw new Error("Erro ao criar conta no Supabase Auth.");
+      if (authErr || !authData.user) {
+        console.error("Erro Supabase Auth:", authErr);
+        throw new Error(
+          authErr?.message || "Erro ao criar conta no Supabase Auth."
+        );
+      }
 
-      console.log("✅ Conta criada no Supabase Auth:", authData.user);
-      console.log("📡 Metadados enviados:", authData.user.user_metadata);
+      const authUser = authData.user;
 
-      return authData.user;
+      console.log("✅ Conta criada no Supabase Auth:", authUser);
+      console.log("📡 Metadados enviados:", authUser.user_metadata);
+
+      // 2) Criar registro correspondente na tabela `usuarios`
+      const { data: usuarioData, error: usuarioErr } = await supabase
+        .from("usuarios")
+        .insert({
+          nome: nome.trim(),
+          email: email.trim().toLowerCase(),
+          tipo_usuario: tipoNormalizado,
+          auth_id: authUser.id,
+          // campo `senha` fica null de propósito
+        })
+        .select("id, nome, tipo_usuario, email, auth_id")
+        .single();
+
+      if (usuarioErr) {
+        console.error("⚠️ Erro ao criar registro em `usuarios`:", usuarioErr);
+        throw new Error("Conta criada, mas falha ao salvar o usuário interno.");
+      }
+
+      console.log("✅ Registro criado em `usuarios`:", usuarioData);
+
+      // 3) Se for PROFISSIONAL, cria também em `profissionais`
+      if (tipoNormalizado === "profissional") {
+        const { error: profErr } = await supabase.from("profissionais").insert({
+          auth_id: authUser.id,
+          nome: nome.trim(),
+          email: email.trim().toLowerCase(),
+          status: "ativo", // mesmo que a função antiga usava
+        });
+
+        if (profErr) {
+          console.error("⚠️ Erro ao criar registro em `profissionais`:", profErr);
+          // aqui eu não dou throw pra não quebrar o cadastro todo;
+          // depois podemos tratar isso melhor se quiser
+        }
+      }
+
+      // 4) Opcional: termina sessão após cadastro (mantém comportamento antigo)
+      await supabase.auth.signOut();
+
+      return usuarioData;
     } catch (err: any) {
       console.error("⚠️ Erro no registro:", err.message);
       throw new Error(err.message);

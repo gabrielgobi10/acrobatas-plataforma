@@ -249,8 +249,9 @@ export default function CustosMensais() {
       if (cancelled) return;
 
       if (!id) {
+        // Conta ainda sem empresa associada: não mostra erro, só não carrega dados
         setEmpresaId(null);
-        setError("Nenhuma empresa associada ao utilizador.");
+        setError(null);
       } else {
         setEmpresaId(id);
       }
@@ -727,7 +728,7 @@ export default function CustosMensais() {
         </div>
       </div>
 
-      {/* Erro */}
+      {/* Erro real (apenas quando falhar Supabase, não por falta de empresa) */}
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200">
           {error}

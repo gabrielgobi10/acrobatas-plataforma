@@ -5,6 +5,7 @@
     "email": "E-mail",
     "senha": "Senha",
     "nomeCompleto": "Nome completo",
+    "nomeEmpresa": "Nome da empresa",
     "profissional": "Profissional",
     "empresa": "Empresa",
     "tipoUsuario": "Tipo de Usuário",
@@ -21,7 +22,7 @@
     "cancelar": "Cancelar",
     "confirmar": "Confirmar",
     "erroCampos": "Preencha todos os campos obrigatórios.",
-    "erroNome": "Informe seu nome completo.",
+    "erroNome": "Informe o nome.",
     "erroEmail": "E-mail inválido.",
     "erroSenha": "A senha deve ter no mínimo 6 caracteres.",
     "sucessoLogin": "Login realizado com sucesso!",
@@ -271,7 +272,6 @@
     "apagarTexto": "Esta ação não pode ser desfeita.",
     "cancelar": "Cancelar",
     "apagar": "Excluir",
-
     "rapidas": {
       "documentacao": "Documentação necessária",
       "respostaDocumentacao": "Para começar a trabalhar, você deve enviar: exame médico, documento de identidade e comprovante de morada.",
@@ -282,55 +282,13 @@
       "equipa": "Equipe e obras",
       "respostaEquipa": "Atualmente temos equipes ativas em Lisboa, Porto e Braga. Contate a equipe para mais detalhes."
     },
-
     "equipe": {
       "rh": "Recursos Humanos",
       "obras": "Obras",
       "financeiro": "Financeiro"
     }
   },
-"empresaPedidos": {
-  "novoPedido": {
-    "titulo": "Novo Pedido",
-    "descricao": "Preencha as informações abaixo para criar um novo pedido de profissionais.",
-    "obraLocal": "🏗️ Obra & Local",
-    "placeholderLocal": "Digite ou selecione o local da obra",
-    "detalhes": "Detalhes adicionais",
-    "tipoObra": "Tipo de obra",
-    "turno": "Turno de trabalho",
-    "alojamento": "Alojamento e Transporte",
-    "alojamentoFornecido": "Alojamento fornecido",
-    "transporteIncluido": "Transporte incluído",
-    "datas": "Datas",
-    "dataInicio": "Data de início",
-    "dataFim": "Data de término",
-    "dias": "dias de duração",
-    "observacoes": "Observações",
-    "placeholderObs": "Informações adicionais (opcional)",
-    "criarPedido": "Criar Pedido",
-    "enviando": "Enviando...",
-    "erroSalvar": "❌ Erro ao criar o pedido. Tente novamente.",
-    "sucessoSalvar": "✅ Pedido criado com sucesso!"
 
-  },
-  "toast": {
-    "operacaoConcluida": "Operação concluída com sucesso!",
-    "criarNovoPedido": "Criar novo pedido",
-    "verPedidos": "Ver meus pedidos"
-      },
-
-  "estimativa": {
-    "valorEstimado": "Valor estimado",
-    "dia": "dia",
-    "baseAutomatica": "Base calculada automaticamente",
-    "comoFunciona": "Como funciona o cálculo:",
-    "item1": "O valor é definido com base no tipo de profissional e nível de experiência.",
-    "item2": "O sistema utiliza uma média de preço/hora e preço/dia ajustada automaticamente conforme o mercado.",
-    "item3": "O custo total estimado multiplica o valor diário pela duração da obra e quantidade de profissionais.",
-    "ultimaAtualizacao": "Última atualização: Setembro/2025",
-    "fechar": "Fechar",
-    "custoTotal": "Custo total estimado"
-      },
   "empresaPedidos": {
     "titulo": "Pedidos",
     "descricao": "Acompanhe todos os pedidos realizados e seus respectivos status.",
@@ -342,10 +300,11 @@
     "criarObra": "Criar Obra",
     "cancelar": "Cancelar",
     "nenhumPedido": "Nenhum pedido encontrado.",
+    "semEmpresaVinculada": "Nenhuma empresa vinculada.",
     "status": {
-      "emAvaliacao": "Em Avaliação",
-      "pendente": "Pendente",
+      "emAnalise": "Em análise",
       "aprovado": "Aprovado",
+      "recusado": "Recusado",
       "cancelado": "Cancelado"
     },
     "local": "Local",
@@ -353,8 +312,48 @@
     "quantidade": "Quantidade",
     "periodo": "Período",
     "custoTotal": "Custo total",
-    "fechar": "Fechar"
+    "fechar": "Fechar",
 
-  }
+    "novoPedido": {
+      "titulo": "Novo Pedido",
+      "descricao": "Preencha as informações abaixo para criar um novo pedido de profissionais.",
+      "obraLocal": "🏗️ Obra & Local",
+      "placeholderLocal": "Digite ou selecione o local da obra",
+      "detalhes": "Detalhes adicionais",
+      "tipoObra": "Tipo de obra",
+      "turno": "Turno de trabalho",
+      "alojamento": "Alojamento e Transporte",
+      "alojamentoFornecido": "Alojamento fornecido",
+      "transporteIncluido": "Transporte incluído",
+      "datas": "Datas",
+      "dataInicio": "Data de início",
+      "dataFim": "Data de término",
+      "dias": "dias de duração",
+      "observacoes": "Observações",
+      "placeholderObs": "Informações adicionais (opcional)",
+      "criarPedido": "Criar Pedido",
+      "enviando": "Enviando...",
+      "erroSalvar": "❌ Erro ao criar o pedido. Tente novamente.",
+      "sucessoSalvar": "✅ Pedido criado com sucesso!"
+    },
+
+    "toast": {
+      "operacaoConcluida": "Operação concluída com sucesso!",
+      "criarNovoPedido": "Criar novo pedido",
+      "verPedidos": "Ver meus pedidos"
+    },
+
+    "estimativa": {
+      "valorEstimado": "Valor estimado",
+      "dia": "dia",
+      "baseAutomatica": "Base calculada automaticamente",
+      "comoFunciona": "Como funciona o cálculo:",
+      "item1": "O valor é definido com base no tipo de profissional e nível de experiência.",
+      "item2": "O sistema utiliza uma média de preço/hora e preço/dia ajustada automaticamente conforme o mercado.",
+      "item3": "O custo total estimado multiplica o valor diário pela duração da obra e quantidade de profissionais.",
+      "ultimaAtualizacao": "Última atualização: Setembro/2025",
+      "fechar": "Fechar",
+      "custoTotal": "Custo total estimado"
+    }
   }
 }

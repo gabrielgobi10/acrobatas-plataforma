@@ -70,17 +70,26 @@ function useIsMobile(breakpoint = 768) {
 
 function AjustarMapa({ obras }: { obras: Obra[] }) {
   const map = useMap();
+
   useEffect(() => {
     const pts = obras.filter((o) => o.latitude && o.longitude);
+
     if (pts.length > 0) {
+      // quando tem obras: bounds baseado nos pontos
       const bounds = L.latLngBounds(
         pts.map((o) => [o.latitude as number, o.longitude as number])
       );
       map.fitBounds(bounds, { padding: [60, 60] });
     } else {
-      map.setView([39.5, -8], 6); // Portugal “default”
+      // sem nenhuma obra: bounds fixo de Portugal
+      const portugalBounds = L.latLngBounds(
+        [36.96, -9.5], // sudoeste
+        [42.15, -6.0]  // nordeste
+      );
+      map.fitBounds(portugalBounds, { padding: [60, 60] });
     }
   }, [obras, map]);
+
   return null;
 }
 
@@ -312,14 +321,9 @@ export default function MapaObras() {
         <div className="flex items-center justify-center h-full">
           <Loader2 className="animate-spin w-8 h-8 text-blue-600" />
         </div>
-      ) : obras.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full text-gray-500">
-          <Layers className="w-10 h-10 mb-2 text-gray-400" />
-          Nenhuma obra registrada
-        </div>
       ) : (
         <>
-          {/* Mapa isolado e memoizado */}
+          {/* Mapa sempre visível */}
           <MapaCore
             obrasFiltradas={obrasFiltradas}
             bm={bm}
@@ -424,7 +428,7 @@ export default function MapaObras() {
             </div>
           )}
 
-          {/* ===== DESKTOP: painel compacto (sem "Média") ===== */}
+          {/* ===== DESKTOP: painel compacto ===== */}
           {!isMobile && deskOpen && (
             <div
               className="
@@ -544,3 +548,4 @@ export default function MapaObras() {
     </div>
   );
 }
+

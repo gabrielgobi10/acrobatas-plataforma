@@ -6,7 +6,8 @@ import {
   AlertCircle,
   ArrowRight,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+// ❌ não precisa mais do useNavigate
+// import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,9 +21,16 @@ type Presenca = {
   obra?: { nome?: string | null } | null;
 };
 
-export default function FaltasPresencas() {
+type FaltasPresencasProps = {
+  /** Chamar Obras Ativas (aba) quando o usuário quer marcar presença */
+  onIrParaObrasAtivas?: () => void;
+};
+
+export default function FaltasPresencas({
+  onIrParaObrasAtivas,
+}: FaltasPresencasProps) {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
 
   const [presencas, setPresencas] = useState<Presenca[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +59,7 @@ export default function FaltasPresencas() {
       }
 
       const { data, error } = await query;
-      if (!error && data) setPresencas(data);
+      if (!error && data) setPresencas(data as Presenca[]);
       setLoading(false);
     }
     carregar();
@@ -113,7 +121,11 @@ export default function FaltasPresencas() {
                   }),
             cor: "text-blue-500",
           },
-          { label: "Total de Registos", valor: presencas.length, cor: "text-yellow-500" },
+          {
+            label: "Total de Registos",
+            valor: presencas.length,
+            cor: "text-yellow-500",
+          },
         ].map((item, i) => (
           <div
             key={i}
@@ -142,7 +154,7 @@ export default function FaltasPresencas() {
           </button>
         ) : (
           <button
-            onClick={() => navigate("/central/obras-ativas")}
+            onClick={() => onIrParaObrasAtivas?.()}
             className="bg-green-600 hover:bg-green-500 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition"
           >
             <CheckCircle2 size={18} /> Marcar Presença Agora
@@ -227,3 +239,4 @@ export default function FaltasPresencas() {
     </div>
   );
 }
+

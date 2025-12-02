@@ -82,7 +82,10 @@ export default function PerfilEmpresa() {
 
   useEffect(() => {
     async function fetchEmpresa() {
-      if (!user?.email) return;
+      if (!user?.email) {
+        setLoading(false);
+        return;
+      }
 
       setLoading(true);
       setError(null);
@@ -96,8 +99,16 @@ export default function PerfilEmpresa() {
           .maybeSingle();
 
         if (errUser) throw errUser;
+
+        // Sem empresa vinculada: tratamos como perfil novo (sem alerta vermelho)
         if (!usuario?.empresa_id) {
-          setError("Não foi possível encontrar a empresa deste utilizador.");
+          const base: EmpresaRow = {
+            id: "",
+            pais: "Portugal",
+          };
+          setEmpresaId(null);
+          setEmpresa(null);
+          setForm((prev) => ({ ...base, ...prev }));
           setLoading(false);
           return;
         }
@@ -113,8 +124,16 @@ export default function PerfilEmpresa() {
           .maybeSingle();
 
         if (errEmp) throw errEmp;
+
+        // Empresa não encontrada: também tratamos como perfil novo
         if (!emp) {
-          setError("Empresa não encontrada na base de dados.");
+          const base: EmpresaRow = {
+            id: "",
+            pais: "Portugal",
+          };
+          setEmpresaId(null);
+          setEmpresa(null);
+          setForm(base);
           setLoading(false);
           return;
         }
@@ -130,6 +149,7 @@ export default function PerfilEmpresa() {
         setForm(base);
       } catch (e: any) {
         console.error(e);
+        // Erro real de servidor → aqui sim mostramos alerta vermelho
         setError("Erro ao carregar dados da empresa.");
       } finally {
         setLoading(false);
@@ -297,7 +317,16 @@ export default function PerfilEmpresa() {
   /* ========= guardar ========= */
 
   const handleSave = async () => {
-    if (!empresaId) return;
+    // se não tiver empresaId ainda, por enquanto não fazemos nada
+    // (fluxo de criação pode ser implementado depois)
+    if (!empresaId) {
+      setForceValidate(true);
+      if (hasMissingRequired) return;
+      setError(
+        "Ainda não existe uma empresa vinculada a este utilizador. Fale com a equipa Acrobatas para concluir o registo."
+      );
+      return;
+    }
 
     // primeiro: validação
     if (hasMissingRequired) {

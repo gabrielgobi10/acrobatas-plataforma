@@ -226,9 +226,9 @@ export default function RelatorioGeral() {
 
       if (cancelled) return;
 
+      // Se não vier empresa_id, só deixa null silencioso (sem banner vermelho)
       if (!id) {
         setEmpresaId(null);
-        setError("Nenhuma empresa associada ao utilizador.");
       } else {
         setEmpresaId(id);
       }
@@ -625,7 +625,7 @@ export default function RelatorioGeral() {
         </div>
       </div>
 
-      {/* Erro */}
+      {/* Erro (apenas para erros reais de carregamento) */}
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs sm:text-sm text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200">
           {error}

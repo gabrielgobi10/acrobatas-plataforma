@@ -1,3 +1,4 @@
+// src/components/company/CentralDeNavegacaoEmpresa/Relatorios/FinanceiroRelatorio.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -87,66 +88,128 @@ const fmtNumber = (v: number, d = 2) =>
 
 const euro = (v: number) => `${fmtNumber(v, 2)} €`;
 
+// mesma RPC usada em CustosMensais
+async function getMinhaEmpresaId(): Promise<string | null> {
+  const { data, error } = await supabase.rpc("minha_empresa_id");
+
+  if (error) {
+    console.error("[FinanceiroRelatorio] minha_empresa_id ->", error.message || error);
+    return null;
+  }
+
+  return (data as string) ?? null;
+}
+
 /* =======================
    Componente
 ======================= */
 
 export default function FinanceiroRelatorio() {
-  const { empresa } = useAuth(); // se tiver empresa logada
+  const { /* empresa, */ } = useAuth(); // não vamos confiar mais nesse id aqui
   const today = dayjs();
 
   const [ano, setAno] = useState(today.year());
   const [obraId, setObraId] = useState<string>("todas");
 
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [obras, setObras] = useState<ObraOption[]>([]);
   const [rows, setRows] = useState<EmpresaCustosMensaisRow[]>([]);
-  const [loading, setLoading] = useState(false);
+
+  const [loadingEmpresa, setLoadingEmpresa] = useState(false);
+  const [loadingDados, setLoadingDados] = useState(false);
 
   const pdfRef = useRef<HTMLDivElement | null>(null);
 
-  /* ========= Carregar obras ========= */
+  /* ========= Buscar empresa via RPC ========= */
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function fetchEmpresa() {
+      setLoadingEmpresa(true);
+      const id = await getMinhaEmpresaId();
+      if (cancelled) return;
+
+      if (!id) {
+        // sem empresa associada → mantemos empresaId null e dados vazios
+        setEmpresaId(null);
+        setRows([]);
+        setObras([]);
+      } else {
+        setEmpresaId(id);
+      }
+
+      setLoadingEmpresa(false);
+    }
+
+    fetchEmpresa();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* ========= Carregar obras da empresa ========= */
+
+  useEffect(() => {
+    if (!empresaId) {
+      setObras([]);
+      return;
+    }
+
+    let cancelled = false;
+
     (async () => {
       const { data, error } = await supabase
         .from("obras")
         .select("id, nome")
+        .eq("empresa_id", empresaId)
         .order("nome", { ascending: true });
+
+      if (cancelled) return;
 
       if (!error && data) {
         setObras(
           (data as any[]).map((o) => ({
             id: o.id as string,
-            nome: o.nome as string,
+            nome: (o.nome as string) ?? "Obra sem nome",
           }))
         );
+      } else {
+        setObras([]);
       }
     })();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [empresaId]);
 
   /* ========= Carregar custos mensais ========= */
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
+    if (!empresaId) {
+      // conta nova / sem empresa vinculada → nada de dados
+      setRows([]);
+      return;
+    }
 
-      // ajusta o nome da view/tabela aqui se for diferente
+    let cancelled = false;
+
+    (async () => {
+      setLoadingDados(true);
+
       let q = supabase
-        .from("empresa_custos_mensais") // <===== AJUSTA PRA VIEW QUE USAS
+        .from("empresa_custos_mensais")
         .select(
           "empresa_id, obra_id, mes_referencia, horas_totais, custo_total, profissionais_distintos"
-        );
-
-      // se tiver empresa logada
-      if (empresa?.id) {
-        q = q.eq("empresa_id", empresa.id);
-      }
+        )
+        .eq("empresa_id", empresaId); // <-- obrigatório
 
       // filtrar por ano
-      q = q.gte("mes_referencia", `${ano}-01-01`).lte(
-        "mes_referencia",
-        `${ano}-12-31`
-      );
+      q = q
+        .gte("mes_referencia", `${ano}-01-01`)
+        .lte("mes_referencia", `${ano}-12-31`);
 
       if (obraId !== "todas") {
         q = q.eq("obra_id", obraId);
@@ -154,15 +217,23 @@ export default function FinanceiroRelatorio() {
 
       const { data, error } = await q;
 
+      if (cancelled) return;
+
       if (!error && data) {
         setRows(data as EmpresaCustosMensaisRow[]);
       } else {
         setRows([]);
       }
 
-      setLoading(false);
+      setLoadingDados(false);
     })();
-  }, [ano, obraId, empresa?.id]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ano, obraId, empresaId]);
+
+  const loading = loadingEmpresa || loadingDados;
 
   /* ========= Transformar em série mensal ========= */
 
@@ -353,14 +424,16 @@ export default function FinanceiroRelatorio() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={exportPDF}
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-slate-900 dark:text-zinc-100 dark:hover:bg-slate-800"
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-slate-900 dark:text-zinc-100 dark:hover:bg-slate-800"
           >
             <FileDown size={16} />
             Exportar PDF
           </button>
           <button
             onClick={exportCSV}
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-slate-900 dark:text-zinc-100 dark:hover:bg-slate-800"
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-slate-900 dark:text-zinc-100 dark:hover:bg-slate-800"
           >
             <Download size={16} />
             Exportar CSV
@@ -371,10 +444,7 @@ export default function FinanceiroRelatorio() {
       {/* Filtros */}
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-slate-950/60">
         <div className="flex items-center gap-2">
-          <Calendar
-            size={16}
-            className="text-zinc-500 dark:text-zinc-400"
-          />
+          <Calendar size={16} className="text-zinc-500 dark:text-zinc-400" />
           <select
             className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-slate-900 dark:text-zinc-100"
             value={ano}
@@ -388,10 +458,7 @@ export default function FinanceiroRelatorio() {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <Factory
-            size={16}
-            className="text-zinc-500 dark:text-zinc-400"
-          />
+          <Factory size={16} className="text-zinc-500 dark:text-zinc-400" />
           <select
             className="min-w-[200px] rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-slate-900 dark:text-zinc-100"
             value={obraId}

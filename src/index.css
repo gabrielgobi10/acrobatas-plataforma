@@ -223,7 +223,24 @@ button {
   user-select: text !important;
 }
 
-/* ====== Safe area helpers (iOS PWA: notch + barra home) ====== */
+/* ====== Safe area helpers (base) ====== */
+/* base funciona em qualquer navegador */
+.safe-screen {
+  min-height: 100dvh;
+  width: 100%;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.safe-top {
+  padding-top: 0.75rem;
+}
+
+.safe-bottom {
+  padding-bottom: 0.75rem;
+}
+
+/* ====== Safe area helpers (iOS/Android com env) ====== */
 @supports (padding: max(0px)) {
   .safe-screen {
     min-height: 100dvh;

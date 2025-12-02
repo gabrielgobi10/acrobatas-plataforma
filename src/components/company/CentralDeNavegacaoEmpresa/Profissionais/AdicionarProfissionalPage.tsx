@@ -1,30 +1,21 @@
 // src/components/company/Profissionais.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Star,
-  MapPin,
-  Briefcase,
-  Award,
-  Flame,
-  Hammer,
-  ShieldCheck,
-  Wrench,
-  Zap,
-  Paintbrush,
-  HardHat,
-  Building2,
-  UsersRound,
-  Globe2,
-  ArrowLeft,
+  Star, MapPin, Briefcase, Award, Flame, Hammer, Wrench, Zap, Paintbrush,
+  HardHat, Building2, UsersRound, Globe2, ArrowLeft, ShieldCheck,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-type Profissional = {
-  id: string;
+/* ======================
+   Tipos
+====================== */
+type Card = {
+  id: string;             // profissionais.id
+  usuario_id: string;     // users.id (ESSENCIAL para abrir perfil)
   nome: string;
   funcao: string;
   cidade: string;
@@ -32,154 +23,150 @@ type Profissional = {
   avaliacao: number;
   obras: number;
   experiencia: number;
-  disponibilidade: string;
-  foto_url: string;
-  capa_url: string;
+  disponibilidade: "Disponível" | "Em obra";
+  foto_url: string | null;
+  capa_url: string | null;
   descricao: string;
 };
 
+const clamp2 = {
+  display: "-webkit-box",
+  WebkitLineClamp: 2 as any,
+  WebkitBoxOrient: "vertical" as any,
+  overflow: "hidden",
+};
+
+const bannerFallback =
+  "https://images.unsplash.com/photo-1523419409543-4d7f2a0efcc3?q=80&w=1400&auto=format&fit=crop";
+const avatarFallback =
+  "https://images.unsplash.com/photo-1527980965255-d3b416303d12?q=80&w=256&auto=format&fit=crop";
+
+function badgeCor(nivel: string) {
+  switch (nivel) {
+    case "Mestre": return "bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-md";
+    case "Oficial": return "bg-blue-600 text-white";
+    case "Profissional": return "bg-green-600 text-white";
+    case "Auxiliar": return "bg-yellow-400 text-slate-800";
+    default: return "bg-slate-400 text-white";
+  }
+}
+
+function iconeFuncao(funcao: string) {
+  const f = (funcao || "").toLowerCase();
+  if (f.includes("canal")) return <Wrench className="w-4 h-4" />;
+  if (f.includes("eletric")) return <Zap className="w-4 h-4" />;
+  if (f.includes("pint")) return <Paintbrush className="w-4 h-4" />;
+  if (f.includes("pedr")) return <Hammer className="w-4 h-4" />;
+  return <HardHat className="w-4 h-4" />;
+}
+
 export default function Profissionais() {
-  const [profissionais, setProfissionais] = useState<Profissional[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [idsDaEmpresa, setIdsDaEmpresa] = useState<string[] | null>(null);
+
   const [busca, setBusca] = useState("");
   const [filtroCidade, setFiltroCidade] = useState("todas");
   const [filtroFuncao, setFiltroFuncao] = useState("todas");
   const [filtroNivel, setFiltroNivel] = useState("todos");
-
-  // alternar entre base global e equipa da empresa
   const [modoEmpresa, setModoEmpresa] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
-
-  // —— lê o state vindo de Equipas
   const fromObra = Boolean((location.state as any)?.fromObra);
   const backTo: string | undefined = (location.state as any)?.backTo;
 
+  /* ======================
+     Carregar cards (view)
+  ====================== */
   useEffect(() => {
-    const data: Profissional[] = [
-      {
-        id: "1",
-        nome: "João Ferreira",
-        funcao: "Canalizador",
-        cidade: "Cascais",
-        nivel: "Oficial",
-        avaliacao: 4.8,
-        obras: 12,
-        experiencia: 6,
-        disponibilidade: "Disponível",
-        foto_url: "https://randomuser.me/api/portraits/men/44.jpg",
-        capa_url:
-          "https://images.unsplash.com/photo-1616627451873-bc1b3c48ffcd?auto=format&fit=crop&w=800&q=60",
-        descricao:
-          "Instalações e reparações hidráulicas em obras residenciais e comerciais.",
-      },
-      {
-        id: "2",
-        nome: "Pedro Almeida",
-        funcao: "Eletricista",
-        cidade: "Lisboa",
-        nivel: "Mestre",
-        avaliacao: 4.9,
-        obras: 27,
-        experiencia: 10,
-        disponibilidade: "Em obra",
-        foto_url: "https://randomuser.me/api/portraits/men/67.jpg",
-        capa_url:
-          "https://images.unsplash.com/photo-1604147706283-360c79c3d3a0?auto=format&fit=crop&w=800&q=60",
-        descricao:
-          "Eletricista certificado com especialização em sistemas industriais e prediais.",
-      },
-      {
-        id: "3",
-        nome: "Carla Nunes",
-        funcao: "Pintora",
-        cidade: "Porto",
-        nivel: "Profissional",
-        avaliacao: 4.7,
-        obras: 9,
-        experiencia: 4,
-        disponibilidade: "Disponível",
-        foto_url: "https://randomuser.me/api/portraits/women/68.jpg",
-        capa_url:
-          "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=60",
-        descricao:
-          "Especialista em pintura decorativa e acabamento fino de interiores.",
-      },
-      {
-        id: "4",
-        nome: "Carlos Pinto",
-        funcao: "Pedreiro",
-        cidade: "Sintra",
-        nivel: "Profissional",
-        avaliacao: 4.6,
-        obras: 18,
-        experiencia: 7,
-        disponibilidade: "Disponível",
-        foto_url: "https://randomuser.me/api/portraits/men/79.jpg",
-        capa_url:
-          "https://images.unsplash.com/photo-1581093458791-9b6c26fa2a67?auto=format&fit=crop&w=800&q=60",
-        descricao:
-          "Experiente em alvenaria estrutural, assentamento e acabamentos de obra.",
-      },
-    ];
-    setProfissionais(data);
+    (async () => {
+      const { data, error } = await supabase
+        .from("profissionais_publico_cards_v1")
+        .select("*");
+
+      if (error) {
+        console.error("Erro ao buscar cards:", error);
+        setCards([]);
+        return;
+      }
+
+      const list: Card[] = (data || []).map((r: any) => {
+        const disponibilidade = r.em_obra ? "Em obra" : "Disponível";
+        return {
+          id: r.profissional_id,           // ← profissionais.id
+          usuario_id: r.user_id,           // ← users.id (abrir perfil)
+          nome: r.nome,
+          funcao: r.funcao,
+          cidade: r.cidade,
+          nivel: r.nivel,
+          avaliacao: 0.0,                  // placeholder até ligar view de avaliações
+          obras: r.obras ?? 0,
+          experiencia: r.experiencia ?? 0,
+          disponibilidade,
+          foto_url: r.foto_url || avatarFallback,
+          capa_url: r.capa_url || bannerFallback,
+          descricao: r.descricao_curta || "",
+        };
+      });
+
+      setCards(list);
+
+      // IDs da Minha Equipa (empresa logada)
+      try {
+        const { data: empId, error: rpcErr } = await supabase.rpc("minha_empresa_id");
+        if (rpcErr) throw rpcErr;
+
+        if (empId) {
+          const { data: vinc, error: vErr } = await supabase
+            .from("profissionais_obras")
+            .select("profissional_id")
+            .eq("empresa_id", empId);
+
+          if (vErr) throw vErr;
+
+          const ids = Array.from(
+            new Set((vinc || []).map((v: any) => v.profissional_id).filter(Boolean))
+          );
+          setIdsDaEmpresa(ids);
+        } else {
+          setIdsDaEmpresa([]);
+        }
+      } catch (e) {
+        console.warn("Minha Equipa indisponível (sem empresa ou RPC):", e);
+        setIdsDaEmpresa([]);
+      }
+    })();
   }, []);
 
-  // IDs dos profissionais vinculados à empresa (simulação por enquanto)
-  const idsDaEmpresa = ["1", "3"];
+  /* ======================
+     Filtros
+  ====================== */
+  const filtrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return cards.filter((p) => {
+      const combinaBusca =
+        q === "" ||
+        p.nome.toLowerCase().includes(q) ||
+        p.funcao.toLowerCase().includes(q);
 
-  const filtrados = profissionais.filter((p) => {
-    const combinaBusca =
-      busca === "" ||
-      p.nome.toLowerCase().includes(busca.toLowerCase()) ||
-      p.funcao.toLowerCase().includes(busca.toLowerCase());
+      const combinaCidade = filtroCidade === "todas" || p.cidade === filtroCidade;
+      const combinaFuncao = filtroFuncao === "todas" || p.funcao === filtroFuncao;
+      const combinaNivel = filtroNivel === "todos" || p.nivel === filtroNivel;
 
-    const combinaCidade = filtroCidade === "todas" || p.cidade === filtroCidade;
-    const combinaFuncao = filtroFuncao === "todas" || p.funcao === filtroFuncao;
-    const combinaNivel = filtroNivel === "todos" || p.nivel === filtroNivel;
+      const pertenceEmpresa =
+        !modoEmpresa || (idsDaEmpresa ? idsDaEmpresa.includes(p.id) : true);
 
-    // quando modoEmpresa = true, mostra apenas quem está vinculado
-    const pertenceEmpresa = !modoEmpresa || idsDaEmpresa.includes(p.id);
+      return (
+        combinaBusca && combinaCidade && combinaFuncao && combinaNivel && pertenceEmpresa
+      );
+    });
+  }, [cards, busca, filtroCidade, filtroFuncao, filtroNivel, modoEmpresa, idsDaEmpresa]);
 
-    return (
-      combinaBusca &&
-      combinaCidade &&
-      combinaFuncao &&
-      combinaNivel &&
-      pertenceEmpresa
-    );
-  });
-
-  const badgeCor = (nivel: string) => {
-    switch (nivel) {
-      case "Mestre":
-        return "bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-md";
-      case "Oficial":
-        return "bg-blue-600 text-white";
-      case "Profissional":
-        return "bg-green-600 text-white";
-      case "Auxiliar":
-        return "bg-yellow-400 text-slate-800";
-      default:
-        return "bg-slate-400 text-white";
-    }
-  };
-
-  const iconeFuncao = (funcao: string) => {
-    if (funcao.toLowerCase().includes("canal"))
-      return <Wrench className="w-4 h-4" />;
-    if (funcao.toLowerCase().includes("eletric"))
-      return <Zap className="w-4 h-4" />;
-    if (funcao.toLowerCase().includes("pint"))
-      return <Paintbrush className="w-4 h-4" />;
-    if (funcao.toLowerCase().includes("pedr"))
-      return <Hammer className="w-4 h-4" />;
-    return <HardHat className="w-4 h-4" />;
-  };
-
+  /* ======================
+     Render
+  ====================== */
   return (
     <div className="p-6 md:p-10">
-      {/* Voltar quando veio de uma obra */}
       {fromObra && (
         <div className="mb-4">
           <button
@@ -192,7 +179,6 @@ export default function Profissionais() {
         </div>
       )}
 
-      {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -205,7 +191,6 @@ export default function Profissionais() {
           </p>
         </div>
 
-        {/* Busca */}
         <div className="mt-4 md:mt-0 flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-xl shadow-sm">
           <input
             type="text"
@@ -217,7 +202,6 @@ export default function Profissionais() {
         </div>
       </div>
 
-      {/* Toggle Base / Empresa */}
       <div className="flex gap-3 mb-6">
         <button
           onClick={() => setModoEmpresa(false)}
@@ -244,7 +228,6 @@ export default function Profissionais() {
         </button>
       </div>
 
-      {/* Filtros (escondidos quando em modo empresa) */}
       {!modoEmpresa && (
         <div className="flex flex-wrap gap-3 mb-8">
           <select
@@ -285,23 +268,22 @@ export default function Profissionais() {
         </div>
       )}
 
-      {/* Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filtrados.map((p) => (
           <motion.div
-            key={p.id}
+            key={`${p.id}-${p.usuario_id}`}
             whileHover={{ scale: 1.03 }}
             transition={{ type: "spring", stiffness: 150 }}
             className="bg-white dark:bg-slate-800 rounded-2xl shadow-md hover:shadow-lg overflow-hidden flex flex-col transition-all"
           >
             <div
               className="h-24 bg-cover bg-center relative"
-              style={{ backgroundImage: `url(${p.capa_url})` }}
+              style={{ backgroundImage: `url(${p.capa_url || bannerFallback})` }}
             >
               <div className="absolute inset-0 bg-black/20 dark:bg-black/40" />
               <div className="absolute bottom-[-30px] left-1/2 transform -translate-x-1/2">
                 <img
-                  src={p.foto_url}
+                  src={p.foto_url || avatarFallback}
                   alt={p.nome}
                   className="w-20 h-20 rounded-full border-4 border-white shadow-md object-cover"
                 />
@@ -317,7 +299,10 @@ export default function Profissionais() {
               <h2 className="text-lg font-bold text-slate-800 dark:text-white">
                 {p.nome}
               </h2>
-              <p className="text-slate-400 text-xs italic mb-1">{p.descricao}</p>
+
+              <p className="text-slate-400 text-xs italic mb-1" style={clamp2} title={p.descricao}>
+                {p.descricao}
+              </p>
 
               <div className="flex items-center justify-center gap-1 mt-1 text-yellow-500">
                 <Star className="w-4 h-4 fill-yellow-500" />
@@ -342,11 +327,7 @@ export default function Profissionais() {
                   {p.disponibilidade}
                 </span>
 
-                <span
-                  className={`text-xs px-3 py-1 rounded-full font-semibold ${badgeCor(
-                    p.nivel
-                  )} flex items-center gap-1`}
-                >
+                <span className={`text-xs px-3 py-1 rounded-full font-semibold ${badgeCor(p.nivel)} flex items-center gap-1`}>
                   {p.nivel === "Mestre" && <Flame className="w-3 h-3" />}
                   {p.nivel === "Oficial" && <Award className="w-3 h-3" />}
                   {p.nivel === "Profissional" && <Hammer className="w-3 h-3" />}
@@ -364,7 +345,11 @@ export default function Profissionais() {
               </div>
 
               <button
-                onClick={() => navigate(`/empresa/profissional/${p.id}`)}
+               onClick={() => {
+  const targetId = p.usuario_id || p.id; // fallback se não tiver user_id
+  navigate(`/empresa/profissional/${targetId}?pid=${p.id}`);
+}}
+ 
                 className="mt-4 w-full flex items-center justify-center gap-2 bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-full hover:bg-blue-700 transition-all"
               >
                 <ShieldCheck className="w-4 h-4" /> Ver Perfil

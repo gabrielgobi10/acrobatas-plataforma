@@ -9,9 +9,11 @@ import {
   Loader2,
   User,
   Search,
+  Star,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../../lib/supabase";
+import { toast } from "sonner";
 
 /* =========================
    Tipos
@@ -59,12 +61,21 @@ type PresencaHoje = {
   status: string | null;
 };
 
+type AvaliacaoTarget = {
+  profissionalId: string;
+  profissionalNome?: string | null;
+  obraId: string | null;
+  obraNome?: string | null;
+};
+
 export default function EquipesEmCampo() {
   const [modo, setModo] = useState<"obras" | "profissionais">("profissionais");
   const [obras, setObras] = useState<Obra[]>([]);
   const [profissionais, setProfissionais] = useState<ProfissionalLinha[]>([]);
   const [obraSelecionada, setObraSelecionada] = useState<Obra | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
 
   // Filtros
   const [busca, setBusca] = useState("");
@@ -79,6 +90,37 @@ export default function EquipesEmCampo() {
 
   const hoje = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const navigate = useNavigate();
+
+  // Avaliação
+  const [avaliacaoAlvo, setAvaliacaoAlvo] = useState<AvaliacaoTarget | null>(
+    null
+  );
+  const [avaliacaoNota, setAvaliacaoNota] = useState(0);
+  const [avaliacaoComentario, setAvaliacaoComentario] = useState("");
+  const [avaliando, setAvaliando] = useState(false);
+
+  /* =========================
+     Descobrir empresa da conta
+  ========================== */
+  useEffect(() => {
+    let cancel = false;
+
+    async function loadEmpresa() {
+      const { data, error } = await supabase.rpc("minha_empresa_id");
+      if (cancel) return;
+      if (error) {
+        console.error("[EquipesEmCampo] minha_empresa_id ->", error);
+        setEmpresaId(null);
+      } else {
+        setEmpresaId(data ?? null);
+      }
+    }
+
+    loadEmpresa();
+    return () => {
+      cancel = true;
+    };
+  }, []);
 
   /* =========================
      Helpers (presenças hoje)
@@ -112,7 +154,7 @@ export default function EquipesEmCampo() {
   /* =========================
      Obras + contadores
   ========================== */
-  async function fetchObras() {
+  async function fetchObras(empId: string) {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -131,6 +173,7 @@ export default function EquipesEmCampo() {
           )
         `
         )
+        .eq("empresa_id", empId)
         .order("data_inicio", { ascending: false });
 
       if (error) throw error;
@@ -152,12 +195,16 @@ export default function EquipesEmCampo() {
       );
 
       const comPresentes = base.map((obra) => {
-        const presentes = (obra.profissionais_obras || []).reduce((acc, vinc) => {
-          const pid = vinc.profissional?.id;
-          const pres = pid ? presencaMap[pid] : undefined;
-          const presente = pres && (pres.status || "").toLowerCase() === "presente";
-          return acc + (presente ? 1 : 0);
-        }, 0);
+        const presentes = (obra.profissionais_obras || []).reduce(
+          (acc, vinc) => {
+            const pid = vinc.profissional?.id;
+            const pres = pid ? presencaMap[pid] : undefined;
+            const presente =
+              pres && (pres.status || "").toLowerCase() === "presente";
+            return acc + (presente ? 1 : 0);
+          },
+          0
+        );
         return { ...obra, presentes_hoje: presentes };
       });
 
@@ -170,8 +217,9 @@ export default function EquipesEmCampo() {
       const totalAusentes = Object.values(presencaMap).filter(
         (p) => (p.status || "").toLowerCase() === "ausente"
       ).length;
-      const obrasComEquipa = comPresentes.filter((o) => (o.presentes_hoje || 0) > 0)
-        .length;
+      const obrasComEquipa = comPresentes.filter(
+        (o) => (o.presentes_hoje || 0) > 0
+      ).length;
 
       setMetricPresentes(totalPresentes);
       setMetricAusencias(totalAusentes);
@@ -188,14 +236,21 @@ export default function EquipesEmCampo() {
   }
 
   useEffect(() => {
-    fetchObras();
+    if (!empresaId) {
+      setObras([]);
+      setMetricPresentes(0);
+      setMetricAusencias(0);
+      setMetricObrasAtivasHoje(0);
+      return;
+    }
+    fetchObras(empresaId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [empresaId]);
 
   /* =========================
-     Profissionais (lista)
+     Profissionais (lista geral)
   ========================== */
-  async function fetchProfissionais() {
+  async function fetchProfissionais(empId: string) {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -206,10 +261,12 @@ export default function EquipesEmCampo() {
           funcao,
           status,
           data_inicio,
-          obra:obra_id (id, nome),
+          obra:obra_id (id, nome, empresa_id),
           profissional:profissional_id ( id, user_id, nome, area, status, foto_url )
         `
-        );
+        )
+        .not("obra_id", "is", null) // só vínculos com obra
+        .eq("obra.empresa_id", empId); // só obras desta empresa
 
       if (error) throw error;
 
@@ -243,11 +300,11 @@ export default function EquipesEmCampo() {
   }
 
   useEffect(() => {
-    if (modo === "profissionais") {
+    if (modo === "profissionais" && empresaId) {
       setObraSelecionada(null);
-      fetchProfissionais();
+      fetchProfissionais(empresaId);
     }
-  }, [modo]);
+  }, [modo, empresaId]);
 
   /* =========================
      Profissionais por obra
@@ -309,6 +366,74 @@ export default function EquipesEmCampo() {
   }
 
   /* =========================
+     Avaliação — helpers
+  ========================== */
+  function abrirAvaliacaoDeProfLinha(item: ProfissionalLinha) {
+    const p = item.profissional;
+    if (!p?.id) return;
+    if (!item.obra?.id) {
+      toast.error("Não foi possível identificar a obra deste profissional.");
+      return;
+    }
+    setAvaliacaoNota(0);
+    setAvaliacaoComentario("");
+    setAvaliacaoAlvo({
+      profissionalId: p.id,
+      profissionalNome: p.nome,
+      obraId: item.obra.id,
+      obraNome: item.obra.nome,
+    });
+  }
+
+  function abrirAvaliacaoNaObra(p: ProfissionalLinha["profissional"]) {
+    if (!p?.id) return;
+    if (!obraSelecionada?.id) {
+      toast.error("Obra não encontrada para avaliação.");
+      return;
+    }
+    setAvaliacaoNota(0);
+    setAvaliacaoComentario("");
+    setAvaliacaoAlvo({
+      profissionalId: p.id,
+      profissionalNome: p.nome,
+      obraId: obraSelecionada.id,
+      obraNome: obraSelecionada.nome,
+    });
+  }
+
+  async function salvarAvaliacao() {
+    if (!avaliacaoAlvo?.profissionalId || !avaliacaoAlvo.obraId) {
+      toast.error("Dados da avaliação incompletos.");
+      return;
+    }
+    if (!avaliacaoNota) {
+      toast.error("Selecione uma nota para avaliar.");
+      return;
+    }
+    try {
+      setAvaliando(true);
+      const { error } = await supabase
+        .from("avaliacoes_profissionais")
+        .insert([
+          {
+            profissional_id: avaliacaoAlvo.profissionalId,
+            obra_id: avaliacaoAlvo.obraId,
+            nota_geral: avaliacaoNota,
+            comentario: avaliacaoComentario || null,
+          },
+        ]);
+      if (error) throw error;
+      toast.success("Avaliação registada com sucesso.");
+      setAvaliacaoAlvo(null);
+    } catch (e) {
+      console.error("Erro ao salvar avaliação:", e);
+      toast.error("Erro ao registar a avaliação.");
+    } finally {
+      setAvaliando(false);
+    }
+  }
+
+  /* =========================
      Filtros em memória
   ========================== */
   const profissionaisFiltrados = useMemo(() => {
@@ -317,7 +442,8 @@ export default function EquipesEmCampo() {
       const nomeMatch = (p.nome || "")
         .toLowerCase()
         .includes(busca.toLowerCase());
-      const funcaoMatch = filtroFuncao === "Todas" || item.funcao === filtroFuncao;
+      const funcaoMatch =
+        filtroFuncao === "Todas" || item.funcao === filtroFuncao;
       const statusMatch = filtroStatus === "Todos" || p.status === filtroStatus;
       const presencaMatch =
         filtroPresenca === "Todas" || item.presenca_hoje === filtroPresenca;
@@ -486,17 +612,30 @@ export default function EquipesEmCampo() {
                           </span>
                         </td>
                         <td className="py-3 px-4 md:px-6 text-right">
-                          <button
-                            onClick={() => abrirPerfilProfissional(p)}
-                            disabled={!p.id}
-                            className={`inline-flex items-center gap-1 text-xs md:text-sm font-medium ${
-                              p.id
-                                ? "text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                                : "text-slate-400 cursor-not-allowed"
-                            }`}
-                          >
-                            <User className="w-4 h-4" /> Ver Perfil
-                          </button>
+                          <div className="flex justify-end gap-3">
+                            <button
+                              onClick={() => abrirPerfilProfissional(p)}
+                              disabled={!p.id}
+                              className={`inline-flex items-center gap-1 text-xs md:text-sm font-medium ${
+                                p.id
+                                  ? "text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                                  : "text-slate-400 cursor-not-allowed"
+                              }`}
+                            >
+                              <User className="w-4 h-4" /> Ver Perfil
+                            </button>
+                            <button
+                              onClick={() => abrirAvaliacaoNaObra(p)}
+                              disabled={!p.id}
+                              className={`inline-flex items-center gap-1 text-xs md:text-sm font-medium ${
+                                p.id
+                                  ? "text-amber-500 hover:text-amber-400"
+                                  : "text-slate-400 cursor-not-allowed"
+                              }`}
+                            >
+                              <Star className="w-4 h-4" /> Avaliar
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -506,6 +645,102 @@ export default function EquipesEmCampo() {
             </div>
           </div>
         )}
+
+        {/* Modal de avaliação */}
+        <AnimatePresence>
+          {avaliacaoAlvo && (
+            <motion.div
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="w-full max-w-md rounded-2xl bg-white dark:bg-[#050816] border border-slate-200 dark:border-slate-700 p-5 shadow-2xl"
+                initial={{ scale: 0.96, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.96, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-base md:text-lg font-semibold text-slate-900 dark:text-slate-50">
+                      Avaliar profissional
+                    </h2>
+                    <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">
+                      {avaliacaoAlvo.profissionalNome} —{" "}
+                      {avaliacaoAlvo.obraNome || "Obra"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setAvaliacaoAlvo(null)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    <ArrowRight className="w-5 h-5 rotate-180" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                      Nota geral
+                    </p>
+                    <div className="flex gap-1.5">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setAvaliacaoNota(n)}
+                          className={`p-1.5 rounded-full transition ${
+                            avaliacaoNota >= n
+                              ? "text-amber-400"
+                              : "text-slate-300 dark:text-slate-600"
+                          }`}
+                        >
+                          <Star className="w-6 h-6 fill-current" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                      Comentário (opcional)
+                    </p>
+                    <textarea
+                      value={avaliacaoComentario}
+                      onChange={(e) => setAvaliacaoComentario(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+                      placeholder="Feedback sobre pontualidade, qualidade, comportamento..."
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    onClick={() => setAvaliacaoAlvo(null)}
+                    className="px-3 py-1.5 rounded-lg text-xs md:text-sm bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-100"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={salvarAvaliacao}
+                    disabled={avaliando}
+                    className="px-4 py-1.5 rounded-lg text-xs md:text-sm bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 disabled:opacity-60"
+                  >
+                    {avaliando ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Star className="w-4 h-4" />
+                    )}
+                    Guardar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   }
@@ -561,7 +796,9 @@ export default function EquipesEmCampo() {
           <p className="text-[11px] font-semibold tracking-wide text-slate-400 dark:text-slate-500 uppercase">
             Presentes hoje
           </p>
-          <p className="mt-2 text-2xl font-bold text-emerald-500">{metricPresentes}</p>
+          <p className="mt-2 text-2xl font-bold text-emerald-500">
+            {metricPresentes}
+          </p>
         </div>
         <div className="relative overflow-hidden bg-white/90 dark:bg-[#050816]/95 border border-slate-100/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
           <div className="absolute -right-6 -top-6 w-16 h-16 rounded-full bg-blue-500/10" />
@@ -577,7 +814,9 @@ export default function EquipesEmCampo() {
           <p className="text-[11px] font-semibold tracking-wide text-slate-400 dark:text-slate-500 uppercase">
             Ausências hoje
           </p>
-          <p className="mt-2 text-2xl font-bold text-rose-500">{metricAusencias}</p>
+          <p className="mt-2 text-2xl font-bold text-rose-500">
+            {metricAusencias}
+          </p>
         </div>
       </div>
 
@@ -770,17 +1009,30 @@ export default function EquipesEmCampo() {
                             </span>
                           </td>
                           <td className="py-3 px-4 md:px-6 text-right">
-                            <button
-                              onClick={() => abrirPerfilProfissional(p)}
-                              disabled={!p.id}
-                              className={`inline-flex items-center gap-1 text-xs md:text-sm font-medium ${
-                                p.id
-                                  ? "text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                                  : "text-slate-400 cursor-not-allowed"
-                              }`}
-                            >
-                              <User className="w-4 h-4" /> Ver Perfil
-                            </button>
+                            <div className="flex justify-end gap-3">
+                              <button
+                                onClick={() => abrirPerfilProfissional(p)}
+                                disabled={!p.id}
+                                className={`inline-flex items-center gap-1 text-xs md:text-sm font-medium ${
+                                  p.id
+                                    ? "text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                                    : "text-slate-400 cursor-not-allowed"
+                                }`}
+                              >
+                                <User className="w-4 h-4" /> Ver Perfil
+                              </button>
+                              <button
+                                onClick={() => abrirAvaliacaoDeProfLinha(item)}
+                                disabled={!p.id}
+                                className={`inline-flex items-center gap-1 text-xs md:text-sm font-medium ${
+                                  p.id
+                                    ? "text-amber-500 hover:text-amber-400"
+                                    : "text-slate-400 cursor-not-allowed"
+                                }`}
+                              >
+                                <Star className="w-4 h-4" /> Avaliar
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -790,6 +1042,20 @@ export default function EquipesEmCampo() {
               </div>
             )}
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de avaliação também disponível aqui (modo profissionais) */}
+      <AnimatePresence>
+        {avaliacaoAlvo && !obraSelecionada && (
+          <motion.div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {/* aqui ele reaproveita o modal já renderizado acima */}
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

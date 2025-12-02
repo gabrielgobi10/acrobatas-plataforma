@@ -12,8 +12,6 @@ import {
   X,
   Search,
   User,
-  BarChart3,
-  Clock4,
   ClipboardList,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -23,7 +21,6 @@ import { Toaster, toast } from "sonner";
    Tipos
 ============================ */
 type Lider = { id: string; nome: string; funcao?: string | null };
-type Presente = { id: string; nome: string };
 type FotoJson = { url: string; nome: string };
 
 type Relatorio = {
@@ -33,31 +30,13 @@ type Relatorio = {
   data_relatorio?: string | null;
   responsavel_id: string | null;
   condicoes_climaticas: string | null;
-  nivel_avanco: "nenhum" | "leve" | "moderado" | "alto" | "muito_alto" | null;
-  progresso_diario: number | null;
-  progresso_total: number | null;
-  horas_trabalhadas_total: number | null;
-  atividades_realizadas: string | null;
+  atividades_realizadas: string | null; // aqui vira a "descrição do dia"
   observacoes: string | null;
-  incidentes: string | null;
   fotos: FotoJson[] | null;
   criado_em?: string | null;
   responsavel?: { nome?: string | null };
 };
 
-const NIVEL_MAP = {
-  nenhum: { label: "Nenhum", base: 0, emoji: "🔴" },
-  leve: { label: "Leve", base: 1.5, emoji: "🟠" },
-  moderado: { label: "Moderado", base: 3, emoji: "🟡" },
-  alto: { label: "Alto", base: 5, emoji: "🟢" },
-  muito_alto: { label: "Muito alto", base: 8, emoji: "🔵" },
-} as const;
-
-const HORAS_PRESETS = [7, 8, 9, 10] as const;
-const HORAS_BASE = 8;
-const HORAS_FACTOR_MIN = 0.5;
-const HORAS_FACTOR_MAX = 1.5;
-const MAX_DAILY_INCREMENT = 10;
 const BUCKET_NAME = "relatorios_fotos";
 const HOJE = new Date().toISOString().split("T")[0];
 
@@ -65,7 +44,7 @@ const HOJE = new Date().toISOString().split("T")[0];
    Componente
 ============================ */
 export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
-  // Tema atual (para ajustar classes dinâmicas)
+  // Tema atual
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains("dark")
   );
@@ -73,7 +52,10 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     const obs = new MutationObserver(() =>
       setIsDark(document.documentElement.classList.contains("dark"))
     );
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
     return () => obs.disconnect();
   }, []);
 
@@ -81,9 +63,10 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
   const [carregando, setCarregando] = useState(true);
   const [relatorios, setRelatorios] = useState<Relatorio[]>([]);
   const [lideres, setLideres] = useState<Lider[]>([]);
-  const [presentes, setPresentes] = useState<Presente[]>([]);
   const [abrirModalNovo, setAbrirModalNovo] = useState(false);
-  const [abrirModalDetalhe, setAbrirModalDetalhe] = useState<Relatorio | null>(null);
+  const [abrirModalDetalhe, setAbrirModalDetalhe] = useState<Relatorio | null>(
+    null
+  );
 
   // Filtros/Busca
   const [busca, setBusca] = useState("");
@@ -91,18 +74,13 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
   const [filtroResp, setFiltroResp] = useState("Todos");
   const [ordemData, setOrdemData] = useState<"desc" | "asc">("desc");
 
-  // Formulário
+  // Formulário simples
   const [form, setForm] = useState({
     data: HOJE,
     condicoes_climaticas: "",
     responsavel_id: "",
-    nivel_avanco: "moderado" as keyof typeof NIVEL_MAP,
-    horasPreset: 8 as number | "custom",
-    horasCustom: "",
-    atividades_realizadas: "",
+    atividades_realizadas: "", // descrição do dia (obrigatória)
     observacoes: "",
-    incidentes: "",
-    profissionais_presentes: [] as string[],
     fotosArquivos: [] as File[],
     fotosPreview: [] as { objectUrl: string; nome: string }[],
   });
@@ -114,7 +92,7 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
   useEffect(() => {
     (async () => {
       setCarregando(true);
-      await Promise.all([carregarRelatorios(), carregarLideres(), carregarPresentes()]);
+      await Promise.all([carregarRelatorios(), carregarLideres()]);
       setCarregando(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -126,88 +104,55 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       .select("*, responsavel:responsavel_id(nome)")
       .eq("obra_id", obraId)
       .order("data", { ascending: ordemData === "asc" });
+
     if (error) console.error(error);
+
     const normalizados = (data || []).map((r: any) => ({
       ...r,
       data: r.data || r.data_relatorio || HOJE,
       condicoes_climaticas: r.condicoes_climaticas ?? r.clima ?? null,
       fotos: safeParseFotos(r.fotos),
     }));
+
     setRelatorios(normalizados as Relatorio[]);
   }
 
   async function carregarLideres() {
     let leaders: Lider[] = [];
+
     const { data: viaObra } = await supabase
       .from("profissionais_obras")
       .select("profissional_id, funcao, profissionais(nome)")
       .eq("obra_id", obraId);
 
     if (viaObra && viaObra.length) {
-      leaders = viaObra
-        .filter((r: any) =>
-          ["chefe de equipa", "encarregado", "engenheiro", "mestre de obra"].includes(
-            (r.funcao || "").toLowerCase()
-          )
-        )
-        .map((r: any) => ({
-          id: r.profissional_id,
-          nome: r.profissionais?.nome || "Sem nome",
-          funcao: r.funcao,
-        }));
+      leaders = viaObra.map((r: any) => ({
+        id: r.profissional_id,
+        nome: r.profissionais?.nome || "Sem nome",
+        funcao: r.funcao,
+      }));
     }
 
+    // fallback geral se não tiver ninguém ligado à obra
     if (!leaders.length) {
       const { data: viaProf } = await supabase
         .from("profissionais")
         .select("id, nome, funcao");
       if (viaProf) {
-        leaders = viaProf
-          .filter((p: any) =>
-            ["chefe de equipa", "encarregado", "engenheiro", "mestre de obra"].includes(
-              (p.funcao || "").toLowerCase()
-            )
-          )
-          .map((p: any) => ({ id: p.id, nome: p.nome, funcao: p.funcao }));
+        leaders = viaProf.map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          funcao: p.funcao,
+        }));
       }
     }
-    setLideres(leaders);
-  }
 
-  async function carregarPresentes() {
-    const { data, error } = await supabase
-      .from("profissionais_obras")
-      .select("profissional_id, profissionais(nome)")
-      .eq("obra_id", obraId);
-    if (error) console.error(error);
-    const list =
-      data?.map((d: any) => ({
-        id: d.profissional_id,
-        nome: d.profissionais?.nome || "Sem nome",
-      })) || [];
-    setPresentes(list);
+    setLideres(leaders);
   }
 
   /* ============================
      Utils
   ============================ */
-  function horasNumber(): number {
-    if (form.horasPreset === "custom") {
-      const val = Number(form.horasCustom);
-      return Number.isFinite(val) && val >= 0 ? val : HORAS_BASE;
-    }
-    return form.horasPreset;
-  }
-
-  function incrementoPrevisto(): number {
-    const base = NIVEL_MAP[form.nivel_avanco].base;
-    const fator = Math.max(
-      HORAS_FACTOR_MIN,
-      Math.min(HORAS_FACTOR_MAX, horasNumber() / HORAS_BASE)
-    );
-    return Math.min(MAX_DAILY_INCREMENT, Math.round(base * fator * 100) / 100);
-  }
-
   function safeParseFotos(f: any): FotoJson[] | null {
     if (!f) return null;
     if (Array.isArray(f)) return f as FotoJson[];
@@ -221,16 +166,34 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
 
   function onSelectFotos(files: FileList | null) {
     if (!files) return;
-    const arr = Array.from(files);
-    const previews = arr.map((f) => ({
-      objectUrl: URL.createObjectURL(f),
-      nome: f.name,
-    }));
-    setForm((old) => ({
-      ...old,
-      fotosArquivos: [...old.fotosArquivos, ...arr],
-      fotosPreview: [...old.fotosPreview, ...previews],
-    }));
+
+    setForm((old) => {
+      const existente = old.fotosArquivos.length;
+      const espacoRestante = 4 - existente;
+
+      if (espacoRestante <= 0) {
+        toast.error("Máximo de 4 fotos por relatório.");
+        return old;
+      }
+
+      const arr = Array.from(files);
+      const selecionadas = arr.slice(0, espacoRestante);
+
+      if (selecionadas.length < arr.length) {
+        toast.error("Só é possível adicionar até 4 fotos por relatório.");
+      }
+
+      const previews = selecionadas.map((f) => ({
+        objectUrl: URL.createObjectURL(f),
+        nome: f.name,
+      }));
+
+      return {
+        ...old,
+        fotosArquivos: [...old.fotosArquivos, ...selecionadas],
+        fotosPreview: [...old.fotosPreview, ...previews],
+      };
+    });
   }
 
   function removerFotoTemp(idx: number) {
@@ -248,42 +211,47 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
      Salvar
   ============================ */
   async function salvarRelatorio() {
+    if (!form.atividades_realizadas.trim()) {
+      toast.error("Descrição do dia é obrigatória.");
+      return;
+    }
+
     try {
       setSalvando(true);
 
+      // empresa_id é opcional aqui, se existir na obra
       const { data: ob, error: errObra } = await supabase
         .from("obras")
-        .select("progresso, empresa_id")
+        .select("empresa_id")
         .eq("id", obraId)
         .single();
-      if (errObra) throw errObra;
 
-      const progressoAtual = Number(ob?.progresso || 0);
-      const empresaId = ob?.empresa_id;
-      if (!empresaId) throw new Error("empresa_id ausente na obra.");
+      if (errObra) {
+        console.error(errObra);
+      }
 
-      const incremento = incrementoPrevisto();
-      const novoTotal = Math.min(100, Math.round((progressoAtual + incremento) * 100) / 100);
+      const empresaId = ob?.empresa_id ?? null;
 
-      const payload = {
+      const payload: any = {
         obra_id: obraId,
         empresa_id: empresaId,
-        data: HOJE,
-        data_relatorio: HOJE,
+        data: form.data,
+        data_relatorio: form.data,
         condicoes_climaticas: form.condicoes_climaticas || null,
         clima: form.condicoes_climaticas || null,
         responsavel_id: form.responsavel_id || null,
-        nivel_avanco: form.nivel_avanco,
-        progresso_diario: incremento,
-        progresso_total: novoTotal,
-        horas_trabalhadas_total: horasNumber(),
-        atividades_realizadas: form.atividades_realizadas || null,
+        atividades_realizadas: form.atividades_realizadas.trim(),
         observacoes: form.observacoes?.trim() || null,
-        incidentes: form.incidentes?.trim() || null,
-        equipa: JSON.stringify(form.profissionais_presentes || []),
-        atividades: JSON.stringify([]),
-        custos: JSON.stringify([]),
-        ocorrencias: JSON.stringify([]),
+        // campos antigos mantidos como nulos para não quebrar schema
+        nivel_avanco: null,
+        progresso_diario: null,
+        progresso_total: null,
+        horas_trabalhadas_total: null,
+        incidentes: null,
+        equipa: null,
+        atividades: null,
+        custos: null,
+        ocorrencias: null,
         fotos: null as any,
       };
 
@@ -296,12 +264,14 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
 
       const relatorioId = inserted?.id as string;
 
-      // Upload de fotos (opcional)
+      // Upload de fotos (opcional, até 4)
       if (form.fotosArquivos.length) {
         const urls: FotoJson[] = [];
         for (const file of form.fotosArquivos) {
           const path = `relatorios/${obraId}/${relatorioId}/${Date.now()}_${file.name}`;
-          const up = await supabase.storage.from(BUCKET_NAME).upload(path, file);
+          const up = await supabase.storage
+            .from(BUCKET_NAME)
+            .upload(path, file);
           if (!up.error) {
             const pub = supabase.storage.from(BUCKET_NAME).getPublicUrl(path);
             if (pub.data?.publicUrl) {
@@ -309,15 +279,16 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
             }
           }
         }
-        await supabase.from("relatorios_obras").update({ fotos: urls }).eq("id", relatorioId);
+        await supabase
+          .from("relatorios_obras")
+          .update({ fotos: urls })
+          .eq("id", relatorioId);
       }
-
-      await supabase.from("obras").update({ progresso: novoTotal }).eq("id", obraId);
 
       limparForm();
       setAbrirModalNovo(false);
       await carregarRelatorios();
-      toast.success(`Relatório criado com sucesso! (+${incremento}% hoje • Total ${novoTotal}%)`);
+      toast.success("Relatório criado com sucesso!");
     } catch (e: any) {
       console.error("❌ Erro ao salvar:", e);
       toast.error(`Erro ao salvar relatório: ${e.message}`);
@@ -332,13 +303,8 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       data: HOJE,
       condicoes_climaticas: "",
       responsavel_id: "",
-      nivel_avanco: "moderado",
-      horasPreset: 8,
-      horasCustom: "",
       atividades_realizadas: "",
       observacoes: "",
-      incidentes: "",
-      profissionais_presentes: [],
       fotosArquivos: [],
       fotosPreview: [],
     });
@@ -351,14 +317,17 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     let lista = relatorios.filter((r) => {
       const buscaOk =
         !busca ||
-        (r.atividades_realizadas || "").toLowerCase().includes(busca.toLowerCase()) ||
+        (r.atividades_realizadas || "")
+          .toLowerCase()
+          .includes(busca.toLowerCase()) ||
         (r.observacoes || "").toLowerCase().includes(busca.toLowerCase());
       const climaOk =
         filtroClima === "Todos" ||
         (r.condicoes_climaticas || "") === filtroClima;
       const respOk =
         filtroResp === "Todos" ||
-        (r.responsavel?.nome || "").toLowerCase() === filtroResp.toLowerCase();
+        (r.responsavel?.nome || "").toLowerCase() ===
+          filtroResp.toLowerCase();
       return buscaOk && climaOk && respOk;
     });
 
@@ -375,8 +344,8 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
      UI helpers
   ============================ */
   const cardBase = isDark
-    ? "bg-[#10161f] border-[#203044]"
-    : "bg-white border-gray-200";
+    ? "bg-[#10161f] border-[#203044] text-gray-100"
+    : "bg-white border-gray-200 text-gray-900";
 
   const inputBase =
     "w-full border rounded-lg px-3 py-2 mt-1 text-sm outline-none transition focus:ring-2 focus:ring-blue-500/30";
@@ -410,36 +379,13 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
     <div className="w-full p-6 mobile-wrap">
       <Toaster position="top-right" richColors />
 
-      {/* Utilitários responsivos para mobile */}
+      {/* Helpers responsivos leves */}
       <style>{`
 @media (max-width: 640px) {
   .mobile-wrap { padding: 12px !important; }
   .mobile-card { padding: 14px !important; border-radius: 14px !important; }
-  .mobile-grid { display: grid; grid-template-columns: 1fr !important; gap: 12px !important; }
-  .mobile-input { padding: 10px 12px !important; font-size: 16px !important; }
-  .mobile-btn { padding: 12px !important; font-size: 16px !important; }
-
-  .modal-mobile{
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto;
-    border-top-left-radius: 18px !important;
-    border-top-right-radius: 18px !important;
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-    overflow: hidden;
-    box-shadow: 0 -8px 30px rgba(0,0,0,.35);
-  }
-  .modal-header{
-    position: sticky; top: 0; z-index: 2;
-    padding: 14px 16px;
-    backdrop-filter: saturate(180%) blur(6px);
-  }
-  .modal-footer{
-    position: sticky; bottom: 0; z-index: 2;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)) 16px;
-    backdrop-filter: saturate(180%) blur(6px);
-  }
+  .mobile-input { font-size: 16px !important; }
+  .mobile-btn { font-size: 15px !important; }
 }
       `}</style>
 
@@ -447,7 +393,11 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <ClipboardList className="text-blue-600 w-5 h-5" />
-          <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+          <h2
+            className={`text-lg font-semibold ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
             Relatórios do dia
           </h2>
         </div>
@@ -461,22 +411,28 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       </div>
 
       {/* Filtros */}
-      <div className={`border rounded-xl p-4 mobile-card ${cardBase}`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mobile-grid">
+      <div
+        className={`border rounded-xl p-4 mobile-card ${cardBase} shadow-sm`}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="flex items-center gap-2">
             <Search size={16} className="opacity-60 shrink-0" />
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              className={`flex-1 ${inputBase} ${isDark ? darkInput : lightInput} mobile-input`}
-              placeholder="Buscar atividades ou observações…"
+              className={`flex-1 ${inputBase} ${
+                isDark ? darkInput : lightInput
+              } mobile-input`}
+              placeholder="Buscar pela descrição ou observações…"
             />
           </div>
 
           <select
             value={filtroClima}
             onChange={(e) => setFiltroClima(e.target.value)}
-            className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
+            className={`${selectBase} ${
+              isDark ? darkInput : lightInput
+            } mobile-input`}
           >
             <option>Todos</option>
             <option>Sol</option>
@@ -488,11 +444,17 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
           <select
             value={filtroResp}
             onChange={(e) => setFiltroResp(e.target.value)}
-            className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
+            className={`${selectBase} ${
+              isDark ? darkInput : lightInput
+            } mobile-input`}
           >
             <option>Todos</option>
             {Array.from(
-              new Set(relatorios.map((r) => r.responsavel?.nome).filter(Boolean) as string[])
+              new Set(
+                relatorios
+                  .map((r) => r.responsavel?.nome)
+                  .filter(Boolean) as string[]
+              )
             ).map((nome) => (
               <option key={nome}>{nome}</option>
             ))}
@@ -501,7 +463,9 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
           <select
             value={ordemData}
             onChange={(e) => setOrdemData(e.target.value as "asc" | "desc")}
-            className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
+            className={`${selectBase} ${
+              isDark ? darkInput : lightInput
+            } mobile-input`}
           >
             <option value="desc">Mais recentes primeiro</option>
             <option value="asc">Mais antigos primeiro</option>
@@ -515,11 +479,13 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
           <Loader2 className="animate-spin text-gray-400" size={28} />
         </div>
       ) : listaFiltrada.length === 0 ? (
-        <div className={`border rounded-xl p-6 text-center text-gray-500 mobile-card ${cardBase}`}>
+        <div
+          className={`border rounded-xl p-6 text-center text-gray-500 mobile-card ${cardBase}`}
+        >
           Nenhum relatório registrado.
         </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-4 mt-4">
           <AnimatePresence>
             {listaFiltrada.map((r) => (
               <motion.div
@@ -527,30 +493,28 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className={`border rounded-xl p-5 flex flex-col mobile-card md:flex-row md:items-center md:justify-between ${cardBase} ${isDark ? "text-gray-200" : "text-gray-900"}`}
+                className={`border rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between mobile-card ${cardBase} shadow-sm`}
               >
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2 text-blue-500 font-medium">
                     <CalendarDays size={16} />
-                    {r.data ? new Date(r.data).toLocaleDateString("pt-PT") : "—"}
+                    {r.data
+                      ? new Date(r.data).toLocaleDateString("pt-PT")
+                      : "—"}
                   </div>
+
                   <div className="flex items-center gap-3 text-sm mt-1 flex-wrap">
-                    {IconeClima(r.condicoes_climaticas)}
-                    <span className="flex items-center gap-1">
-                      <BarChart3 size={14} />
-                      +{r.progresso_diario || 0}% (total {r.progresso_total ?? 0}%)
-                    </span>
-                    {r.horas_trabalhadas_total != null && (
-                      <span className="flex items-center gap-1">
-                        <Clock4 size={14} /> {r.horas_trabalhadas_total}h
+                    <span className="flex items-center gap-2">
+                      {IconeClima(r.condicoes_climaticas)}
+                      <span className="opacity-80">
+                        {r.condicoes_climaticas || "Clima não informado"}
                       </span>
-                    )}
+                    </span>
                   </div>
-                  {r.atividades_realizadas && (
-                    <p className="mt-2 text-sm/6 max-w-3xl opacity-90">
-                      {r.atividades_realizadas}
-                    </p>
-                  )}
+
+                  <p className="mt-2 text-sm leading-relaxed max-w-3xl opacity-90 line-clamp-2">
+                    {r.atividades_realizadas || "Sem descrição do dia."}
+                  </p>
                 </div>
                 <div className="flex flex-col items-end gap-2 mt-4 md:mt-0">
                   <span className="text-sm flex items-center gap-2 opacity-90">
@@ -574,23 +538,26 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       <AnimatePresence>
         {abrirModalNovo && (
           <motion.div
-            className="fixed inset-0 bg-black/60 backdrop-blur-[1px] flex sm:items-center items-end justify-center z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center z-50 px-2 sm:px-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => { limparForm(); setAbrirModalNovo(false); }}
+            onClick={() => {
+              limparForm();
+              setAbrirModalNovo(false);
+            }}
           >
             <motion.div
-              initial={{ y: 24, opacity: 0 }}
+              initial={{ y: 32, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 24, opacity: 0 }}
+              exit={{ y: 32, opacity: 0 }}
               role="dialog"
               aria-modal="true"
               onClick={(e) => e.stopPropagation()}
-              className={`modal-mobile sm:rounded-2xl sm:w-[720px] sm:max-h-[88vh] w-full border ${cardBase} overflow-hidden`}
+              className={`w-full sm:w-[780px] max-w-[960px] h-[92vh] sm:h-auto max-h-[90vh] rounded-t-2xl sm:rounded-2xl border ${cardBase} shadow-xl flex flex-col overflow-hidden`}
             >
               {/* Header */}
-              <div className={`modal-header ${cardBase} flex items-center justify-between`}>
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-black/5 dark:border-white/10">
                 <div className="flex items-center gap-2">
                   <ClipboardList className="w-5 h-5 text-blue-600" />
                   <div className="leading-tight">
@@ -598,23 +565,26 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                       Novo relatório do dia
                     </h3>
                     <p className="text-xs opacity-70">
-                      Preencha as informações da jornada de trabalho.
+                      Registe rapidamente como foi o dia na obra.
                     </p>
                   </div>
                 </div>
                 <button
                   aria-label="Fechar"
-                  onClick={() => { limparForm(); setAbrirModalNovo(false); }}
-                  className="p-2 rounded-md hover:bg-black/10"
+                  onClick={() => {
+                    limparForm();
+                    setAbrirModalNovo(false);
+                  }}
+                  className="p-2 rounded-md hover:bg-black/10 dark:hover:bg-white/5"
                 >
                   <X />
                 </button>
               </div>
 
               {/* Body */}
-              <div className="modal-body sm:max-h-[calc(88vh-112px)] overflow-auto px-4 sm:px-6 pb-4">
+              <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4">
                 {/* Dados gerais */}
-                <section className="space-y-3 pb-4">
+                <section className="space-y-3">
                   <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80">
                     Dados gerais
                   </h4>
@@ -627,17 +597,26 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                         min={HOJE}
                         max={HOJE}
                         disabled
-                        className={`${inputBase} ${isDark ? darkInput : lightInput} mobile-input`}
+                        className={`${inputBase} ${
+                          isDark ? darkInput : lightInput
+                        } mobile-input`}
                       />
                     </div>
                     <div>
                       <label className="text-xs opacity-70">Clima</label>
                       <select
                         value={form.condicoes_climaticas}
-                        onChange={(e) => setForm({ ...form, condicoes_climaticas: e.target.value })}
-                        className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            condicoes_climaticas: e.target.value,
+                          })
+                        }
+                        className={`${selectBase} ${
+                          isDark ? darkInput : lightInput
+                        } mobile-input`}
                       >
-                        <option value="">Selecione</option>
+                        <option value="">Não informar</option>
                         <option>Sol</option>
                         <option>Nublado</option>
                         <option>Chuva</option>
@@ -648,10 +627,14 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                       <label className="text-xs opacity-70">Responsável</label>
                       <select
                         value={form.responsavel_id}
-                        onChange={(e) => setForm({ ...form, responsavel_id: e.target.value })}
-                        className={`${selectBase} ${isDark ? darkInput : lightInput} mobile-input`}
+                        onChange={(e) =>
+                          setForm({ ...form, responsavel_id: e.target.value })
+                        }
+                        className={`${selectBase} ${
+                          isDark ? darkInput : lightInput
+                        } mobile-input`}
                       >
-                        <option value="">Selecione</option>
+                        <option value="">Opcional</option>
                         {lideres.map((l) => (
                           <option key={l.id} value={l.id}>
                             {l.nome} {l.funcao ? `— ${l.funcao}` : ""}
@@ -662,159 +645,71 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                   </div>
                 </section>
 
-                <hr className={`${isDark ? "border-white/10" : "border-gray-200"} my-3`} />
+                <hr
+                  className={`${
+                    isDark ? "border-white/10" : "border-gray-200"
+                  }`}
+                />
 
-                {/* Produção + Atividades */}
-                <section className="grid gap-6 md:grid-cols-2 pb-2">
-                  {/* Coluna esquerda */}
-                  <div className="space-y-4">
-                    <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80">
-                      Produção do dia
-                    </h4>
-
-                    {/* Nível */}
-                    <div>
-                      <label className="text-xs opacity-70 block mb-1">Nível de avanço</label>
-                      <div className="flex flex-wrap gap-2">
-                        {(Object.keys(NIVEL_MAP) as (keyof typeof NIVEL_MAP)[]).map((k) => {
-                          const active = form.nivel_avanco === k;
-                          return (
-                            <button
-                              key={k}
-                              type="button"
-                              onClick={() => setForm({ ...form, nivel_avanco: k })}
-                              className={`px-3 py-1.5 rounded-full border text-sm transition mobile-btn
-                                ${active ? "bg-blue-600 text-white border-blue-600" : (isDark ? "border-[#1f2a37] text-gray-100" : "border-gray-300 text-gray-800")}
-                              `}
-                            >
-                              {NIVEL_MAP[k].emoji} {NIVEL_MAP[k].label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Horas */}
-                    <div>
-                      <label className="text-xs opacity-70 block mb-1">
-                        Horas trabalhadas (total da equipa)
-                      </label>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {HORAS_PRESETS.map((h) => (
-                          <button
-                            key={h}
-                            type="button"
-                            onClick={() => setForm({ ...form, horasPreset: h, horasCustom: "" })}
-                            className={`px-3 py-1.5 rounded-full border text-sm transition mobile-btn
-                              ${form.horasPreset === h ? "bg-blue-600 text-white border-blue-600" : (isDark ? "border-[#1f2a37] text-gray-100" : "border-gray-300 text-gray-800")}
-                            `}
-                          >
-                            {h}h
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => setForm({ ...form, horasPreset: "custom" })}
-                          className={`px-3 py-1.5 rounded-full border text-sm transition mobile-btn
-                            ${form.horasPreset === "custom" ? "bg-blue-600 text-white border-blue-600" : (isDark ? "border-[#1f2a37] text-gray-100" : "border-gray-300 text-gray-800")}
-                          `}
-                        >
-                          Personalizado
-                        </button>
-                        {form.horasPreset === "custom" && (
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.5}
-                            placeholder="Horas…"
-                            value={form.horasCustom}
-                            onChange={(e) => setForm({ ...form, horasCustom: e.target.value })}
-                            className={`w-28 ${inputBase} ${isDark ? darkInput : lightInput} ml-1`}
-                          />
-                        )}
-                      </div>
-                      <div className="mt-2 text-xs opacity-70">
-                        Incremento previsto hoje: <strong>+{incrementoPrevisto()}%</strong>
-                      </div>
-                    </div>
-
-                    {/* Profissionais */}
-                    <div>
-                      <label className="text-xs opacity-70">Profissionais presentes</label>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {presentes.map((p) => {
-                          const ativo = form.profissionais_presentes.includes(p.id);
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => {
-                                const sel = form.profissionais_presentes;
-                                const novo = ativo ? sel.filter((id) => id !== p.id) : [...sel, p.id];
-                                setForm({ ...form, profissionais_presentes: novo });
-                              }}
-                              className={`px-3 py-1 rounded-full text-sm border transition mobile-btn
-                                ${ativo ? "bg-blue-600 text-white border-blue-600" : (isDark ? "border-[#1f2a37] text-gray-100" : "border-gray-300 text-gray-800")}
-                              `}
-                            >
-                              {p.nome}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Coluna direita: atividades */}
-                  <div>
-                    <label className="text-xs opacity-70">Atividades realizadas</label>
-                    <textarea
-                      value={form.atividades_realizadas}
-                      onChange={(e) =>
-                        setForm({ ...form, atividades_realizadas: e.target.value })
-                      }
-                      className={`${textareaBase} ${isDark ? darkInput : lightInput} mobile-input`}
-                      rows={12}
-                      placeholder="Ex.: Concretagem da laje do piso 2, assentamento de blocos…"
-                    />
+                {/* Descrição do dia */}
+                <section>
+                  <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80 mb-2">
+                    Descrição do dia (obrigatória)
+                  </h4>
+                  <textarea
+                    value={form.atividades_realizadas}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        atividades_realizadas: e.target.value,
+                      })
+                    }
+                    className={`${textareaBase} ${
+                      isDark ? darkInput : lightInput
+                    } mobile-input`}
+                    rows={4}
+                    maxLength={300}
+                    placeholder="Ex.: Instalação de tubagens no 2º andar e acabamentos em 2 casas de banho."
+                  />
+                  <div className="text-xs opacity-60 mt-1">
+                    Resuma em 1–2 linhas o que a equipa fez hoje.
                   </div>
                 </section>
 
-                <hr className={`${isDark ? "border-white/10" : "border-gray-200"} my-3`} />
+                <hr
+                  className={`${
+                    isDark ? "border-white/10" : "border-gray-200"
+                  }`}
+                />
 
-                {/* Observações & Incidentes */}
-                <section className="grid gap-4 md:grid-cols-2 pb-2">
-                  <div>
-                    <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80 mb-2">
-                      Observações
-                    </h4>
-                    <textarea
-                      value={form.observacoes}
-                      onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-                      className={`${textareaBase} ${isDark ? darkInput : lightInput} mobile-input`}
-                      rows={6}
-                    />
-                  </div>
-                  <div>
-                    <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80 mb-2">
-                      Incidentes
-                    </h4>
-                    <textarea
-                      value={form.incidentes}
-                      onChange={(e) => setForm({ ...form, incidentes: e.target.value })}
-                      className={`${textareaBase} ${isDark ? darkInput : lightInput} mobile-input`}
-                      rows={6}
-                      placeholder="Se houve acidente, atraso, falta de material, etc."
-                    />
-                  </div>
+                {/* Observações opcionais */}
+                <section>
+                  <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80 mb-2">
+                    Observações (opcional)
+                  </h4>
+                  <textarea
+                    value={form.observacoes}
+                    onChange={(e) =>
+                      setForm({ ...form, observacoes: e.target.value })
+                    }
+                    className={`${textareaBase} ${
+                      isDark ? darkInput : lightInput
+                    } mobile-input`}
+                    rows={4}
+                    placeholder="Ex.: Faltou material em parte do dia, chuva no período da tarde, cliente pediu pequeno ajuste…"
+                  />
                 </section>
 
-                <hr className={`${isDark ? "border-white/10" : "border-gray-200"} my-3`} />
+                <hr
+                  className={`${
+                    isDark ? "border-white/10" : "border-gray-200"
+                  }`}
+                />
 
                 {/* Fotos */}
-                <section className="pb-1">
+                <section>
                   <h4 className="text-[13px] font-medium tracking-wide uppercase opacity-80 mb-2">
-                    Registo fotográfico
+                    Fotos do dia (até 4)
                   </h4>
                   <input
                     type="file"
@@ -830,7 +725,9 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                           <img
                             src={f.objectUrl}
                             alt={f.nome}
-                            className={`w-24 h-24 object-cover rounded-lg border ${isDark ? "border-[#1f2a37]" : "border-gray-300"}`}
+                            className={`w-24 h-24 object-cover rounded-lg border ${
+                              isDark ? "border-[#1f2a37]" : "border-gray-300"
+                            }`}
                           />
                           <button
                             type="button"
@@ -848,22 +745,27 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
               </div>
 
               {/* Footer */}
-              <div className={`modal-footer ${cardBase} flex justify-end gap-3`}>
+              <div className="flex justify-end gap-3 px-4 sm:px-6 py-3 border-t border-black/5 dark:border-white/10 bg-black/5 dark:bg-white/5">
                 <button
-                  onClick={() => { limparForm(); setAbrirModalNovo(false); }}
-                  className="px-4 py-2 rounded-lg text-sm font-medium border transition hover:bg-black/10
-                             border-transparent bg-gray-600 hover:bg-gray-500 text-white"
+                  onClick={() => {
+                    limparForm();
+                    setAbrirModalNovo(false);
+                  }}
+                  className="px-4 py-2 rounded-lg text-sm font-medium border border-transparent bg-gray-600 hover:bg-gray-500 text-white"
                   disabled={salvando}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={salvarRelatorio}
-                  className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2
-                             bg-blue-600 hover:bg-blue-700 text-white"
+                  className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                   disabled={salvando}
                 >
-                  {salvando ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />}
+                  {salvando ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <Upload size={16} />
+                  )}
                   Salvar relatório
                 </button>
               </div>
@@ -876,41 +778,43 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
       <AnimatePresence>
         {abrirModalDetalhe && (
           <motion.div
-            className="fixed inset-0 bg-black/60 backdrop-blur-[1px] flex sm:items-center items-end justify-center z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center z-50 px-2 sm:px-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setAbrirModalDetalhe(null)}
           >
             <motion.div
-              initial={{ y: 24, opacity: 0 }}
+              initial={{ y: 32, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 24, opacity: 0 }}
+              exit={{ y: 32, opacity: 0 }}
               role="dialog"
               aria-modal="true"
               onClick={(e) => e.stopPropagation()}
-              className={`modal-mobile sm:rounded-2xl sm:w-[680px] sm:max-h-[86vh] w-full border ${cardBase} overflow-hidden`}
+              className={`w-full sm:w-[680px] max-w-[900px] max-h-[86vh] rounded-t-2xl sm:rounded-2xl border ${cardBase} shadow-xl flex flex-col overflow-hidden`}
             >
-              <div className={`modal-header ${cardBase} flex items-center justify-between`}>
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-black/5 dark:border-white/10">
                 <div className="flex items-center gap-2">
                   <CalendarDays size={18} className="text-blue-600" />
                   <h3 className="text-[15px] font-semibold">
                     {abrirModalDetalhe?.data
-                      ? new Date(abrirModalDetalhe.data).toLocaleDateString("pt-PT")
+                      ? new Date(
+                          abrirModalDetalhe.data
+                        ).toLocaleDateString("pt-PT")
                       : "Detalhes do relatório"}
                   </h3>
                 </div>
                 <button
                   aria-label="Fechar"
                   onClick={() => setAbrirModalDetalhe(null)}
-                  className="p-2 rounded-md hover:bg-black/10"
+                  className="p-2 rounded-md hover:bg-black/10 dark:hover:bg-white/5"
                 >
                   <X />
                 </button>
               </div>
 
-              <div className="modal-body sm:max-h-[calc(86vh-108px)] overflow-auto px-4 sm:px-6 pb-4">
-                <div className="grid gap-3 md:grid-cols-2 text-sm">
+              <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 text-sm">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div className="opacity-70">Clima</div>
                   <div className="flex items-center gap-2">
                     {IconeClima(abrirModalDetalhe?.condicoes_climaticas)}
@@ -920,40 +824,32 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                   <div className="opacity-70">Responsável</div>
                   <div>{abrirModalDetalhe?.responsavel?.nome || "—"}</div>
 
-                  <div className="opacity-70">Avanço</div>
+                  <div className="opacity-70">Data do registo</div>
                   <div>
-                    +{abrirModalDetalhe?.progresso_diario || 0}% (total{" "}
-                    {abrirModalDetalhe?.progresso_total ?? 0}%)
+                    {abrirModalDetalhe?.data
+                      ? new Date(
+                          abrirModalDetalhe.data
+                        ).toLocaleDateString("pt-PT")
+                      : "—"}
                   </div>
-
-                  <div className="opacity-70">Horas trabalhadas</div>
-                  <div>{abrirModalDetalhe?.horas_trabalhadas_total ?? 0}h</div>
                 </div>
 
-                <div className="mt-4">
-                  <div className="opacity-70 mb-1 text-sm">Atividades</div>
-                  <div className="text-sm whitespace-pre-line">
+                <div>
+                  <div className="opacity-70 mb-1">Descrição do dia</div>
+                  <div className="whitespace-pre-line">
                     {abrirModalDetalhe?.atividades_realizadas || "—"}
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div>
-                    <div className="opacity-70 mb-1 text-sm">Observações</div>
-                    <div className="text-sm whitespace-pre-line">
-                      {abrirModalDetalhe?.observacoes || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="opacity-70 mb-1 text-sm">Incidentes</div>
-                    <div className="text-sm whitespace-pre-line">
-                      {abrirModalDetalhe?.incidentes || "—"}
-                    </div>
+                <div>
+                  <div className="opacity-70 mb-1">Observações</div>
+                  <div className="whitespace-pre-line">
+                    {abrirModalDetalhe?.observacoes || "—"}
                   </div>
                 </div>
 
                 {(abrirModalDetalhe?.fotos || []).length > 0 && (
-                  <div className="mt-5">
+                  <div>
                     <div className="text-sm font-medium opacity-80 mb-2">
                       Fotos do dia
                     </div>
@@ -970,7 +866,9 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                           <img
                             src={f.url}
                             alt={f.nome}
-                            className={`w-24 h-24 rounded-lg object-cover border ${isDark ? "border-[#1f2a37]" : "border-gray-300"}`}
+                            className={`w-24 h-24 rounded-lg object-cover border ${
+                              isDark ? "border-[#1f2a37]" : "border-gray-300"
+                            }`}
                           />
                         </a>
                       ))}
@@ -979,7 +877,7 @@ export default function RelatoriosDoDia({ obraId }: { obraId: string }) {
                 )}
               </div>
 
-              <div className={`modal-footer ${cardBase} flex justify-end`}>
+              <div className="flex justify-end px-4 sm:px-6 py-3 border-t border-black/5 dark:border-white/10 bg-black/5 dark:bg-white/5">
                 <button
                   onClick={() => setAbrirModalDetalhe(null)}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg mobile-btn text-sm font-medium"

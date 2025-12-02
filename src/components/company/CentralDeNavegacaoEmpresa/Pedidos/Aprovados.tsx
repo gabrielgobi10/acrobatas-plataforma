@@ -1,7 +1,14 @@
 // src/components/company/CentralDeNavegacaoEmpresa/Pedidos/Aprovados.tsx
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, ClipboardCheck, Search, Loader2, MapPin, Info } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardCheck,
+  Search,
+  Loader2,
+  MapPin,
+  Info,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -21,7 +28,7 @@ type Pedido = {
   data_fim?: string | null;
   local?: string | null;
   status?: string | null;
-  criado_em?: string | null;   // coluna válida na view
+  criado_em?: string | null; // coluna válida na view
 };
 
 export default function Aprovados() {
@@ -36,13 +43,30 @@ export default function Aprovados() {
         "empresaPedidos.aprovados.desc",
         "Visualize todos os pedidos já aprovados e prontos para execução."
       ),
-      buscar: tt(t, "empresaPedidos.buscarPlaceholder", "Pesquisar por localização, tipo ou ID..."),
+      buscar: tt(
+        t,
+        "empresaPedidos.buscarPlaceholder",
+        "Buscar por local, tipo ou ID..."
+      ),
       empresa: tt(t, "empresaPedidos.col.empresa", "Empresa"),
       tipo: tt(t, "empresaPedidos.col.tipo", "Tipo"),
-      profissionais: tt(t, "empresaPedidos.col.profissionais", "Profissionais"),
+      profissionais: tt(
+        t,
+        "empresaPedidos.col.profissionais",
+        "Profissionais"
+      ),
       periodo: tt(t, "empresaPedidos.col.periodo", "Período"),
       status: tt(t, "empresaPedidos.col.status", "Status"),
-      nenhum: tt(t, "empresaPedidos.aprovados.nenhum", "Nenhum pedido aprovado."),
+      nenhumTitulo: tt(
+        t,
+        "empresaPedidos.aprovados.nenhumTitulo",
+        "Nenhum pedido aprovado."
+      ),
+      nenhumDica: tt(
+        t,
+        "empresaPedidos.aprovados.nenhumDica",
+        "Dica: tente pesquisar pela cidade, tipo (“Eletricista”) ou pelo ID."
+      ),
       aprovado: tt(t, "empresaPedidos.status.aprovado", "Aprovado"),
     }),
     [t]
@@ -95,7 +119,7 @@ export default function Aprovados() {
     setLoading(false);
   }
 
-  // 2) Fetch + realtime (escuta 'pedidos' e refaz a lista quando muda algo da empresa aprovado)
+  // 2) Fetch + realtime
   useEffect(() => {
     if (!empresaId) {
       setPedidos([]);
@@ -109,13 +133,16 @@ export default function Aprovados() {
       .channel("pedidos_aprovados_changes_v2")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "pedidos" },
+        { event: "*", schema: "public", table: "pedidos_empresa_v2" },
         (payload: any) => {
           const row = payload.new as Pedido | undefined;
           if (!row) return;
           if (row.id_empresa !== empresaId) return;
-          if (row.status !== "aprovado") return;
-          fetchAprovados(empresaId);
+
+          // sempre que um pedido da empresa mudar para aprovado, recarrega
+          if (row.status === "aprovado") {
+            fetchAprovados(empresaId);
+          }
         }
       )
       .subscribe();
@@ -160,22 +187,34 @@ export default function Aprovados() {
             <h1 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
               {L.titulo}
             </h1>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{L.desc}</p>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+              {L.desc}
+            </p>
           </div>
         </div>
 
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
           <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
-            <div className="text-[11px] text-gray-500 dark:text-gray-400">Total aprovados</div>
-            <div className="text-xl font-bold text-green-600 dark:text-green-400">{total}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+              Total aprovados
+            </div>
+            <div className="text-xl font-bold text-green-600 dark:text-green-400">
+              {total}
+            </div>
           </div>
           <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
-            <div className="text-[11px] text-gray-500 dark:text-gray-400">Filtrados</div>
-            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{count}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+              Filtrados
+            </div>
+            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
+              {count}
+            </div>
           </div>
           <div className="hidden sm:block rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
-            <div className="text-[11px] text-gray-500 dark:text-gray-400">Estado</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+              Estado
+            </div>
             <div className="inline-flex items-center gap-1 text-sm font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-300/60">
               <CheckCircle2 className="w-3.5 h-3.5" /> {L.aprovado}
             </div>
@@ -206,11 +245,11 @@ export default function Aprovados() {
         ) : count === 0 ? (
           <div className="mx-auto max-w-[720px]">
             <div className="text-center text-sm sm:text-base text-gray-600 dark:text-gray-300 py-8 sm:py-10 bg-white dark:bg-[#1e2a3a] border border-gray-100 dark:border-slate-700 rounded-xl shadow-sm">
-              {L.nenhum}
-              <div className="mt-3 inline-flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <p className="font-semibold">{L.nenhumTitulo}</p>
+              <p className="mt-3 inline-flex items-center gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                 <Info className="w-4 h-4" />
-                Dica: tente pesquisar pela cidade, tipo (“Eletricista”) ou pelo ID.
-              </div>
+                <span>{L.nenhumDica}</span>
+              </p>
             </div>
           </div>
         ) : (
@@ -266,7 +305,9 @@ export default function Aprovados() {
                       <th className="py-3 pl-6 pr-3 font-medium">ID</th>
                       <th className="py-3 px-3 font-medium">{L.empresa}</th>
                       <th className="py-3 px-3 font-medium">{L.tipo}</th>
-                      <th className="py-3 px-3 font-medium">{L.profissionais}</th>
+                      <th className="py-3 px-3 font-medium">
+                        {L.profissionais}
+                      </th>
                       <th className="py-3 px-3 font-medium">{L.periodo}</th>
                       <th className="py-3 pr-6 pl-3 font-medium">{L.status}</th>
                     </tr>

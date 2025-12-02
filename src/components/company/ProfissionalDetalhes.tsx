@@ -1,7 +1,7 @@
 // src/components/company/ProfissionalDetalhes.tsx
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import type React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -166,13 +166,25 @@ const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 /* =========================
    Componente
 ========================= */
+const TAB_KEYS = ["sobre", "trabalhos", "historico", "avaliacoes", "docs"] as const;
+type TabKey = (typeof TAB_KEYS)[number];
+
 export default function ProfissionalDetalhes() {
   const { id: idParam } = useParams();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<"sobre" | "trabalhos" | "historico" | "avaliacoes" | "docs">("sobre");
+  const [tab, setTab] = useState<TabKey>("sobre");
   const [loading, setLoading] = useState(true);
   const [prof, setProf] = useState<PerfilView | null>(null);
+
+  // refs para as abas (pra dar scrollIntoView)
+  const tabButtonRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({
+    sobre: null,
+    trabalhos: null,
+    historico: null,
+    avaliacoes: null,
+    docs: null,
+  });
 
   // Modal "Convidar para Obra"
   const [abrirConvidar, setAbrirConvidar] = useState(false);
@@ -180,11 +192,29 @@ export default function ProfissionalDetalhes() {
   const [obras, setObras] = useState<ObraRow[]>([]);
   const [obraSelecionada, setObraSelecionada] = useState<string>("");
 
-  const handleKeyTabs = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    const order = ["sobre", "trabalhos", "historico", "avaliacoes", "docs"] as const;
-    const idx = order.indexOf(tab);
-    if (e.key === "ArrowRight") setTab(order[(idx + 1) % order.length]);
-    if (e.key === "ArrowLeft") setTab(order[(idx - 1 + order.length) % order.length]);
+  const handleKeyTabs = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      const order = TAB_KEYS;
+      const idx = order.indexOf(tab);
+      if (e.key === "ArrowRight") setTab(order[(idx + 1) % order.length]);
+      if (e.key === "ArrowLeft") setTab(order[(idx - 1 + order.length) % order.length]);
+    },
+    [tab]
+  );
+
+  // sempre que mudar de aba no mobile, faz a aba ativa deslizar pro centro
+  useEffect(() => {
+    const btn = tabButtonRefs.current[tab];
+    if (!btn) return;
+
+    // só faz isso em telas pequenas
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      btn.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
   }, [tab]);
 
   useEffect(() => {
@@ -231,14 +261,7 @@ export default function ProfissionalDetalhes() {
       const usuarioId = header.user_id || "";
       const profissionalId = header.profissional_id || null;
 
-      const [
-        vinculosRes,
-        avaliacoesRes,
-        docsRes,
-        pastasRes,
-        histRes,
-        perfilRes,
-      ] = await Promise.all([
+      const [vinculosRes, avaliacoesRes, docsRes, pastasRes, histRes, perfilRes] = await Promise.all([
         profissionalId
           ? supabase.from("profissionais_obras").select("profissional_id,status").eq("profissional_id", profissionalId)
           : Promise.resolve({ data: [] } as any),
@@ -302,8 +325,11 @@ export default function ProfissionalDetalhes() {
       const documentos: Documento[] = docsRaw.map((d) => ({
         nome: d.titulo || d.tipo || "Documento",
         status:
-          (d.status as any) === "validado" ? "validado" :
-          (d.status as any) === "expirado" ? "expirado" : "pendente",
+          (d.status as any) === "validado"
+            ? "validado"
+            : (d.status as any) === "expirado"
+            ? "expirado"
+            : "pendente",
       }));
 
       const pastas: PortfolioPastaRow[] = (pastasRes.data as any) ?? [];
@@ -368,15 +394,18 @@ export default function ProfissionalDetalhes() {
 
         area_principal: perfilData?.area_principal ?? null,
         funcao_obra: perfilData?.funcao_obra ?? null,
-        anos_experiencia: typeof perfilData?.anos_experiencia === "number" ? perfilData.anos_experiencia : null,
+        anos_experiencia:
+          typeof perfilData?.anos_experiencia === "number" ? perfilData.anos_experiencia : null,
         nivel_perfil: perfilData?.nivel ?? null,
         habilidades: Array.isArray(perfilData?.habilidades) ? perfilData.habilidades : [],
         disponibilidade_text: perfilData?.disponibilidade ?? null,
 
         cidade_base: perfilData?.cidade_base ?? null,
-        raio_deslocacao: typeof perfilData?.raio_deslocacao === "string" ? perfilData.raio_deslocacao : null,
+        raio_deslocacao:
+          typeof perfilData?.raio_deslocacao === "string" ? perfilData.raio_deslocacao : null,
         pode_viajar: typeof perfilData?.pode_viajar === "boolean" ? perfilData.pode_viajar : null,
-        pode_alojamento: typeof perfilData?.pode_alojamento === "boolean" ? perfilData.pode_alojamento : null,
+        pode_alojamento:
+          typeof perfilData?.pode_alojamento === "boolean" ? perfilData.pode_alojamento : null,
 
         nacionalidade: perfilData?.nacionalidade ?? null,
         idiomas: Array.isArray(perfilData?.idiomas) ? perfilData.idiomas : [],
@@ -474,10 +503,8 @@ export default function ProfissionalDetalhes() {
           <div
             className="absolute inset-0 rounded-3xl overflow-hidden ring-1 ring-slate-200/60 dark:ring-white/10 shadow-sm"
             style={{
-              WebkitMaskImage:
-                "linear-gradient(to bottom, black 90%, rgba(0,0,0,0) 100%)",
-              maskImage:
-                "linear-gradient(to bottom, black 90%, rgba(0,0,0,0) 100%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black 90%, rgba(0,0,0,0) 100%)",
+              maskImage: "linear-gradient(to bottom, black 90%, rgba(0,0,0,0) 100%)",
             }}
           >
             <div
@@ -532,7 +559,11 @@ export default function ProfissionalDetalhes() {
             <Chip>
               <MapPin className="w-4 h-4" /> {prof.cidade}
             </Chip>
-            <span className={`text-xs px-3 py-1 rounded-full font-semibold ${nivelBadgeClass(prof.nivel)} inline-flex items-center gap-1`}>
+            <span
+              className={`text-xs px-3 py-1 rounded-full font-semibold ${nivelBadgeClass(
+                prof.nivel
+              )} inline-flex items-center gap-1`}
+            >
               {prof.nivel === "Mestre" && <Flame className="w-3 h-3" />}
               {prof.nivel === "Oficial" && <Award className="w-3 h-3" />}
               {prof.nivel === "Profissional" && <Hammer className="w-3 h-3" />}
@@ -562,36 +593,45 @@ export default function ProfissionalDetalhes() {
         aria-label="Navegação de seções do perfil"
         onKeyDown={handleKeyTabs}
       >
-        <div className="max-w-6xl mx-auto px-4">
+        <div className="max-w-6xl mx-auto px-2 md:px-4">
           <nav className="w-full flex justify-center">
-            <div className="inline-flex items-center gap-1 rounded-full px-1 py-1
+            {/* wrapper rolável no mobile */}
+            <div className="w-full md:w-auto overflow-x-auto">
+              <div
+                className="inline-flex min-w-max md:min-w-0 items-center gap-1 rounded-full px-1 py-1
                             bg-white/75 dark:bg-slate-900/55 backdrop-blur
-                            ring-1 ring-slate-200/80 dark:ring-white/10 shadow-sm">
-              {[
-                { key: "sobre", label: "Sobre" },
-                { key: "trabalhos", label: "Trabalhos" },
-                { key: "historico", label: "Histórico" },
-                { key: "avaliacoes", label: "Avaliações" },
-                { key: "docs", label: "Documentos" },
-              ].map((t) => {
-                const active = tab === (t.key as typeof tab);
-                return (
-                  <button
-                    key={t.key}
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setTab(t.key as any)}
-                    className={[
-                      "px-3 md:px-4 py-1.5 rounded-full text-sm font-medium transition",
-                      active
-                        ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
-                        : "text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-white/5"
-                    ].join(" ")}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
+                            ring-1 ring-slate-200/80 dark:ring-white/10 shadow-sm"
+              >
+                {[
+                  { key: "sobre", label: "Sobre" },
+                  { key: "trabalhos", label: "Trabalhos" },
+                  { key: "historico", label: "Histórico" },
+                  { key: "avaliacoes", label: "Avaliações" },
+                  { key: "docs", label: "Documentos" },
+                ].map((t) => {
+                  const k = t.key as TabKey;
+                  const active = tab === k;
+                  return (
+                    <button
+                      key={t.key}
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setTab(k)}
+                      ref={(el) => {
+                        tabButtonRefs.current[k] = el;
+                      }}
+                      className={[
+                        "px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition whitespace-nowrap",
+                        active
+                          ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-white/5",
+                      ].join(" ")}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </nav>
         </div>
@@ -602,10 +642,7 @@ export default function ProfissionalDetalhes() {
         {tab === "sobre" && <SobreTab prof={prof} />}
 
         {tab === "trabalhos" && (
-          <TrabalhosTab
-            profissionalId={prof.profissionalId}
-            usuarioId={prof.usuarioId}
-          />
+          <TrabalhosTab profissionalId={prof.profissionalId} usuarioId={prof.usuarioId} />
         )}
 
         {tab === "historico" && <HistoricoTab timeline={prof.timeline} />}
@@ -623,7 +660,10 @@ export default function ProfissionalDetalhes() {
           <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 p-5 shadow-xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold">Convidar para Obra</h3>
-              <button onClick={() => setAbrirConvidar(false)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+              <button
+                onClick={() => setAbrirConvidar(false)}
+                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -665,4 +705,3 @@ export default function ProfissionalDetalhes() {
     </div>
   );
 }
-

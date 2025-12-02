@@ -49,7 +49,14 @@ type Vinculo = {
   progresso?: number | null;
 };
 
-export default function ObrasAtivasProfissional() {
+type ObrasAtivasProfissionalProps = {
+  /** Chamado quando o usuário clica em "Ver vagas disponíveis" no estado vazio */
+  onIrParaVagas?: () => void;
+};
+
+export default function ObrasAtivasProfissional({
+  onIrParaVagas,
+}: ObrasAtivasProfissionalProps) {
   const { user } = useAuth();
 
   // lê o id da obra vindo do painel (se existir)
@@ -413,11 +420,28 @@ export default function ObrasAtivasProfissional() {
               </div>
             </div>
 
-            {/* Lista */}
+            {/* Lista / Estado vazio */}
             {loading ? (
               <div className="flex justify-center py-20 text-gray-400">
                 <Loader2 className="animate-spin w-6 h-6 text-blue-500 mr-2" />
                 Carregando...
+              </div>
+            ) : obrasFiltradas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Building2 className="w-12 h-12 text-blue-500 mb-4" />
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  Você não está alocado em nenhuma obra
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mt-2 max-w-md text-sm">
+                  Veja novas vagas para começar a trabalhar. Assim que você for
+                  alocado em uma obra, ela aparecerá aqui automaticamente.
+                </p>
+                <button
+                  onClick={() => onIrParaVagas?.()}
+                  className="mt-6 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow-sm transition"
+                >
+                  Ver vagas disponíveis
+                </button>
               </div>
             ) : (
               <div className="grid gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">

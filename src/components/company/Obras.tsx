@@ -35,8 +35,13 @@ const statusColors: Record<string, string> = {
 
 function PlaceholderCard() {
   return (
-    <div className="relative">
-      <div className={`bg-gradient-to-b from-blue-400 to-blue-600 rounded-t-2xl ${RIBBON_H} w-[94%] mx-auto`} />
+    <div className="relative group">
+      {/* faixa azul com animação leve */}
+      <div
+        className={`bg-gradient-to-b from-blue-400 to-blue-600 rounded-t-2xl ${RIBBON_H} w-[94%] mx-auto
+        transform transition-transform duration-200 ease-out
+        group-hover:-translate-y-1 active:-translate-y-0.5`}
+      />
       <div
         className={`bg-white dark:bg-[#1b2535] shadow-md sm:shadow-lg rounded-b-2xl border border-gray-200 dark:border-[#2a3647] p-4 sm:p-5 -mt-1 relative z-10 ${CARD_MIN_H}`}
       >
@@ -199,13 +204,17 @@ export default function ObrasPage() {
                 key={obra.id}
                 whileHover={{ y: -4, scale: 1.015 }}
                 transition={{ type: "spring", stiffness: 160 }}
-                className="relative group"
+                className="relative group cursor-default sm:cursor-pointer"
               >
-                {/* BARRA COLORIDA */}
+                {/* BARRA COLORIDA com animação */}
                 <div
-                  className={`bg-gradient-to-b ${
-                    statusColors[obra.status] || "from-blue-400 to-blue-600"
-                  } rounded-t-2xl ${RIBBON_H} w-[94%] mx-auto`}
+                  className={`
+                    bg-gradient-to-b ${
+                      statusColors[obra.status] || "from-blue-400 to-blue-600"
+                    } rounded-t-2xl ${RIBBON_H} w-[94%] mx-auto
+                    transform transition-transform duration-200 ease-out
+                    group-hover:-translate-y-1 active:-translate-y-0.5
+                  `}
                 />
 
                 {/* CARD */}
@@ -272,7 +281,9 @@ export default function ObrasPage() {
 
                   <div className="mt-3 sm:mt-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all flex gap-4 sm:gap-3 justify-between">
                     <button
-                      onClick={() => navigate(`/empresa/obras/${obra.id}/detalhes`)}
+                      onClick={() =>
+                        navigate(`/empresa/obras/${obra.id}/detalhes`)
+                      }
                       className="text-blue-600 dark:text-blue-400 text-xs sm:text-sm font-medium hover:underline"
                     >
                       Ver detalhes

@@ -1,4 +1,3 @@
-// src/components/company/ChatComEquipa.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Send,
@@ -28,8 +27,8 @@ import { useLocation, useSearchParams } from "react-router-dom";
 ============================= */
 type ChatSessao = {
   id: string;
-  profissional_id?: string;
-  empresa_id?: string;
+  profissional_id?: string | null;
+  empresa_id?: string | null;
   titulo: string;
   status: "ativo" | "inativo";
   criado_em: string;
@@ -55,11 +54,14 @@ export default function ChatComEquipa() {
   const [search] = useSearchParams();
 
   const [isMobile, setIsMobile] = useState(false);
-  const [abaMobile, setAbaMobile] = useState<"chats" | "equipa" | "rapidas" | "chat">("chats");
+  const [abaMobile, setAbaMobile] =
+    useState<"chats" | "equipa" | "rapidas" | "chat">("chats");
 
   const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatSessao[]>([]);
-  const [chatSelecionado, setChatSelecionado] = useState<ChatSessao | null>(null);
+  const [chatSelecionado, setChatSelecionado] = useState<ChatSessao | null>(
+    null
+  );
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [novaMensagem, setNovaMensagem] = useState("");
 
@@ -68,6 +70,8 @@ export default function ChatComEquipa() {
 
   const [mostrarModal, setMostrarModal] = useState(false);
   const [chatParaApagar, setChatParaApagar] = useState<string | null>(null);
+
+  const [filtroBusca, setFiltroBusca] = useState("");
 
   // refs para UX
   const listaRef = useRef<HTMLDivElement | null>(null);
@@ -128,12 +132,6 @@ export default function ChatComEquipa() {
   }, []);
 
   /* ---------------- Carregar conversas --------------- */
-  useEffect(() => {
-    if (!user) return;
-    carregarConversas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, empresaId]);
-
   const carregarConversas = async () => {
     if (!user) return;
 
@@ -180,7 +178,8 @@ export default function ChatComEquipa() {
 
         if (ultimaMsg) {
           const diffHoras =
-            (Date.now() - new Date(ultimaMsg.criado_em).getTime()) / (1000 * 60 * 60);
+            (Date.now() - new Date(ultimaMsg.criado_em as string).getTime()) /
+            (1000 * 60 * 60);
           statusLabel = diffHoras < 24 ? "Ativa" : "Inativa";
           ultima_mensagem = (ultimaMsg as any).conteudo ?? null;
         }
@@ -190,6 +189,33 @@ export default function ChatComEquipa() {
     );
 
     setChats(enriquecidas as ChatSessao[]);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    carregarConversas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, empresaId]);
+
+  /* --------- helper: atualizar preview da sessão --------- */
+  const atualizarPreviewSessao = (sessaoId: string, conteudo: string) => {
+    setChats((prev) => {
+      const existente = prev.find((c) => c.id === sessaoId);
+      if (!existente) return prev;
+      const atualizado: ChatSessao = {
+        ...existente,
+        ultima_mensagem: conteudo,
+        statusLabel: "Ativa",
+      };
+      const resto = prev.filter((c) => c.id !== sessaoId);
+      return [atualizado, ...resto];
+    });
+
+    setChatSelecionado((current) =>
+      current && current.id === sessaoId
+        ? { ...current, ultima_mensagem: conteudo, statusLabel: "Ativa" }
+        : current
+    );
   };
 
   /* --------- Criar/abrir conversa --------- */
@@ -264,8 +290,13 @@ export default function ChatComEquipa() {
   /* --------- Salvar título --------- */
   const salvarTitulo = async () => {
     if (!chatSelecionado || !tituloTemp.trim()) return;
-    await supabase.from("chat_sessoes").update({ titulo: tituloTemp }).eq("id", chatSelecionado.id);
-    setChats((prev) => prev.map((c) => (c.id === chatSelecionado.id ? { ...c, titulo: tituloTemp } : c)));
+    await supabase
+      .from("chat_sessoes")
+      .update({ titulo: tituloTemp })
+      .eq("id", chatSelecionado.id);
+    setChats((prev) =>
+      prev.map((c) => (c.id === chatSelecionado.id ? { ...c, titulo: tituloTemp } : c))
+    );
     setChatSelecionado({ ...chatSelecionado, titulo: tituloTemp });
     setEditandoTitulo(false);
   };
@@ -273,21 +304,69 @@ export default function ChatComEquipa() {
   /* --------- Enviar mensagens --------- */
   const enviarMensagem = async (conteudoCustom?: string) => {
     const conteudo = (conteudoCustom ?? novaMensagem).trim();
-    if (!conteudo || !chatSelecionado) return;
+    if (!conteudo || !chatSelecionado || !user) return;
 
-    const { error } = await supabase.from("chat_mensagens").insert([
-      {
-        sessao_id: chatSelecionado.id,
-        remetente_id: user?.id ?? null,
-        conteudo,
-        tipo: "texto",
-      },
-    ]);
+    const { data, error } = await supabase
+      .from("chat_mensagens")
+      .insert([
+        {
+          sessao_id: chatSelecionado.id,
+          remetente_id: user.id,
+          conteudo,
+          tipo: "texto",
+        },
+      ])
+      .select()
+      .single();
 
-    if (!error) setNovaMensagem("");
+    if (error) {
+      console.error("Erro ao enviar mensagem:", error);
+      return;
+    }
+
+    const nova = data as Mensagem;
+
+    setMensagens((prev) => {
+      if (prev.some((m) => m.id === nova.id)) return prev;
+      return [...prev, nova];
+    });
+
+    setNovaMensagem("");
+    atualizarPreviewSessao(chatSelecionado.id, conteudo);
   };
 
-  const enviarPerguntaRapida = async (r: { titulo: string; respostaAutomatica: string }) => {
+  const enviarMensagemSistema = async (sessaoId: string, conteudo: string) => {
+    const { data, error } = await supabase
+      .from("chat_mensagens")
+      .insert([
+        {
+          sessao_id: sessaoId,
+          remetente_id: null,
+          conteudo,
+          tipo: "texto",
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Erro ao enviar mensagem automática:", error);
+      return;
+    }
+
+    const nova = data as Mensagem;
+    setMensagens((prev) => {
+      if (prev.some((m) => m.id === nova.id)) return prev;
+      return [...prev, nova];
+    });
+
+    atualizarPreviewSessao(sessaoId, conteudo);
+  };
+
+  const enviarPerguntaRapida = async (r: {
+    titulo: string;
+    respostaAutomatica: string;
+  }) => {
     let sess = chatSelecionado;
     if (!sess) sess = await criarChat("Suporte Acrobatas");
     if (!sess) return;
@@ -296,19 +375,10 @@ export default function ChatComEquipa() {
     if (isMobile) setAbaMobile("chat");
 
     await enviarMensagem(r.titulo);
-    setTimeout(async () => {
-      await supabase.from("chat_mensagens").insert([
-        {
-          sessao_id: sess!.id,
-          remetente_id: null,
-          conteudo: r.respostaAutomatica,
-          tipo: "texto",
-        },
-      ]);
-    }, 400);
+    await enviarMensagemSistema(sess.id, r.respostaAutomatica);
   };
 
-  /* --------- Realtime + histórico --------- */
+  /* --------- Realtime mensagens --------- */
   useEffect(() => {
     if (!chatSelecionado) return;
 
@@ -320,7 +390,12 @@ export default function ChatComEquipa() {
         (payload) => {
           const nova = payload.new as Mensagem;
           if (nova.sessao_id === chatSelecionado.id) {
-            setMensagens((prev) => [...prev, nova]);
+            setMensagens((prev) => {
+              if (prev.some((m) => m.id === nova.id)) return prev;
+              return [...prev, nova];
+            });
+            if (nova.conteudo)
+              atualizarPreviewSessao(chatSelecionado.id, nova.conteudo);
           }
         }
       )
@@ -340,9 +415,50 @@ export default function ChatComEquipa() {
     return () => {
       supabase.removeChannel(canal);
     };
-  }, [chatSelecionado]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatSelecionado?.id]);
 
-  // autoscroll elegante
+  // Realtime de sessões
+  useEffect(() => {
+    if (!user && !empresaId) return;
+
+    const canal = supabase
+      .channel("chat-sessoes-listener")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_sessoes" },
+        (payload) => {
+          const nova = payload.new as ChatSessao;
+          const pertence =
+            (empresaId && nova.empresa_id === empresaId) ||
+            (user && nova.profissional_id === user.id);
+          if (!pertence) return;
+
+          setChats((prev) => {
+            if (prev.some((c) => c.id === nova.id)) return prev;
+            return [{ ...nova, statusLabel: "Ativa" }, ...prev];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "chat_sessoes" },
+        (payload) => {
+          const removida = payload.old as ChatSessao;
+          setChats((prev) => prev.filter((c) => c.id !== removida.id));
+          setChatSelecionado((atual) =>
+            atual && atual.id === removida.id ? null : atual
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [empresaId, user]);
+
+  // autoscroll
   useEffect(() => {
     if (!listaRef.current) return;
     listaRef.current.scrollTo({
@@ -384,28 +500,144 @@ export default function ChatComEquipa() {
       (async () => {
         const s = await criarChat(state.novoChat as string);
         if (s && state.primeiraMensagem) {
-          await supabase.from("chat_mensagens").insert([
-            {
-              sessao_id: s.id,
-              remetente_id: user?.id ?? null,
-              conteudo: String(state.primeiraMensagem),
-              tipo: "texto",
-            },
-          ]);
+          await enviarMensagemSistema(s.id, String(state.primeiraMensagem));
         }
       })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, search, chats, isMobile]);
 
-  /* ===================== MOBILE ===================== */
+  /* --------- Filtro de conversas --------- */
+  const chatsFiltrados = useMemo(() => {
+    const termo = filtroBusca.trim().toLowerCase();
+    if (!termo) return chats;
+    return chats.filter(
+      (c) =>
+        c.titulo.toLowerCase().includes(termo) ||
+        (c.ultima_mensagem || "").toLowerCase().includes(termo)
+    );
+  }, [chats, filtroBusca]);
+
+  /* ============= MOBILE: CHAT FULLSCREEN ============= */
+  if (isMobile && abaMobile === "chat" && chatSelecionado) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 28 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="fixed inset-0 z-40 flex flex-col bg-slate-50 dark:bg-slate-900"
+      >
+        {/* HEADER FIXO */}
+        <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm">
+          <button
+            onClick={() => {
+              setAbaMobile("chats");
+              setChatSelecionado(null);
+            }}
+            className="p-1 rounded-md"
+          >
+            <ArrowLeft className="w-5 h-5 text-slate-500" />
+          </button>
+
+          {editandoTitulo ? (
+            <div className="flex items-center gap-2 flex-1 mx-2">
+              <input
+                value={tituloTemp}
+                onChange={(e) => setTituloTemp(e.target.value)}
+                className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <button onClick={salvarTitulo} className="text-green-600">
+                <Check size={16} />
+              </button>
+            </div>
+          ) : (
+            <h3
+              className="font-semibold text-sm truncate flex-1 mx-2"
+              onDoubleClick={() => {
+                setTituloTemp(chatSelecionado.titulo);
+                setEditandoTitulo(true);
+              }}
+            >
+              {chatSelecionado.titulo}
+            </h3>
+          )}
+
+          <button onClick={() => setChatSelecionado(null)} className="text-xs text-red-500">
+            Encerrar
+          </button>
+        </div>
+
+        {/* MENSAGENS – SÓ AQUI ROLA */}
+        <div
+          ref={listaRef}
+          className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
+        >
+          {mensagens.map((m) => (
+            <div
+              key={m.id}
+              className={`flex ${
+                m.remetente_id === user?.id ? "justify-end" : "justify-start"
+              }`}
+            >
+              <div
+                className={`px-4 py-2 rounded-2xl max-w-[80%] text-sm ${
+                  m.remetente_id === user?.id
+                    ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                }`}
+              >
+                {m.conteudo}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* INPUT + RÁPIDAS FIXOS EMBAIXO */}
+        <div className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pt-2 pb-3 space-y-2 [padding-bottom:calc(env(safe-area-inset-bottom)+12px)]">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            {respostas.map((r, i) => (
+              <button
+                key={i}
+                onClick={() => enviarPerguntaRapida(r)}
+                className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-100"
+              >
+                {r.titulo}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Paperclip className="w-5 h-5 text-slate-400" />
+            <input
+              ref={inputRef}
+              value={novaMensagem}
+              onChange={(e) => setNovaMensagem(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && novaMensagem.trim()) {
+                  e.preventDefault();
+                  enviarMensagem();
+                }
+              }}
+              placeholder="Escreva uma mensagem..."
+              className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+            />
+            <button
+              disabled={!novaMensagem.trim()}
+              onClick={() => enviarMensagem()}
+              className="disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-2 rounded-lg flex items-center gap-1 active:scale-[.98] shadow"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  /* ===================== MOBILE (LISTAS / EQUIPA / RÁPIDAS) ===================== */
   if (isMobile) {
     return (
-      // >>> sem fundo extra: herda do painel
       <div className="min-h-screen bg-transparent flex flex-col">
-        {/* SEGMENTED TABS */}
         {abaMobile !== "chat" && (
-          // >>> tabs bar transparente (sem véu)
           <div className="sticky top-0 z-30 px-4 pt-3 pb-2 bg-transparent border-b border-slate-200 dark:border-slate-800">
             <div className="relative w-full bg-slate-100 dark:bg-slate-800 rounded-full p-1 flex">
               {["chats", "equipa", "rapidas"].map((k) => (
@@ -426,7 +658,6 @@ export default function ChatComEquipa() {
                   </span>
                 </button>
               ))}
-              {/* indicador */}
               <motion.span
                 layout
                 className="absolute top-1 bottom-1 w-1/3 rounded-full bg-white dark:bg-slate-700 shadow"
@@ -456,8 +687,17 @@ export default function ChatComEquipa() {
                 </button>
               </div>
 
+              <div className="px-4 pt-3 pb-2">
+                <input
+                  value={filtroBusca}
+                  onChange={(e) => setFiltroBusca(e.target.value)}
+                  placeholder="Procurar conversa..."
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+
               <div className="p-3 space-y-2">
-                {chats.length === 0 && (
+                {chatsFiltrados.length === 0 && (
                   <div className="text-center py-10">
                     <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                       <MessageCircle className="w-6 h-6 text-slate-400" />
@@ -472,7 +712,7 @@ export default function ChatComEquipa() {
                   </div>
                 )}
 
-                {chats.map((c) => (
+                {chatsFiltrados.map((c) => (
                   <button
                     key={c.id}
                     onClick={() => {
@@ -527,9 +767,14 @@ export default function ChatComEquipa() {
                     onClick={() => criarChat(`Suporte — ${a.nome}`)}
                     className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800"
                   >
-                    <span className="text-sm">👤 {a.nome} — {a.cargo}</span>
+                    <span className="text-sm">
+                      👤 {a.nome} — {a.cargo}
+                    </span>
                     <span className="inline-flex items-center gap-2 text-xs text-slate-500">
-                      <Circle size={10} className={a.online ? "text-green-500" : "text-slate-400"} />
+                      <Circle
+                        size={10}
+                        className={a.online ? "text-green-500" : "text-slate-400"}
+                      />
                       {a.online ? "online" : "offline"}
                     </span>
                   </button>
@@ -559,102 +804,25 @@ export default function ChatComEquipa() {
           </div>
         )}
 
-        {/* CHAT */}
-        {abaMobile === "chat" && chatSelecionado && (
-          <motion.div
-            initial={{ opacity: 0, x: 28 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex flex-col flex-1"
-          >
-            <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800">
-              <button onClick={() => setAbaMobile("chats")} className="p-1 rounded-md">
-                <ArrowLeft className="w-5 h-5 text-slate-500" />
-              </button>
-
-              {editandoTitulo ? (
-                <div className="flex items-center gap-2 flex-1 mx-2">
-                  <input
-                    value={tituloTemp}
-                    onChange={(e) => setTituloTemp(e.target.value)}
-                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                  <button onClick={salvarTitulo} className="text-green-600">
-                    <Check size={16} />
-                  </button>
-                </div>
-              ) : (
-                <h3
-                  className="font-semibold text-sm truncate flex-1 mx-2"
-                  onDoubleClick={() => {
-                    setTituloTemp(chatSelecionado.titulo);
-                    setEditandoTitulo(true);
-                  }}
-                >
-                  {chatSelecionado.titulo}
-                </h3>
-              )}
-
-              <button onClick={() => setChatSelecionado(null)} className="text-xs text-red-500">
-                Encerrar
-              </button>
-            </div>
-
-            <div ref={listaRef} className="flex-1 overflow-y-auto p-4 space-y-2">
-              {mensagens.map((m) => (
-                <div
-                  key={m.id}
-                  className={`flex ${m.remetente_id === user?.id ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`px-4 py-2 rounded-2xl max-w-[80%] text-sm ${
-                      m.remetente_id === user?.id
-                        ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white"
-                        : "bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
-                    }`}
-                  >
-                    {m.conteudo}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 flex items-center gap-2 [padding-bottom:calc(env(safe-area-inset-bottom)+12px)]">
-              <Paperclip className="w-5 h-5 text-slate-400" />
-              <input
-                ref={inputRef}
-                value={novaMensagem}
-                onChange={(e) => setNovaMensagem(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    enviarMensagem();
-                  }
-                }}
-                placeholder="Escreva uma mensagem..."
-                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-              />
-              <button
-                disabled={!novaMensagem.trim()}
-                onClick={() => enviarMensagem()}
-                className="disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-2 rounded-lg flex items-center gap-1 active:scale-[.98] shadow"
-              >
-                <Send size={16} />
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Modal apagar */}
+        {/* Modal apagar (somente na tela de listas) */}
         {mostrarModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 text-center max-w-sm w-full border border-slate-200 dark:border-slate-700 shadow-2xl">
               <h3 className="text-lg font-semibold mb-2">Apagar conversa?</h3>
-              <p className="text-sm text-slate-500 mb-4">Esta ação não poderá ser desfeita.</p>
+              <p className="text-sm text-slate-500 mb-4">
+                Esta ação não poderá ser desfeita.
+              </p>
               <div className="flex justify-center gap-3">
-                <button onClick={() => setMostrarModal(false)} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600">
+                <button
+                  onClick={() => setMostrarModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600"
+                >
                   Cancelar
                 </button>
-                <button onClick={apagarChat} className="px-4 py-2 rounded-lg bg-red-600 text-white">
+                <button
+                  onClick={apagarChat}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white"
+                >
                   Apagar
                 </button>
               </div>
@@ -672,8 +840,13 @@ export default function ChatComEquipa() {
         {/* Conversas (esquerda) */}
         <div className="col-span-1 bg-white dark:bg-[#111827]/90 rounded-2xl border border-gray-200 dark:border-[#1e293b]/70 shadow-sm flex flex-col">
           <div className="flex items-center justify-between p-4 border-b dark:border-[#1e293b]/70">
-            <h2 className="font-semibold text-gray-700 dark:text-gray-200">💬 Suas conversas</h2>
-            <button onClick={() => criarChat()} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm">
+            <h2 className="font-semibold text-gray-700 dark:text-gray-200">
+              💬 Suas conversas
+            </h2>
+            <button
+              onClick={() => criarChat()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm"
+            >
               + Novo
             </button>
           </div>
@@ -681,16 +854,20 @@ export default function ChatComEquipa() {
           <div className="p-3">
             <input
               type="text"
+              value={filtroBusca}
+              onChange={(e) => setFiltroBusca(e.target.value)}
               placeholder="Procurar conversa..."
               className="w-full p-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-[#0f172a]/70 text-gray-800 dark:text-gray-100"
             />
           </div>
 
           <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2">
-            {chats.length === 0 ? (
-              <p className="text-center text-gray-400 mt-10 text-sm">Nenhum chat ainda.</p>
+            {chatsFiltrados.length === 0 ? (
+              <p className="text-center text-gray-400 mt-10 text-sm">
+                Nenhum chat ainda.
+              </p>
             ) : (
-              chats.map((c) => (
+              chatsFiltrados.map((c) => (
                 <div
                   key={c.id}
                   onClick={() => setChatSelecionado(c)}
@@ -701,9 +878,17 @@ export default function ChatComEquipa() {
                   }`}
                 >
                   <div className="min-w-0">
-                    <p className="font-medium text-sm text-gray-700 dark:text-gray-100 truncate">{c.titulo}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.ultima_mensagem || "Sem mensagens ainda"}</p>
-                    <span className={`text-[11px] ${c.statusLabel === "Ativa" ? "text-green-500" : "text-gray-400"}`}>
+                    <p className="font-medium text-sm text-gray-700 dark:text-gray-100 truncate">
+                      {c.titulo}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {c.ultima_mensagem || "Sem mensagens ainda"}
+                    </p>
+                    <span
+                      className={`text-[11px] ${
+                        c.statusLabel === "Ativa" ? "text-green-500" : "text-gray-400"
+                      }`}
+                    >
                       {c.statusLabel === "Ativa" ? "🟢 Ativa" : "⚪ Inativa"}
                     </span>
                   </div>
@@ -734,7 +919,10 @@ export default function ChatComEquipa() {
                       onChange={(e) => setTituloTemp(e.target.value)}
                       className="border rounded-md px-2 py-1 flex-1 outline-none text-sm bg-white dark:bg-[#0f172a]/70 text-gray-800 dark:text-gray-200"
                     />
-                    <button onClick={salvarTitulo} className="text-green-600 hover:text-green-700">
+                    <button
+                      onClick={salvarTitulo}
+                      className="text-green-600 hover:text-green-700"
+                    >
                       <Check size={16} />
                     </button>
                   </div>
@@ -751,7 +939,10 @@ export default function ChatComEquipa() {
                         }}
                       />
                     </h3>
-                    <button onClick={() => setChatSelecionado(null)} className="text-sm text-gray-400 hover:text-red-500">
+                    <button
+                      onClick={() => setChatSelecionado(null)}
+                      className="text-sm text-gray-400 hover:text-red-500"
+                    >
                       ✖ Encerrar
                     </button>
                   </>
@@ -760,10 +951,17 @@ export default function ChatComEquipa() {
 
               <div ref={listaRef} className="flex-1 overflow-y-auto p-6 space-y-3">
                 {mensagens.length === 0 ? (
-                  <p className="text-center text-gray-400">Nenhuma mensagem ainda. Comece a conversar!</p>
+                  <p className="text-center text-gray-400">
+                    Nenhuma mensagem ainda. Comece a conversar!
+                  </p>
                 ) : (
                   mensagens.map((m) => (
-                    <div key={m.id} className={`flex ${m.remetente_id === user?.id ? "justify-end" : "justify-start"}`}>
+                    <div
+                      key={m.id}
+                      className={`flex ${
+                        m.remetente_id === user?.id ? "justify-end" : "justify-start"
+                      }`}
+                    >
                       <div
                         className={`px-4 py-2 rounded-2xl max-w-[70%] text-sm ${
                           m.remetente_id === user?.id
@@ -786,10 +984,19 @@ export default function ChatComEquipa() {
                   placeholder="Escreva uma mensagem..."
                   value={novaMensagem}
                   onChange={(e) => setNovaMensagem(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && enviarMensagem()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && novaMensagem.trim()) {
+                      e.preventDefault();
+                      enviarMensagem();
+                    }
+                  }}
                   className="flex-1 p-2 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-[#1e293b]/70 text-sm"
                 />
-                <button onClick={() => enviarMensagem()} disabled={!novaMensagem.trim()} className="disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                <button
+                  onClick={() => enviarMensagem()}
+                  disabled={!novaMensagem.trim()}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                >
                   <Send className="w-4 h-4" /> Enviar
                 </button>
               </div>
@@ -808,25 +1015,36 @@ export default function ChatComEquipa() {
             <h3 className="font-semibold text-gray-700 dark:text-gray-100 flex items-center gap-2">
               <LifeBuoy className="w-5 h-5" /> Equipa Acrobatas
             </h3>
-            <p className="text-xs text-gray-400 mt-1">Tire dúvidas com o suporte ou gestão.</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Tire dúvidas com o suporte ou gestão.
+            </p>
           </div>
 
           <div className="p-5 border-b dark:border-[#1e293b]/70">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Agentes online</h4>
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+              Agentes online
+            </h4>
             {agentes.map((a, i) => (
               <button
                 key={i}
                 onClick={() => criarChat(`Suporte — ${a.nome}`)}
                 className="flex items-center justify-between w-full mb-2 p-2 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-[#1e2536]"
               >
-                <span className="text-sm text-gray-700 dark:text-gray-200">👤 {a.nome} — {a.cargo}</span>
-                <Circle size={10} className={a.online ? "text-green-500" : "text-gray-400"} />
+                <span className="text-sm text-gray-700 dark:text-gray-200">
+                  👤 {a.nome} — {a.cargo}
+                </span>
+                <Circle
+                  size={10}
+                  className={a.online ? "text-green-500" : "text-gray-400"}
+                />
               </button>
             ))}
           </div>
 
           <div className="flex-1 p-5 space-y-3 overflow-y-auto">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Perguntas rápidas</h4>
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              Perguntas rápidas
+            </h4>
             {respostas.map((r, i) => (
               <button
                 key={i}
@@ -844,17 +1062,27 @@ export default function ChatComEquipa() {
         </div>
       </div>
 
-      {/* Modal apagar */}
+      {/* Modal apagar (desktop) */}
       {mostrarModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white dark:bg-[#111827]/95 rounded-2xl p-6 shadow-2xl text-center max-w-sm w-full border border-gray-200 dark:border-[#1e293b]/70">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Apagar conversa?</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Esta ação não poderá ser desfeita.</p>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+              Apagar conversa?
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Esta ação não poderá ser desfeita.
+            </p>
             <div className="flex justify-center gap-3 mt-5">
-              <button onClick={() => setMostrarModal(false)} className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-[#1e2536] text-gray-700 dark:text-gray-300 text-sm">
+              <button
+                onClick={() => setMostrarModal(false)}
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-[#1e2536] text-gray-700 dark:text-gray-300 text-sm"
+              >
                 Cancelar
               </button>
-              <button onClick={apagarChat} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm shadow">
+              <button
+                onClick={apagarChat}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm shadow"
+              >
                 Apagar
               </button>
             </div>

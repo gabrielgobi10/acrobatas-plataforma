@@ -24,7 +24,9 @@ import { useTranslation } from "react-i18next";
 export const LoginPage = () => {
   const { t, i18n } = useTranslation();
   const [isLogin, setIsLogin] = useState(true);
-  const [userRole, setUserRole] = useState<"professional" | "company" | "admin">("professional");
+  const [userRole, setUserRole] = useState<"professional" | "company" | "admin">(
+    "professional"
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -37,12 +39,12 @@ export const LoginPage = () => {
   const [adminKey, setAdminKey] = useState("");
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showLangModal, setShowLangModal] = useState(false); // ✅ idioma mobile modal
+  const [showLangModal, setShowLangModal] = useState(false); // idioma mobile modal
 
   const { login, register, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
-  // 🔹 Listener para evento vindo do MobileDock
+  // Listener para evento vindo do MobileDock
   useEffect(() => {
     const openLang = () => setShowLangModal(true);
     window.addEventListener("toggle-idioma", openLang);
@@ -53,7 +55,7 @@ export const LoginPage = () => {
     };
   }, []);
 
-  // 🔹 Lembrar tipo de usuário
+  // Lembrar tipo de usuário
   useEffect(() => {
     const savedRole = localStorage.getItem("userRole");
     if (savedRole === "professional" || savedRole === "company") {
@@ -65,7 +67,7 @@ export const LoginPage = () => {
     localStorage.setItem("userRole", userRole);
   }, [userRole]);
 
-  // 🔹 Redirecionamento pós-login
+  // Redirecionamento pós-login
   useEffect(() => {
     if (isAuthenticated && user) {
       switch (user.tipo_usuario) {
@@ -87,7 +89,7 @@ export const LoginPage = () => {
     }
   }, [isAuthenticated, user, navigate]);
 
-  // 🔹 Enviar formulário
+  // Enviar formulário
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -95,9 +97,11 @@ export const LoginPage = () => {
     setSubmitting(true);
 
     try {
-      if (!email.trim() || !password.trim()) throw new Error(t("login.erroCampos"));
+      if (!email.trim() || !password.trim())
+        throw new Error(t("login.erroCampos"));
       if (!isLogin && !name.trim()) throw new Error(t("login.erroNome"));
-      if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) throw new Error(t("login.erroEmail"));
+      if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/))
+        throw new Error(t("login.erroEmail"));
       if (password.length < 6) throw new Error(t("login.erroSenha"));
 
       const tipoMap = {
@@ -140,7 +144,7 @@ export const LoginPage = () => {
     }
   };
 
-  // 🔹 Validação da chave admin
+  // Validação da chave admin
   const handleConfirmAdminKey = () => {
     const adminKeyEnv = import.meta.env.VITE_ADMIN_ACCESS_KEY || "acrobatas2024";
     if (adminKey === adminKeyEnv) {
@@ -157,7 +161,7 @@ export const LoginPage = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 🔹 Idiomas disponíveis (para modal mobile)
+  // Idiomas disponíveis (para modal mobile)
   const LANGUAGES = [
     { code: "pt", name: "Português", flag: "🇵🇹" },
     { code: "en", name: "English", flag: "🇬🇧" },
@@ -167,19 +171,23 @@ export const LoginPage = () => {
     { code: "ar", name: "العربية", flag: "🇸🇦" },
   ];
 
+  const nomeLabel =
+    !adminMode && userRole === "company"
+      ? t("login.nomeEmpresa") // ex.: "Nome da empresa"
+      : t("login.nomeCompleto"); // ex.: "Nome completo"
+
   return (
     <div className="min-h-[100dvh] bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex items-center justify-center p-4 sm:p-6 relative overflow-hidden">
-
-      {/* 🌍 Desktop */}
+      {/* Desktop */}
       <div className="hidden sm:flex absolute top-3 right-3 items-center gap-3 z-20">
         <IdiomaSelector />
         <Suporte />
       </div>
 
-      {/* 🚀 Mobile Dock */}
+      {/* Mobile Dock */}
       <MobileDock />
 
-      {/* 🔹 Container principal */}
+      {/* Container principal */}
       <div className="w-full max-w-5xl flex flex-col md:grid md:grid-cols-2 gap-6 md:gap-8 items-stretch">
         {/* ESQUERDA */}
         <div className="order-1 bg-white/95 rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col justify-center relative">
@@ -196,7 +204,9 @@ export const LoginPage = () => {
             <button
               onClick={() => handleTabSwitch(true)}
               className={`flex-1 pb-2 sm:pb-3 text-center font-semibold transition-all ${
-                isLogin ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500"
+                isLogin
+                  ? "text-blue-600 border-b-2 border-blue-600"
+                  : "text-gray-500"
               }`}
             >
               {t("login.entrar")}
@@ -204,7 +214,9 @@ export const LoginPage = () => {
             <button
               onClick={() => handleTabSwitch(false)}
               className={`flex-1 pb-2 sm:pb-3 text-center font-semibold transition-all ${
-                !isLogin ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500"
+                !isLogin
+                  ? "text-blue-600 border-b-2 border-blue-600"
+                  : "text-gray-500"
               }`}
             >
               {t("login.cadastrar")}
@@ -280,14 +292,14 @@ export const LoginPage = () => {
             {!isLogin && (
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t("login.nomeCompleto")} <span className="text-red-500">*</span>
+                  {nomeLabel} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all text-sm sm:text-base"
-                  placeholder={t("login.nomeCompleto")}
+                  placeholder={nomeLabel}
                   required
                 />
               </div>
@@ -380,11 +392,26 @@ export const LoginPage = () => {
           </h2>
           <div className="space-y-6">
             {[
-              { icon: <Users className="w-6 h-6 text-blue-200" />, title: t("login.profissional"), text: t("login.descricaoProfissionais") },
-              { icon: <Building2 className="w-6 h-6 text-blue-200" />, title: t("login.empresa"), text: t("login.descricaoEmpresas") },
-              { icon: <Shield className="w-6 h-6 text-blue-200" />, title: t("login.cadastroGratuito"), text: t("login.descricaoCadastro") },
+              {
+                icon: <Users className="w-6 h-6 text-blue-200" />,
+                title: t("login.profissional"),
+                text: t("login.descricaoProfissionais"),
+              },
+              {
+                icon: <Building2 className="w-6 h-6 text-blue-200" />,
+                title: t("login.empresa"),
+                text: t("login.descricaoEmpresas"),
+              },
+              {
+                icon: <Shield className="w-6 h-6 text-blue-200" />,
+                title: t("login.cadastroGratuito"),
+                text: t("login.descricaoCadastro"),
+              },
             ].map((item, i) => (
-              <div key={i} className="flex gap-4 items-start bg-white/5 md:bg-transparent p-3 md:p-0 rounded-xl md:rounded-none border border-white/10 md:border-0">
+              <div
+                key={i}
+                className="flex gap-4 items-start bg-white/5 md:bg-transparent p-3 md:p-0 rounded-xl md:rounded-none border border-white/10 md:border-0"
+              >
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center border border-white/20">
                   {item.icon}
                 </div>
@@ -398,22 +425,45 @@ export const LoginPage = () => {
         </div>
       </div>
 
-      {/* 🔐 MODAL ADMIN */}
+      {/* MODAL ADMIN */}
       <AnimatePresence>
         {showAdminModal && (
           <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
             <motion.div className="bg-white rounded-2xl p-8 w-[90%] max-w-[380px] shadow-2xl relative">
-              <button onClick={() => setShowAdminModal(false)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
+              <button
+                onClick={() => setShowAdminModal(false)}
+                className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+              >
                 <X className="w-5 h-5" />
               </button>
               <div className="flex flex-col items-center text-center">
                 <LockKeyhole className="w-10 h-10 text-blue-600 mb-3" />
-                <h2 className="text-xl font-semibold mb-2 text-gray-800">{t("login.acessoAdmin")}</h2>
-                <p className="text-gray-500 text-sm mb-5">{t("login.digiteChave")}</p>
-                <input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} placeholder={t("login.placeholderChave")} className="w-full border border-gray-300 rounded-lg p-2 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                <h2 className="text-xl font-semibold mb-2 text-gray-800">
+                  {t("login.acessoAdmin")}
+                </h2>
+                <p className="text-gray-500 text-sm mb-5">
+                  {t("login.digiteChave")}
+                </p>
+                <input
+                  type="password"
+                  value={adminKey}
+                  onChange={(e) => setAdminKey(e.target.value)}
+                  placeholder={t("login.placeholderChave")}
+                  className="w-full border border-gray-300 rounded-lg p-2 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
                 <div className="flex justify-end gap-3 mt-6 w-full">
-                  <button onClick={() => setShowAdminModal(false)} className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm">{t("login.cancelar")}</button>
-                  <button onClick={handleConfirmAdminKey} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">{t("login.confirmar")}</button>
+                  <button
+                    onClick={() => setShowAdminModal(false)}
+                    className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm"
+                  >
+                    {t("login.cancelar")}
+                  </button>
+                  <button
+                    onClick={handleConfirmAdminKey}
+                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
+                  >
+                    {t("login.confirmar")}
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -421,10 +471,13 @@ export const LoginPage = () => {
         )}
       </AnimatePresence>
 
-      {/* 🔑 Recuperar senha */}
-      <RecuperarSenha open={showForgotPassword} onClose={() => setShowForgotPassword(false)} />
+      {/* Recuperar senha */}
+      <RecuperarSenha
+        open={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+      />
 
-      {/* 🌍 MODAL IDIOMA MOBILE */}
+      {/* MODAL IDIOMA MOBILE */}
       <AnimatePresence>
         {showLangModal &&
           createPortal(
@@ -441,15 +494,20 @@ export const LoginPage = () => {
                 initial={{ y: 40, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 40, opacity: 0 }}
-                transition={{ duration: 0.25, ease: 'easeOut' }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
                 className="bg-white rounded-2xl shadow-2xl w-[88%] max-w-sm p-5 text-gray-800 border border-gray-200 relative"
                 onClick={(e) => e.stopPropagation()}
               >
-                <button onClick={() => setShowLangModal(false)} className="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <button
+                  onClick={() => setShowLangModal(false)}
+                  className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+                >
                   <X className="w-5 h-5" />
                 </button>
 
-                <h2 className="text-lg font-bold mb-4 text-center">🌍 Selecione o idioma</h2>
+                <h2 className="text-lg font-bold mb-4 text-center">
+                  🌍 Selecione o idioma
+                </h2>
 
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto">
                   {LANGUAGES.map((lang) => (

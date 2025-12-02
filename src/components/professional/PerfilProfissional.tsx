@@ -2,8 +2,20 @@
 
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import {
-  MapPin, Mail, Phone, Star, Clock4, Trophy, Camera, Sparkles, Edit3,
-  Link as LinkIcon, ExternalLink, Loader2, Trash2, ArrowLeft,
+  MapPin,
+  Mail,
+  Phone,
+  Star,
+  Clock4,
+  Trophy,
+  Camera,
+  Sparkles,
+  Edit3,
+  Link as LinkIcon,
+  ExternalLink,
+  Loader2,
+  Trash2,
+  ArrowLeft,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -19,7 +31,12 @@ import AtividadeTab from "./perfil/AtividadeTab";
 import EditarPerfilModal from "./EditarPerfilModal";
 
 import type {
-  Perfil, PastaPortfolio, Experiencia, Documento, Avaliacao, HistoricoObra,
+  Perfil,
+  PastaPortfolio,
+  Experiencia,
+  Documento,
+  Avaliacao,
+  HistoricoObra,
 } from "./perfil/types";
 
 type PerfilProfissionalProps = {
@@ -31,10 +48,14 @@ type PerfilProfissionalProps = {
 
 const BUCKET_NAME = "public";
 
-function mapDbToPerfil(row: any, userLike: { id?: string | null; email?: string | null } | null): Perfil {
+function mapDbToPerfil(
+  row: any,
+  userLike: { id?: string | null; email?: string | null } | null
+): Perfil {
   return {
     usuario_id: row.usuario_id ?? userLike?.id ?? null,
-    nome_completo: row.nome_completo ?? userLike?.email?.split("@")[0],
+    // não usa mais prefixo do e-mail como nome
+    nome_completo: row.nome_completo ?? null,
     email: row.email ?? userLike?.email ?? "",
     telefone: row.telefone ?? null,
     whatsapp: row.whatsapp ?? null,
@@ -82,7 +103,8 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   const navigate = useNavigate();
 
   // 🔑 ID alvo para TODAS as queries deste componente
-  const alvoUsuarioId = adminView && forceUsuarioId ? forceUsuarioId : user?.id ?? null;
+  const alvoUsuarioId =
+    adminView && forceUsuarioId ? forceUsuarioId : user?.id ?? null;
 
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [portfolios, setPortfolios] = useState<PastaPortfolio[]>([]);
@@ -91,7 +113,13 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
   const [historicoObras, setHistoricoObras] = useState<HistoricoObra[]>([]);
   const [aba, setAba] = useState<
-    "sobre" | "portfolio" | "experiencia" | "historico" | "documentos" | "avaliacoes" | "atividade"
+    | "sobre"
+    | "portfolio"
+    | "experiencia"
+    | "historico"
+    | "documentos"
+    | "avaliacoes"
+    | "atividade"
   >("sobre");
 
   const [savingBanner, setSavingBanner] = useState(false);
@@ -101,7 +129,8 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   const [showBannerActions, setShowBannerActions] = useState(false);
   const [showAvatarActions, setShowAvatarActions] = useState(false);
   const isTouch = useMemo(
-    () => typeof window !== "undefined" && matchMedia?.("(hover: none)").matches,
+    () =>
+      typeof window !== "undefined" && matchMedia?.("(hover: none)").matches,
     []
   );
 
@@ -110,7 +139,7 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   const fileBannerRef = useRef<HTMLInputElement | null>(null);
   const fileAvatarRef = useRef<HTMLInputElement | null>(null);
 
-  // --- NOVO: refs para tabs + centralizar ativa
+  // refs para tabs + centralizar ativa
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
   const tabsRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -146,11 +175,14 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
         .maybeSingle();
 
       if (!error && data) {
-        setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+        setPerfil(
+          mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null })
+        );
       } else {
+        // primeira vez: não usa mais o e-mail como nome
         setPerfil({
           usuario_id: alvoUsuarioId,
-          nome_completo: user?.email?.split("@")[0] ?? "Profissional",
+          nome_completo: null,
           email: user?.email ?? "",
           perfil_completo: false,
           nivel: "Profissional",
@@ -173,7 +205,9 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
         .from("profissionais_portfolio_pastas")
         .select("id,titulo,obra_id,cliente,cidade,ano,capa_url,midias")
         .eq("usuario_id", alvoUsuarioId);
-      setPortfolios((data as any[])?.map(p => ({ ...p, midias: p.midias ?? [] })) ?? []);
+      setPortfolios(
+        (data as any[])?.map((p) => ({ ...p, midias: p.midias ?? [] })) ?? []
+      );
     })();
   }, [alvoUsuarioId]);
 
@@ -226,21 +260,29 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
 
   const mediaAvaliacao = useMemo(() => {
     if (!avaliacoes.length) return 0;
-    return avaliacoes.reduce((acc, a) => acc + (a.nota ?? 0), 0) / Math.max(1, avaliacoes.length);
+    return (
+      avaliacoes.reduce((acc, a) => acc + (a.nota ?? 0), 0) /
+      Math.max(1, avaliacoes.length)
+    );
   }, [avaliacoes]);
 
   const MAX_MB = 10;
   const uploadToBucket = async (file: File, path: string) => {
-    if (file.size > MAX_MB * 1024 * 1024) throw new Error(`Arquivo muito grande (>${MAX_MB}MB).`);
+    if (file.size > MAX_MB * 1024 * 1024)
+      throw new Error(`Arquivo muito grande (>${MAX_MB}MB).`);
     const { data: up, error: upErr } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(path, file, { upsert: true, cacheControl: "3600" });
     if (upErr) throw upErr;
-    const { data: publicUrl } = supabase.storage.from(BUCKET_NAME).getPublicUrl(up.path);
+    const { data: publicUrl } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(up.path);
     return publicUrl.publicUrl;
   };
 
-  const handleBannerChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerChange = async (
+    ev: React.ChangeEvent<HTMLInputElement>
+  ) => {
     try {
       if (!perfil?.usuario_id || !ev.target.files?.[0]) return;
       setSavingBanner(true);
@@ -251,13 +293,19 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
 
       const { data, error } = await supabase
         .from("profissionais_perfil")
-        .update({ banner_url: publicUrl, data_atualizacao: new Date().toISOString() })
+        .update({
+          banner_url: publicUrl,
+          data_atualizacao: new Date().toISOString(),
+        })
         .eq("usuario_id", perfil.usuario_id)
         .select()
         .maybeSingle();
 
       if (error) throw error;
-      if (data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+      if (data)
+        setPerfil(
+          mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null })
+        );
     } catch (e) {
       console.error("Erro ao trocar banner:", e);
       alert("Não foi possível trocar a capa. Tente novamente.");
@@ -275,7 +323,10 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
       setSavingBanner(true);
       const { data, error } = await supabase
         .from("profissionais_perfil")
-        .update({ banner_url: null, data_atualizacao: new Date().toISOString() })
+        .update({
+          banner_url: null,
+          data_atualizacao: new Date().toISOString(),
+        })
         .eq("usuario_id", perfil.usuario_id)
         .select()
         .maybeSingle();
@@ -284,7 +335,10 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
       const path = extractStoragePathFromPublicUrl(perfil.banner_url);
       if (path) await supabase.storage.from(BUCKET_NAME).remove([path]);
 
-      if (data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+      if (data)
+        setPerfil(
+          mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null })
+        );
     } catch (e) {
       console.error("Erro ao apagar capa:", e);
       alert("Não foi possível apagar a capa.");
@@ -293,7 +347,9 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
     }
   };
 
-  const handleAvatarChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (
+    ev: React.ChangeEvent<HTMLInputElement>
+  ) => {
     try {
       if (!perfil?.usuario_id || !ev.target.files?.[0]) return;
       setSavingAvatar(true);
@@ -304,12 +360,18 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
 
       const { data, error } = await supabase
         .from("profissionais_perfil")
-        .update({ avatar_url: publicUrl, data_atualizacao: new Date().toISOString() })
+        .update({
+          avatar_url: publicUrl,
+          data_atualizacao: new Date().toISOString(),
+        })
         .eq("usuario_id", perfil.usuario_id)
         .select()
         .maybeSingle();
       if (error) throw error;
-      if (data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+      if (data)
+        setPerfil(
+          mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null })
+        );
     } catch (e) {
       console.error("Erro ao trocar avatar:", e);
       alert("Não foi possível trocar a foto. Tente novamente.");
@@ -327,7 +389,10 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
       setSavingAvatar(true);
       const { data, error } = await supabase
         .from("profissionais_perfil")
-        .update({ avatar_url: null, data_atualizacao: new Date().toISOString() })
+        .update({
+          avatar_url: null,
+          data_atualizacao: new Date().toISOString(),
+        })
         .eq("usuario_id", perfil.usuario_id)
         .select()
         .maybeSingle();
@@ -336,7 +401,10 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
       const path = extractStoragePathFromPublicUrl(perfil.avatar_url);
       if (path) await supabase.storage.from(BUCKET_NAME).remove([path]);
 
-      if (data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+      if (data)
+        setPerfil(
+          mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null })
+        );
     } catch (e) {
       console.error("Erro ao apagar avatar:", e);
       alert("Não foi possível apagar a foto.");
@@ -348,43 +416,83 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   const handleSaveModal = async (data: any) => {
     if (!perfil?.usuario_id) return;
     const safeKeys = [
-      "nome_completo","email","telefone","cidade_base","nacionalidade","data_nascimento","nivel",
-      "anos_experiencia","area_principal","funcao_obra","disponibilidade","raio_deslocacao",
-      "pode_viajar","pode_alojamento","idiomas","habilidades","avatar_url","banner_url",
-      "site","linkedin","instagram","perfil_completo","tipo_contrato","valor_diario","whatsapp",
-      "observacoes","bio",
+      "nome_completo",
+      "email",
+      "telefone",
+      "cidade_base",
+      "nacionalidade",
+      "data_nascimento",
+      "nivel",
+      "anos_experiencia",
+      "area_principal",
+      "funcao_obra",
+      "disponibilidade",
+      "raio_deslocacao",
+      "pode_viajar",
+      "pode_alojamento",
+      "idiomas",
+      "habilidades",
+      "avatar_url",
+      "banner_url",
+      "site",
+      "linkedin",
+      "instagram",
+      "perfil_completo",
+      "tipo_contrato",
+      "valor_diario",
+      "whatsapp",
+      "observacoes",
+      "bio",
     ] as const;
 
     const normalizeBool = (v: any) =>
-      typeof v === "string" ? v.toLowerCase().startsWith("s") || v === "true" || v === "1" : !!v;
+      typeof v === "string"
+        ? v.toLowerCase().startsWith("s") || v === "true" || v === "1"
+        : !!v;
     const normalizeMoney = (v: any) =>
-      v == null || v === "" ? null : String(v).replace(/[^\d,.-]/g, "").replace(",", ".");
+      v == null || v === ""
+        ? null
+        : String(v).replace(/[^\d,.-]/g, "").replace(",", ".");
 
     const payload: any = { usuario_id: perfil.usuario_id };
     for (const k of safeKeys) if (data[k] !== undefined) payload[k] = data[k];
 
-    if (payload.pode_viajar !== undefined) payload.pode_viajar = normalizeBool(payload.pode_viajar);
+    if (payload.pode_viajar !== undefined)
+      payload.pode_viajar = normalizeBool(payload.pode_viajar);
     if (payload.pode_alojamento !== undefined)
       payload.pode_alojamento = normalizeBool(payload.pode_alojamento);
-    if (payload.valor_diario !== undefined) payload.valor_diario = normalizeMoney(payload.valor_diario);
+    if (payload.valor_diario !== undefined)
+      payload.valor_diario = normalizeMoney(payload.valor_diario);
 
     payload.perfil_completo = !!(
-      payload.nome_completo && payload.telefone && payload.area_principal && payload.cidade_base
+      payload.nome_completo &&
+      payload.telefone &&
+      payload.area_principal &&
+      payload.cidade_base
     );
 
     try {
       const { data: up, error } = await supabase
         .from("profissionais_perfil")
-        .upsert({ ...payload, data_atualizacao: new Date().toISOString() }, { onConflict: "usuario_id" })
+        .upsert(
+          { ...payload, data_atualizacao: new Date().toISOString() },
+          { onConflict: "usuario_id" }
+        )
         .select()
         .maybeSingle();
 
       if (error) {
         console.error("Erro ao salvar perfil:", error.message, error);
-        alert("Não foi possível salvar o perfil.\n\nDetalhe: " + (error.message ?? ""));
+        alert(
+          "Não foi possível salvar o perfil.\n\nDetalhe: " +
+            (error.message ?? "")
+        );
         return;
       }
-      if (up) setPerfil(mapDbToPerfil(up, { id: alvoUsuarioId, email: user?.email ?? null }));
+      if (up)
+        setPerfil(
+          mapDbToPerfil(up, { id: alvoUsuarioId, email: user?.email ?? null })
+        );
     } catch (e) {
       console.error("Erro inesperado ao salvar perfil:", e);
       alert("Erro inesperado ao salvar o perfil.");
@@ -396,11 +504,17 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
     try {
       const { data, error } = await supabase
         .from("profissionais_perfil")
-        .update({ bio: texto, data_atualizacao: new Date().toISOString() })
+        .update({
+          bio: texto,
+          data_atualizacao: new Date().toISOString(),
+        })
         .eq("usuario_id", perfil.usuario_id)
         .select()
         .maybeSingle();
-      if (!error && data) setPerfil(mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null }));
+      if (!error && data)
+        setPerfil(
+          mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null })
+        );
     } catch (e) {
       console.error("Erro ao salvar bio:", e);
     }
@@ -415,23 +529,39 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   }
 
   if (!perfil) {
-    return <div className="flex items-center justify-center h-[60vh] text-slate-400">Carregando perfil…</div>;
+    return (
+      <div className="flex items-center justify-center h-[60vh] text-slate-400">
+        Carregando perfil…
+      </div>
+    );
   }
 
-  const nome = perfil?.nome_completo || "Profissional";
-  const avatar =
-    perfil?.avatar_url ||
-    "https://images.unsplash.com/photo-1527980965255-d3b416303d12?q=80&w=256&auto=format&fit=crop";
+  const nomeDefinido =
+    !!perfil.nome_completo && perfil.nome_completo.trim().length > 0;
+  const nome = nomeDefinido
+    ? (perfil.nome_completo as string)
+    : "Defina seu nome";
+
+  const hasAvatar = !!perfil.avatar_url;
+
   const bannerFallback =
     "https://images.unsplash.com/photo-1523419409543-4d7f2a0efcc3?q=80&w=1400&auto=format&fit=crop";
-  const hasBanner = !!perfil?.banner_url;
-  const banner = perfil?.banner_url || bannerFallback;
+  const hasBanner = !!perfil.banner_url;
+  const banner = perfil.banner_url || bannerFallback;
 
   // visibilidade (hover desktop / toque mobile)
   const bannerActionsBase =
     "transition-opacity inline-flex items-center gap-2 rounded-full px-2.5 py-2 text-[13px] bg-white/70 text-slate-800 border border-black/5 backdrop-blur-sm shadow-sm hover:bg-white/90 dark:bg-slate-900/60 dark:text-slate-100 dark:border-white/10 dark:hover:bg-slate-900/80 disabled:opacity-60";
-  const bannerActionOpacity = isTouch ? (showBannerActions ? "opacity-100" : "opacity-0") : "opacity-0 md:group-hover:opacity-100";
-  const avatarActionOpacity = isTouch ? (showAvatarActions ? "opacity-100" : "opacity-0") : "opacity-0 group-hover:opacity-100";
+  const bannerActionOpacity = isTouch
+    ? showBannerActions
+      ? "opacity-100"
+      : "opacity-0"
+    : "opacity-0 md:group-hover:opacity-100";
+  const avatarActionOpacity = isTouch
+    ? showAvatarActions
+      ? "opacity-100"
+      : "opacity-0"
+    : "opacity-0 group-hover:opacity-100";
 
   return (
     <div className="mx-auto max-w-6xl px-3 md:px-6 pb-24">
@@ -452,12 +582,21 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
         {/* Capa */}
         <div
           className="group relative"
-          onClick={() => { if (isTouch) setShowBannerActions(v => !v); }}
+          onClick={() => {
+            if (isTouch) setShowBannerActions((v) => !v);
+          }}
         >
           {hasBanner ? (
-            <div className="h-44 sm:h-52 md:h-64 bg-cover bg-center" style={{ backgroundImage: `url(${banner})` }} aria-label="Capa do perfil" />
+            <div
+              className="h-44 sm:h-52 md:h-64 bg-cover bg-center"
+              style={{ backgroundImage: `url(${banner})` }}
+              aria-label="Capa do perfil"
+            />
           ) : (
-            <div className="h-44 sm:h-52 md:h-64 relative overflow-hidden" aria-label="Área da capa (vazia)">
+            <div
+              className="h-44 sm:h-52 md:h-64 relative overflow-hidden"
+              aria-label="Área da capa (vazia)"
+            >
               <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-800 dark:via-slate-900 dark:to-slate-900" />
               <div className="absolute inset-0 [background:radial-gradient(transparent_1px,rgba(0,0,0,0)_1px)] [background-size:24px_24px] opacity-30 dark:opacity-20" />
               <div className="absolute inset-0 ring-1 ring-inset ring-black/5 dark:ring-white/10" />
@@ -469,19 +608,29 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
           {/* Ações da capa */}
           <div className="absolute right-3 top-3 flex gap-2">
             <button
-              onClick={(e) => { e.stopPropagation(); fileBannerRef.current?.click(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                fileBannerRef.current?.click();
+              }}
               disabled={savingBanner}
               className={`${bannerActionsBase} ${bannerActionOpacity}`}
               title="Trocar capa"
               aria-label="Trocar capa"
             >
-              {savingBanner ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              {savingBanner ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Camera className="h-4 w-4" />
+              )}
               <span className="hidden sm:inline">Trocar capa</span>
             </button>
 
             {perfil.banner_url && (
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteBanner(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteBanner();
+                }}
                 disabled={savingBanner}
                 className={`${bannerActionsBase} ${bannerActionOpacity}`}
                 title="Apagar capa"
@@ -493,7 +642,13 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
             )}
           </div>
 
-          <input ref={fileBannerRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
+          <input
+            ref={fileBannerRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleBannerChange}
+          />
         </div>
 
         {/* Conteúdo principal */}
@@ -503,39 +658,82 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
             <div className="flex justify-center md:block">
               <div
                 className="relative group"
-                onClick={() => { if (isTouch) setShowAvatarActions(v => !v); }}
+                onClick={() => {
+                  if (isTouch) setShowAvatarActions((v) => !v);
+                }}
               >
-                <img
-                  src={avatar}
-                  alt={nome}
-                  className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl border-4 border-white dark:border-slate-900 object-cover shadow-xl"
-                />
+                {hasAvatar ? (
+                  <>
+                    <img
+                      src={perfil.avatar_url as string}
+                      alt={nome}
+                      className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl border-4 border-white dark:border-slate-900 object-cover shadow-xl"
+                    />
 
-                {/* Trocar */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); fileAvatarRef.current?.click(); }}
-                  disabled={savingAvatar}
-                  className={`absolute right-1.5 bottom-1.5 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/95 border border-gray-200 text-slate-700 hover:bg-white hover:shadow-sm dark:bg-slate-800/90 dark:text-slate-100 dark:border-slate-700 ${avatarActionOpacity}`}
-                  title="Alterar foto"
-                  aria-label="Alterar foto"
-                >
-                  {savingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                </button>
+                    {/* Trocar */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileAvatarRef.current?.click();
+                      }}
+                      disabled={savingAvatar}
+                      className={`absolute right-1.5 bottom-1.5 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/95 border border-gray-200 text-slate-700 hover:bg-white hover:shadow-sm dark:bg-slate-800/90 dark:text-slate-100 dark:border-slate-700 ${avatarActionOpacity}`}
+                      title="Alterar foto"
+                      aria-label="Alterar foto"
+                    >
+                      {savingAvatar ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Camera className="w-4 h-4" />
+                      )}
+                    </button>
 
-                {/* Apagar */}
-                {perfil.avatar_url && (
+                    {/* Apagar */}
+                    {perfil.avatar_url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAvatar();
+                        }}
+                        disabled={savingAvatar}
+                        className={`absolute left-1.5 top-1.5 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/95 border border-gray-200 text-slate-700 hover:bg-white hover:shadow-sm dark:bg-slate-800/90 dark:text-slate-100 dark:border-slate-700 ${avatarActionOpacity}`}
+                        title="Apagar foto"
+                        aria-label="Apagar foto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </>
+                ) : (
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteAvatar(); }}
-                    disabled={savingAvatar}
-                    className={`absolute left-1.5 top-1.5 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/95 border border-gray-200 text-slate-700 hover:bg-white hover:shadow-sm dark:bg-slate-800/90 dark:text-slate-100 dark:border-slate-700 ${avatarActionOpacity}`}
-                    title="Apagar foto"
-                    aria-label="Apagar foto"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileAvatarRef.current?.click();
+                    }}
+                    className="
+                      w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32
+                      rounded-2xl border-4 border-white dark:border-slate-900
+                      bg-slate-100 dark:bg-slate-800
+                      flex flex-col items-center justify-center
+                      shadow-xl
+                    "
+                    aria-label="Adicionar foto de perfil"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Camera className="w-6 h-6 text-slate-400 dark:text-slate-500 mb-1" />
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      Adicionar foto
+                    </span>
                   </button>
                 )}
 
-                <input ref={fileAvatarRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                <input
+                  ref={fileAvatarRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
               </div>
             </div>
 
@@ -554,10 +752,28 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
               </p>
 
               <div className="mt-2 flex flex-wrap justify-center md:justify-start gap-2 text-xs sm:text-[13px]">
-                <Chip icon={<Trophy className="w-3.5 h-3.5" />} txt={perfil.nivel || "Profissional"} color="indigo" />
-                <Chip icon={<Clock4 className="w-3.5 h-3.5" />} txt={`${perfil.anos_experiencia ?? 1}+ anos`} color="emerald" />
-                <Chip icon={<Star className="w-3.5 h-3.5" />} txt={`${mediaAvaliacao.toFixed(1)} (${avaliacoes.length})`} color="amber" />
-                {perfil.perfil_completo && <Chip icon={<Sparkles className="w-3.5 h-3.5" />} txt="Perfil completo" color="sky" />}
+                <Chip
+                  icon={<Trophy className="w-3.5 h-3.5" />}
+                  txt={perfil.nivel || "Profissional"}
+                  color="indigo"
+                />
+                <Chip
+                  icon={<Clock4 className="w-3.5 h-3.5" />}
+                  txt={`${perfil.anos_experiencia ?? 1}+ anos`}
+                  color="emerald"
+                />
+                <Chip
+                  icon={<Star className="w-3.5 h-3.5" />}
+                  txt={`${mediaAvaliacao.toFixed(1)} (${avaliacoes.length})`}
+                  color="amber"
+                />
+                {perfil.perfil_completo && (
+                  <Chip
+                    icon={<Sparkles className="w-3.5 h-3.5" />}
+                    txt="Perfil completo"
+                    color="sky"
+                  />
+                )}
               </div>
             </div>
 
@@ -581,21 +797,38 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
             </div>
             <div className="flex items-center gap-2 justify-center sm:justify-start text-gray-700 dark:text-slate-300">
               <Phone className="w-4 h-4" />
-              <span className="truncate">{perfil.telefone || (perfil as any).whatsapp || "-"}</span>
+              <span className="truncate">
+                {perfil.telefone || (perfil as any).whatsapp || "-"}
+              </span>
             </div>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
               {safeHttpUrl(perfil.site) && (
-                <a href={safeHttpUrl(perfil.site)!} target="_blank" rel="noopener noreferrer" className={btnLink}>
+                <a
+                  href={safeHttpUrl(perfil.site)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={btnLink}
+                >
                   <LinkIcon className="w-4 h-4" /> Site
                 </a>
               )}
               {safeHttpUrl(perfil.linkedin) && (
-                <a href={safeHttpUrl(perfil.linkedin)!} target="_blank" rel="noopener noreferrer" className={btnLink}>
+                <a
+                  href={safeHttpUrl(perfil.linkedin)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={btnLink}
+                >
                   <ExternalLink className="w-4 h-4" /> LinkedIn
                 </a>
               )}
               {safeHttpUrl(perfil.instagram) && (
-                <a href={safeHttpUrl(perfil.instagram)!} target="_blank" rel="noopener noreferrer" className={btnLink}>
+                <a
+                  href={safeHttpUrl(perfil.instagram)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={btnLink}
+                >
                   <Camera className="w-4 h-4" /> Instagram
                 </a>
               )}
@@ -605,8 +838,10 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
       </div>
 
       {/* ===== Abas ===== */}
-      <div className="sticky top-0 z-30 mt-6 border-b dark:border-slate-800/60 border-gray-200
-                      bg-white/70 dark:bg-slate-900/60 backdrop-blur supports-[backdrop-filter]:bg-white/50">
+      <div
+        className="sticky top-0 z-30 mt-6 border-b dark:border-slate-800/60 border-gray-200
+                      bg-white/70 dark:bg-slate-900/60 backdrop-blur supports-[backdrop-filter]:bg-white/50"
+      >
         <div
           ref={tabsContainerRef}
           className="
@@ -650,18 +885,28 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
         <Suspense fallback={<div className="text-slate-400">Carregando…</div>}>
           {aba === "sobre" && (
             <SobreTab
-              perfil={{ ...(perfil ?? ({} as any)), experiencia: (perfil as any)?.experiencia ?? (perfil as any)?.anos_experiencia ?? 0 }}
+              perfil={{
+                ...(perfil ?? ({} as any)),
+                experiencia:
+                  (perfil as any)?.experiencia ??
+                  (perfil as any)?.anos_experiencia ??
+                  0,
+              }}
               onSaveBio={handleSaveBio}
             />
           )}
 
-          {/* 🔧 Portfólio: garante ownerId do profissional aberto (funciona no Admin e no painel do próprio) */}
+          {/* Portfólio: garante ownerId do profissional aberto */}
           {aba === "portfolio" && <PortfolioTab ownerId={alvoUsuarioId} />}
 
-          {aba === "experiencia" && <ExperienciaTab experiencias={experiencias} />}
+          {aba === "experiencia" && (
+            <ExperienciaTab experiencias={experiencias} />
+          )}
           {aba === "historico" && <HistoricoTab obras={historicoObras} />}
           {aba === "documentos" && <DocumentosTab docs={documentos} />}
-          {aba === "avaliacoes" && <AvaliacoesTab avaliacoes={avaliacoes} />}
+          {aba === "avaliacoes" && (
+            <AvaliacoesTab avaliacoes={avaliacoes} />
+          )}
           {aba === "atividade" && <AtividadeTab />}
         </Suspense>
       </div>
@@ -715,8 +960,14 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
               tipo_contrato: data.tipo_contrato ?? "",
               disponibilidade: data.disponibilidade ?? "Imediata",
               raio_deslocacao: data.raio ?? null,
-              pode_viajar: typeof data.pode_viajar === "string" ? data.pode_viajar.toLowerCase().startsWith("s") : !!data.pode_viajar,
-              pode_alojamento: typeof data.pode_alojamento === "string" ? data.pode_alojamento.toLowerCase().startsWith("s") : !!data.pode_alojamento,
+              pode_viajar:
+                typeof data.pode_viajar === "string"
+                  ? data.pode_viajar.toLowerCase().startsWith("s")
+                  : !!data.pode_viajar,
+              pode_alojamento:
+                typeof data.pode_alojamento === "string"
+                  ? data.pode_alojamento.toLowerCase().startsWith("s")
+                  : !!data.pode_alojamento,
               idiomas: data.idiomas ?? [],
               habilidades: data.habilidades ?? [],
               observacoes: data.observacoes ?? null,
@@ -733,26 +984,53 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   );
 }
 
-function Chip({ icon, txt, color }: { icon: React.ReactNode; txt: string; color: "sky" | "emerald" | "amber" | "indigo"; }) {
+function Chip({
+  icon,
+  txt,
+  color,
+}: {
+  icon: React.ReactNode;
+  txt: string;
+  color: "sky" | "emerald" | "amber" | "indigo";
+}) {
   const map: Record<string, string> = {
     sky: "bg-sky-500/10 text-sky-700 border-sky-200 dark:text-sky-300 dark:border-sky-500/20",
-    emerald: "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-300 dark:border-emerald-500/20",
-    amber: "bg-amber-500/10 text-amber-700 border-amber-200 dark:text-amber-300 dark:border-amber-500/20",
-    indigo: "bg-indigo-500/10 text-indigo-700 border-indigo-200 dark:text-indigo-300 dark:border-indigo-500/20",
+    emerald:
+      "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-300 dark:border-emerald-500/20",
+    amber:
+      "bg-amber-500/10 text-amber-700 border-amber-200 dark:text-amber-300 dark:border-amber-500/20",
+    indigo:
+      "bg-indigo-500/10 text-indigo-700 border-indigo-200 dark:text-indigo-300 dark:border-indigo-500/20",
   };
-  return <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs border ${map[color]}`}>{icon}{txt}</span>;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs border ${map[color]}`}
+    >
+      {icon}
+      {txt}
+    </span>
+  );
 }
 
-const linkBase = "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium border transition";
-const light = "bg-white text-slate-700 border-gray-200 hover:bg-gray-50";
-const dark = "dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700";
+const linkBase =
+  "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium border transition";
+const light =
+  "bg-white text-slate-700 border-gray-200 hover:bg-gray-50";
+const dark =
+  "dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700";
 export const btnLink = `${linkBase} ${light} ${dark}`;
 
 function safeHttpUrl(u?: string | null) {
   if (!u) return null;
   try {
-    const url = new URL(u, typeof window !== "undefined" ? window.location.origin : "http://localhost");
-    if (url.protocol === "http:" || url.protocol === "https:") return url.toString();
+    const url = new URL(
+      u,
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "http://localhost"
+    );
+    if (url.protocol === "http:" || url.protocol === "https:")
+      return url.toString();
   } catch {}
   return null;
 }
