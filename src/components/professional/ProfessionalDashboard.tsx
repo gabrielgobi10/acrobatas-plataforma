@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
@@ -296,7 +297,7 @@ export const ProfessionalDashboard = () => {
 
   return (
     <div
-      className={`flex flex-col min-h-[100dvh] transition-all duration-700 ${
+      className={`min-h-screen transition-all duration-700 ${
         theme === "dark"
           ? "bg-gradient-to-b from-[#0b1221] to-[#101b33] text-gray-100"
           : "bg-gradient-to-b from-[#e9eef6] to-[#f8fafc] text-gray-800"
@@ -330,7 +331,7 @@ export const ProfessionalDashboard = () => {
             </div>
           </div>
 
-          {/* Navegação desktop (topo) */}
+          {/* Navegação desktop */}
           <nav className="hidden md:flex gap-6 text-sm font-medium">
             {[
               ["painel", "Painel"],
@@ -392,69 +393,56 @@ export const ProfessionalDashboard = () => {
         </div>
       </header>
 
-      {/* ÁREA PRINCIPAL (desktop + mobile) */}
-      <div className="flex-1 w-full">
-        {/* DESKTOP */}
-        <div className="hidden md:flex h-full">
-          <SidebarProfissional
-            onSelectSection={safeSetActivePage}
-            activeSection={activePage}
-          />
-          <main className="flex-1 px-6 py-8 flex justify-center ml-64 transition-all">
-            <div className="w-full max-w-7xl space-y-8">{renderContent()}</div>
-          </main>
-        </div>
+      {/* NAV MOBILE (tabs inferiores) */}
+      <motion.div
+        initial={{ y: -10, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        className={`md:hidden flex justify-between px-3 py-2 border-b backdrop-blur-md ${
+          theme === "dark"
+            ? "bg-slate-900/70 border-slate-800/50"
+            : "bg-white/70 border-gray-200/70"
+        }`}
+      >
+        {[
+          { key: "painel", label: "Painel", icon: LayoutDashboard },
+          { key: "vagas", label: "Vagas", icon: Briefcase },
+          { key: "candidaturas", label: "Candidaturas", icon: FileText },
+          { key: "perfil", label: "Perfil", icon: User },
+          { key: "batepapo", label: "Chat", icon: MessageSquare },
+        ].map(({ key, label, icon: Icon }) => {
+          const isActive = activePage === key;
+          return (
+            <button
+              key={key}
+              onClick={() => safeSetActivePage(key)}
+              className={`relative flex flex-col items-center text-[11px] font-medium transition ${
+                isActive ? "text-sky-400" : "text-gray-400 hover:text-blue-400"
+              }`}
+            >
+              {isActive && (
+                <motion.span
+                  layoutId="activeNavPill"
+                  className="absolute inset-0 bg-sky-400/10 rounded-xl"
+                  transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                />
+              )}
+              <Icon className="w-5 h-5 mb-0.5 relative z-10" />
+              <span className="relative z-10">{label}</span>
+            </button>
+          );
+        })}
+      </motion.div>
 
-        {/* MOBILE */}
-        <div className="md:hidden flex flex-col h-full">
-          {/* Conteúdo scrollável (tipo app) */}
-          <div className="flex-1 px-4 py-4 overflow-y-auto">
-            {renderContent()}
-          </div>
-
-          {/* NAV MOBILE (tabs inferiores) */}
-          <motion.div
-            initial={{ y: 10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className={`flex justify-between px-3 py-2 border-t backdrop-blur-md safe-bottom ${
-              theme === "dark"
-                ? "bg-slate-950/90 border-slate-800/70"
-                : "bg-white/90 border-gray-200/80"
-            }`}
-          >
-            {[
-              { key: "painel", label: "Painel", icon: LayoutDashboard },
-              { key: "vagas", label: "Vagas", icon: Briefcase },
-              { key: "candidaturas", label: "Candidaturas", icon: FileText },
-              { key: "perfil", label: "Perfil", icon: User },
-              { key: "batepapo", label: "Chat", icon: MessageSquare },
-            ].map(({ key, label, icon: Icon }) => {
-              const isActive = activePage === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => safeSetActivePage(key)}
-                  className={`relative flex flex-col items-center text-[11px] font-medium transition ${
-                    isActive
-                      ? "text-sky-400"
-                      : "text-gray-400 hover:text-blue-400"
-                  }`}
-                >
-                  {isActive && (
-                    <motion.span
-                      layoutId="activeNavPill"
-                      className="absolute inset-0 bg-sky-400/10 rounded-xl"
-                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                    />
-                  )}
-                  <Icon className="w-5 h-5 mb-0.5 relative z-10" />
-                  <span className="relative z-10">{label}</span>
-                </button>
-              );
-            })}
-          </motion.div>
-        </div>
+      {/* DESKTOP */}
+      <div className="hidden md:flex">
+        <SidebarProfissional
+          onSelectSection={safeSetActivePage}
+          activeSection={activePage}
+        />
+        <main className="flex-1 px-6 py-8 flex justify-center ml-64 transition-all">
+          <div className="w-full max-w-7xl space-y-8">{renderContent()}</div>
+        </main>
       </div>
 
       {/* MOBILE MENU (drawer lateral) */}
@@ -503,6 +491,10 @@ export const ProfessionalDashboard = () => {
           </>
         )}
       </AnimatePresence>
+
+      {/* CONTEÚDO MOBILE */}
+      <div className="md:hidden px-4 py-6">{renderContent()}</div>
     </div>
   );
 };
+
