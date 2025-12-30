@@ -4,7 +4,6 @@ import {
   FileText,
   Clock4,
   Gauge,
-  Banknote,
   MapPin,
   Plane,
   Home,
@@ -15,35 +14,37 @@ import {
   CalendarDays,
   Flag,
   Languages,
-  Star,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
-/** ===== Tipos (inclui campos novos que você pediu) ===== */
+/* =========================================================
+   Tipos
+========================================================= */
 export type PerfilSobre = {
   bio?: string | null;
 
   // PROFISSIONAL
-  area_principal?: string | null;
+  area_id?: string | null; // AGORA É O CAMPO OFICIAL
   funcao_obra?: string | null;
-  funcao?: string | null;                 // compat
+  funcao?: string | null;
   tipo_contrato?: string | null;
   nivel?: string | null;
   anos_experiencia?: number | null;
-  experiencia?: number | null;            // compat
-  valor_diario?: string | number | null;  // exibido como valor por hora
+  experiencia?: number | null;
+  // valor_diario removido (não aparece mais)
   disponibilidade?: string | null;
   habilidades?: string[] | null;
 
   // IDENTIFICAÇÃO
   nacionalidade?: string | null;
-  data_nascimento?: string | null;        // ISO ou qualquer string exibível
+  data_nascimento?: string | null;
   idiomas?: string[] | null;
 
   // LOCALIZAÇÃO
   cidade_base?: string | null;
-  cidade?: string | null;                 // compat
+  cidade?: string | null;
   raio_deslocacao?: string | null;
-  raio?: string | null;                   // compat
+  raio?: string | null;
   pode_viajar?: boolean | string | null;
   pode_alojamento?: boolean | string | null;
 };
@@ -54,16 +55,11 @@ type Props = {
   bioMaxLength?: number;
 };
 
-/** ===== Helpers ===== */
+/* =========================================================
+   Helpers
+========================================================= */
 const valOr = (v: any) =>
   v === null || v === undefined || String(v).trim() === "" ? "—" : String(v);
-
-const fmtMoney = (v?: string | number | null) => {
-  if (v === null || v === undefined || v === "") return "—";
-  const n = typeof v === "string" ? Number(v.replace(",", ".")) : Number(v);
-  if (Number.isNaN(n)) return String(v);
-  return `€ ${n.toLocaleString("pt-PT", { maximumFractionDigits: 2 })}`;
-};
 
 const fmtBool = (v?: boolean | string | null) => {
   if (typeof v === "boolean") return v ? "Sim" : "Não";
@@ -82,15 +78,7 @@ const fmtDate = (iso?: string | null) => {
   return isNaN(d.getTime()) ? valOr(iso) : d.toLocaleDateString("pt-PT");
 };
 
-function Line({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
+function Line({ icon, label, value }: any) {
   return (
     <div className="flex items-center justify-between gap-3 py-2">
       <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
@@ -104,7 +92,7 @@ function Line({
   );
 }
 
-function Tag({ children }: { children: React.ReactNode }) {
+function Tag({ children }: any) {
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800/60 dark:text-slate-200 dark:border-slate-700">
       {children}
@@ -112,58 +100,72 @@ function Tag({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** ===== Componente ===== */
+/* =========================================================
+   Componente principal
+========================================================= */
 const SobreTab = memo(function SobreTab({
   perfil,
   onSaveBio,
   bioMaxLength = 800,
 }: Props) {
-  // Compat / normalização
+  /* ================================
+     NOVO: Buscar nome da área pelo area_id
+  ================================= */
+  const [areaNome, setAreaNome] = useState("—");
+
+  useEffect(() => {
+    const loadArea = async () => {
+      if (!perfil.area_id) return;
+
+      const { data } = await supabase
+        .from("profissional_areas")
+        .select("nome")
+        .eq("id", perfil.area_id)
+        .maybeSingle();
+
+      if (data?.nome) setAreaNome(data.nome);
+    };
+    loadArea();
+  }, [perfil.area_id]);
+
+  /* ================================
+     Data normalization
+  ================================= */
   const anos = Number(perfil.anos_experiencia ?? perfil.experiencia ?? 0);
-  const funcaoObra = perfil.funcao_obra ?? perfil.funcao ?? undefined;
   const cidadeBase = perfil.cidade_base ?? perfil.cidade ?? undefined;
   const raioDeslocacao = perfil.raio_deslocacao ?? perfil.raio ?? undefined;
-  const valorHora = perfil.valor_diario;
 
-  // Estado do "Sobre mim"
+  /* ================================
+     BIO — editar/salvar
+  ================================= */
   const [editing, setEditing] = useState(false);
   const [bioText, setBioText] = useState(
     (perfil.bio ?? "").trim() ||
-      "Profissional focado em qualidade, prazos e segurança. Atendo pinturas, pequenas reformas e acabamentos com atenção ao detalhe e limpeza do local."
+      "Profissional focado em qualidade, prazos e segurança."
   );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!editing) {
-      setBioText((perfil.bio ?? "").trim() || "");
+      setBioText((perfil.bio ?? "").trim());
     }
   }, [perfil.bio, editing]);
 
   const remaining = Math.max(0, bioMaxLength - bioText.length);
 
-  const handleCancel = () => {
-    setBioText((perfil.bio ?? "").trim() || "");
+  const handleSave = async () => {
+    if (!onSaveBio) return setEditing(false);
+    setSaving(true);
+    await onSaveBio(bioText.trim());
+    setSaving(false);
     setEditing(false);
   };
 
-  const handleSave = async () => {
-    if (!onSaveBio) {
-      setEditing(false);
-      return;
-    }
-    try {
-      setSaving(true);
-      await onSaveBio(bioText.trim());
-      setEditing(false);
-    } finally {
-      setSaving(false);
-    }
+  const handleCancel = () => {
+    setBioText((perfil.bio ?? "").trim());
+    setEditing(false);
   };
 
-  const habilidades = useMemo(
-    () => (perfil.habilidades ?? []).filter(Boolean),
-    [perfil.habilidades]
-  );
   const idiomas = useMemo(
     () => (perfil.idiomas ?? []).filter(Boolean),
     [perfil.idiomas]
@@ -171,7 +173,9 @@ const SobreTab = memo(function SobreTab({
 
   return (
     <div className="space-y-8">
-      {/* ===== Sobre mim (sem chips extras) ===== */}
+      {/* =====================================================
+         SOBRE MIM
+      ===================================================== */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -185,21 +189,19 @@ const SobreTab = memo(function SobreTab({
 
           {!editing && (
             <button
-              type="button"
               onClick={() => setEditing(true)}
-              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[12px] font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-white dark:border-slate-700"
             >
-              <EditIcon className="w-3.5 h-3.5" />
-              Editar
+              <EditIcon className="w-3.5 h-3.5" /> Editar
             </button>
           )}
         </div>
 
         {!editing ? (
           <p className="mt-3 text-[15px] leading-7 text-slate-800 dark:text-slate-200">
-            {bioText && bioText.trim().length > 0
+            {bioText?.trim()?.length
               ? bioText
-              : "Adicione uma breve descrição do seu trabalho, experiência e como você atende o cliente."}
+              : "Adicione uma breve descrição sobre sua experiência e serviços."}
           </p>
         ) : (
           <div className="mt-3">
@@ -213,31 +215,29 @@ const SobreTab = memo(function SobreTab({
                 )
               }
               rows={6}
-              placeholder="Escreva aqui sobre você e seus serviços (ex.: Pintura interior/exterior, reparos de parede, acabamento, limpeza do local, etc.)"
-              className="w-full resize-y rounded-lg border bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500 px-3 py-2"
+              className="w-full rounded-lg border bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-sky-500 px-3 py-2"
             />
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs">
+
+            <div className="mt-2 flex items-center justify-between text-xs">
               <span className="text-slate-500 dark:text-slate-400">
                 {remaining} caracteres restantes
               </span>
-              <div className="flex gap-2 justify-end">
+
+              <div className="flex gap-2">
                 <button
-                  type="button"
                   onClick={handleCancel}
-                  disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-medium border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-white"
                 >
-                  <X className="w-3.5 h-3.5" />
-                  Cancelar
+                  <X className="w-3.5 h-3.5" /> Cancelar
                 </button>
+
                 <button
-                  type="button"
                   onClick={handleSave}
                   disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-medium bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-60"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-60"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  {saving ? "Salvando..." : "Salvar"}
+                  {saving ? "Salvando…" : "Salvar"}
                 </button>
               </div>
             </div>
@@ -245,9 +245,11 @@ const SobreTab = memo(function SobreTab({
         )}
       </div>
 
-      {/* ===== Cards ===== */}
+      {/* =====================================================
+         CARDS DE INFORMAÇÕES
+      ===================================================== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Profissional */}
+        {/* PROFISSIONAL */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
           <div className="flex items-center gap-2 mb-3">
             <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
@@ -262,63 +264,38 @@ const SobreTab = memo(function SobreTab({
             <Line
               icon={<FileText className="w-4 h-4" />}
               label="Área principal"
-              value={valOr(perfil.area_principal)}
+              value={areaNome}
             />
-            <Line
-              icon={<Briefcase className="w-4 h-4" />}
-              label="Função na obra"
-              value={valOr(funcaoObra)}
-            />
+
             <Line
               icon={<FileText className="w-4 h-4" />}
               label="Tipo de contrato"
               value={valOr(perfil.tipo_contrato)}
             />
+
             <Line
               icon={<Gauge className="w-4 h-4" />}
               label="Nível"
-              value={valOr(perfil.nivel || "Profissional")}
+              value={valOr(perfil.nivel || "Aprendiz")}
             />
+
             <Line
               icon={<Clock4 className="w-4 h-4" />}
               label="Experiência"
-              value={`${Math.max(0, Number(anos))}+ anos`}
+              value={`${Math.max(0, anos)} anos`}
             />
-            <Line
-              icon={<Banknote className="w-4 h-4" />}
-              label="Valor por hora"
-              value={fmtMoney(valorHora)}
-            />
+
+            {/* Valor por dia/hora removido */}
+
             <Line
               icon={<Sparkles className="w-4 h-4" />}
               label="Disponibilidade"
               value={valOr(perfil.disponibilidade)}
             />
           </div>
-
-          {/* Habilidades */}
-          <div className="mt-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Star className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                Habilidades
-              </span>
-            </div>
-            {habilidades.length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {habilidades.map((h) => (
-                  <Tag key={h}>{h}</Tag>
-                ))}
-              </div>
-            ) : (
-              <div className="text-[13px] text-slate-500 dark:text-slate-400">
-                —
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Identificação */}
+        {/* IDENTIFICAÇÃO */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
           <div className="flex items-center gap-2 mb-3">
             <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
@@ -335,6 +312,7 @@ const SobreTab = memo(function SobreTab({
               label="Nacionalidade"
               value={valOr(perfil.nacionalidade)}
             />
+
             <Line
               icon={<CalendarDays className="w-4 h-4" />}
               label="Data de nascimento"
@@ -342,7 +320,7 @@ const SobreTab = memo(function SobreTab({
             />
           </div>
 
-          {/* Idiomas */}
+          {/* IDIOMAS */}
           <div className="mt-4">
             <div className="flex items-center gap-2 mb-1">
               <Languages className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
@@ -350,6 +328,7 @@ const SobreTab = memo(function SobreTab({
                 Idiomas
               </span>
             </div>
+
             {idiomas.length ? (
               <div className="flex flex-wrap gap-1.5">
                 {idiomas.map((i) => (
@@ -364,7 +343,7 @@ const SobreTab = memo(function SobreTab({
           </div>
         </div>
 
-        {/* Localização & Mobilidade */}
+        {/* LOCALIZAÇÃO */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 md:col-span-2">
           <div className="flex items-center gap-2 mb-3">
             <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
@@ -382,18 +361,21 @@ const SobreTab = memo(function SobreTab({
                 label="Cidade base"
                 value={valOr(cidadeBase)}
               />
+
               <Line
                 icon={<Sparkles className="w-4 h-4" />}
                 label="Raio de deslocação"
                 value={valOr(raioDeslocacao)}
               />
             </div>
+
             <div className="divide-y divide-slate-200 dark:divide-slate-800">
               <Line
                 icon={<Plane className="w-4 h-4" />}
                 label="Pode viajar"
                 value={fmtBool(perfil.pode_viajar)}
               />
+
               <Line
                 icon={<Home className="w-4 h-4" />}
                 label="Aceita alojamento"

@@ -38,6 +38,7 @@ type Obra = {
   local?: string | null;
   custo_real?: number | null;
   progresso?: number | null;
+  empresa_id?: string | null;
 };
 
 const iconBase = (color: string) =>
@@ -75,16 +76,14 @@ function AjustarMapa({ obras }: { obras: Obra[] }) {
     const pts = obras.filter((o) => o.latitude && o.longitude);
 
     if (pts.length > 0) {
-      // quando tem obras: bounds baseado nos pontos
       const bounds = L.latLngBounds(
         pts.map((o) => [o.latitude as number, o.longitude as number])
       );
       map.fitBounds(bounds, { padding: [60, 60] });
     } else {
-      // sem nenhuma obra: bounds fixo de Portugal
       const portugalBounds = L.latLngBounds(
-        [36.96, -9.5], // sudoeste
-        [42.15, -6.0]  // nordeste
+        [36.96, -9.5],
+        [42.15, -6.0]
       );
       map.fitBounds(portugalBounds, { padding: [60, 60] });
     }
@@ -259,7 +258,7 @@ export default function MapaObras() {
   );
 
   const [sheetAberta, setSheetAberta] = useState(false); // mobile
-  const [deskOpen, setDeskOpen] = useState(true); // desktop: recolher/abrir
+  const [deskOpen, setDeskOpen] = useState(true); // desktop
 
   const [base, setBase] = useState<BaseKey>("osm"); // mapa-base
   const isMobile = useIsMobile(768);
@@ -268,7 +267,6 @@ export default function MapaObras() {
 
   const toObra = (id: string) => navigate(`/empresa/obras/${id}/detalhes`);
 
-  // Montagem “suave”
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -279,13 +277,51 @@ export default function MapaObras() {
     return () => cancelAnimationFrame(id);
   }, [sheetAberta, isMobile, deskOpen]);
 
-  // Load obras
+  // Load obras APENAS da empresa logada
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      const { data, error } = await supabase.from("obras").select("*");
-      if (!error && data) setObras(data as Obra[]);
-      setLoading(false);
+      try {
+        setLoading(true);
+
+        // 1) descobrir empresa da sessão
+        const { data: empresaData, error: empresaErr } = await supabase.rpc(
+          "minha_empresa_id"
+        );
+
+        if (empresaErr) {
+          console.error("[MapaObras] minha_empresa_id ->", empresaErr);
+          setObras([]);
+          return;
+        }
+
+        const empresaId = (empresaData as string) ?? null;
+
+        if (!empresaId) {
+          // nenhum registo de empresa para este utilizador
+          setObras([]);
+          return;
+        }
+
+        // 2) buscar apenas obras dessa empresa
+        const { data, error } = await supabase
+          .from("obras")
+          .select("*")
+          .eq("empresa_id", empresaId);
+
+        if (error) {
+          console.error("[MapaObras] erro ao carregar obras ->", error);
+          setObras([]);
+        } else if (data) {
+          setObras(data as Obra[]);
+        } else {
+          setObras([]);
+        }
+      } catch (e: any) {
+        console.error("[MapaObras] erro inesperado ->", e?.message || e);
+        setObras([]);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -332,7 +368,7 @@ export default function MapaObras() {
             toObra={toObra}
           />
 
-          {/* ===== MOBILE: botão para abrir resumo ===== */}
+          {/* MOBILE: botão para abrir resumo */}
           {isMobile && !sheetAberta && (
             <button
               onClick={() => setSheetAberta(true)}
@@ -352,7 +388,7 @@ export default function MapaObras() {
             </button>
           )}
 
-          {/* ===== MOBILE: Bottom Sheet ===== */}
+          {/* MOBILE: Bottom Sheet */}
           {isMobile && sheetAberta && (
             <div className="absolute bottom-0 left-0 right-0 bg-white/95 dark:bg-[#1b2535]/95 rounded-t-2xl shadow-2xl border-t border-gray-200 dark:border-[#2a3647] z-[30] p-3 pb-[calc(env(safe-area-inset-bottom,0)+12px)]">
               <button
@@ -428,7 +464,7 @@ export default function MapaObras() {
             </div>
           )}
 
-          {/* ===== DESKTOP: painel compacto ===== */}
+          {/* DESKTOP: painel compacto */}
           {!isMobile && deskOpen && (
             <div
               className="
@@ -548,4 +584,3 @@ export default function MapaObras() {
     </div>
   );
 }
-

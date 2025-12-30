@@ -39,7 +39,7 @@ type Experiencia = {
   instituicao?: string | null;
   horas?: number | null;
   ano?: number | null;
-  validade?: string | null; // ISO (YYYY-MM-01, YYYY-MM, ou YYYY)
+  validade?: string | null; // ISO
   comprovante_url?: string | null; // path do storage (privado) OU URL pública
   status_validacao?: StatusValidacao | null;
   created_at?: string | null;
@@ -87,41 +87,80 @@ function statusValidacaoClasses(s?: StatusValidacao | null) {
   if (s === "reprovado") {
     return "bg-red-500/10 border-red-300/60 text-red-700 dark:text-red-300";
   }
-  // em_analise ou null
   return "bg-amber-500/10 border-amber-300/60 text-amber-700 dark:text-amber-300";
 }
 
-/** Upload no Storage (bucket privado). Retorna apenas o PATH salvo */
-async function uploadComprovanteAndReturnPath(file: File, userId: string) {
-  const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-  const path = `${userId}/experiencias/${crypto.randomUUID()}.${ext}`;
+function isHttpUrl(v?: string | null) {
+  return !!v && /^https?:\/\//i.test(v);
+}
 
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+/* =========================================================
+   Upload / Storage (com evidência objetiva)
+========================================================= */
+
+/** Pega o auth user id (fonte de verdade do auth.uid()) */
+async function getAuthUserIdOrThrow() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+
+  const authUserId = data.user?.id;
+  if (!authUserId) throw new Error("Sem usuário autenticado (auth).");
+
+  return authUserId;
+}
+
+/** Upload no Storage (bucket privado). Retorna apenas o PATH salvo */
+async function uploadComprovanteAndReturnPath(file: File) {
+  // evidência do usuário autenticado (auth.uid())
+  const authUserId = await getAuthUserIdOrThrow();
+  console.log("[UPLOAD] authUserId:", authUserId);
+
+  // path (policy depende do primeiro segmento ser auth.uid())
+  const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+  const path = `${authUserId}/experiencias/${crypto.randomUUID()}.${ext}`;
+  console.log("[UPLOAD] path:", path, "type:", file.type, "size:", file.size);
+
+  const res = await supabase.storage.from(BUCKET).upload(path, file, {
     cacheControl: "3600",
     contentType: file.type,
     upsert: false,
   });
 
+  console.log("[UPLOAD] uploadRes:", res);
+
+  if (res.error) throw res.error;
+  return path;
+}
+
+/** Remove arquivo do Storage se for PATH (não URL) */
+async function deleteComprovanteIfStoragePath(comprovante_url?: string | null) {
+  if (!comprovante_url) return;
+  if (isHttpUrl(comprovante_url)) return;
+
+  const { error } = await supabase.storage.from(BUCKET).remove([comprovante_url]);
   if (error) throw error;
-  return path; // importante: gravar só o path, pois o bucket é privado
 }
 
 /** Abre comprovante: se for URL externa abre direto; se for PATH do bucket, gera URL assinada */
 async function openComprovante(comprovante_url: string) {
   try {
-    if (/^https?:\/\//i.test(comprovante_url)) {
+    if (isHttpUrl(comprovante_url)) {
       window.open(comprovante_url, "_blank");
       return;
     }
-    // é path do storage privado
-    const { data, error } = await supabase
-      .storage
+
+    // garante que existe sessão válida (para RLS do storage.objects)
+    const authUserId = await getAuthUserIdOrThrow();
+    console.log("[OPEN] authUserId:", authUserId, "path:", comprovante_url);
+
+    const { data, error } = await supabase.storage
       .from(BUCKET)
-      .createSignedUrl(comprovante_url, 600); // 10 minutos
+      .createSignedUrl(comprovante_url, 600);
 
     if (error) throw error;
     if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-  } catch {
+  } catch (e: any) {
+    console.error("[OPEN] erro:", e);
     alert("Não foi possível abrir o comprovante.");
   }
 }
@@ -242,7 +281,7 @@ function FormExperiencia({
   const [ano, setAno] = useState<number | undefined>(
     initial?.ano === null ? undefined : initial?.ano
   );
-  const [validade, setValidade] = useState(initial?.validade?.slice(0, 7) || ""); // YYYY-MM
+  const [validade, setValidade] = useState(initial?.validade?.slice(0, 7) || "");
   const [comprovanteUrl, setComprovanteUrl] = useState(
     initial?.comprovante_url || ""
   );
@@ -265,13 +304,12 @@ function FormExperiencia({
           instituicao: instituicao?.trim() || null,
           horas: typeof horas === "number" ? horas : null,
           ano: typeof ano === "number" ? ano : null,
-          validade: validade ? `${validade}-01` : null, // salva como YYYY-MM-01
+          validade: validade ? `${validade}-01` : null,
           comprovante_url: comprovanteUrl?.trim() || null,
           __file: file,
         });
       }}
     >
-      {/* Categoria */}
       <div className="grid grid-cols-3 gap-2">
         {(["curso", "certificado", "treinamento"] as Categoria[]).map((c) => {
           const Icon = CategoriaIcon[c];
@@ -295,7 +333,6 @@ function FormExperiencia({
         })}
       </div>
 
-      {/* Nome */}
       <div>
         <label className="block text-sm mb-1">Nome</label>
         <input
@@ -307,7 +344,6 @@ function FormExperiencia({
         />
       </div>
 
-      {/* Instituição */}
       <div>
         <label className="block text-sm mb-1">Instituição</label>
         <input
@@ -318,7 +354,6 @@ function FormExperiencia({
         />
       </div>
 
-      {/* Linha horas/ano/validade */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
           <label className="block text-sm mb-1">Carga horária (h)</label>
@@ -328,14 +363,13 @@ function FormExperiencia({
             inputMode="numeric"
             value={typeof horas === "number" ? horas : ""}
             onChange={(e) =>
-              setHoras(
-                e.target.value === "" ? undefined : Number(e.target.value)
-              )
+              setHoras(e.target.value === "" ? undefined : Number(e.target.value))
             }
             placeholder="Ex.: 16"
             className="w-full rounded-xl border px-3 py-2 bg-white dark:bg-neutral-900 border-neutral-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+
         <div>
           <label className="block text-sm mb-1">Ano</label>
           <input
@@ -345,14 +379,13 @@ function FormExperiencia({
             inputMode="numeric"
             value={typeof ano === "number" ? ano : ""}
             onChange={(e) =>
-              setAno(
-                e.target.value === "" ? undefined : Number(e.target.value)
-              )
+              setAno(e.target.value === "" ? undefined : Number(e.target.value))
             }
             placeholder="Ex.: 2024"
             className="w-full rounded-xl border px-3 py-2 bg-white dark:bg-neutral-900 border-neutral-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+
         <div>
           <label className="block text-sm mb-1">Validade</label>
           <input
@@ -367,7 +400,6 @@ function FormExperiencia({
         </div>
       </div>
 
-      {/* Comprovante (upload OU URL) */}
       <div className="space-y-2">
         <label className="block text-sm">Comprovante (upload ou URL)</label>
 
@@ -404,12 +436,16 @@ function FormExperiencia({
               )}
             </div>
           </div>
+
           <div className="flex items-center gap-2">
             {file && (
               <button
                 type="button"
                 className="px-3 py-1.5 rounded-lg border text-sm hover:bg-neutral-50 dark:hover:bg-white/10"
-                onClick={() => setFile(null)}
+                onClick={() => {
+                  setFile(null);
+                  setUploadError(null);
+                }}
               >
                 Remover
               </button>
@@ -417,12 +453,11 @@ function FormExperiencia({
             <button
               type="button"
               className="px-3 py-1.5 rounded-lg border text-sm hover:bg-neutral-50 dark:hover:bg-white/10"
-              onClick={() => document.getElementById("file-input-exp")?.click()}
+              onClick={() => fileInputRef.current?.click()}
             >
               Selecionar
             </button>
             <input
-              id="file-input-exp"
               ref={fileInputRef}
               type="file"
               accept={ACCEPTED.join(",")}
@@ -496,7 +531,6 @@ function ItemExperiencia({
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-semibold truncate">{item.nome}</p>
 
-            {/* Categoria */}
             <span
               className={classNames(
                 "text-xs px-2 py-0.5 rounded-full border",
@@ -511,7 +545,6 @@ function ItemExperiencia({
               {CATEGORIAS_LABEL[item.categoria]}
             </span>
 
-            {/* Status de validação */}
             <span
               className={classNames(
                 "text-xs px-2 py-0.5 rounded-full border",
@@ -527,6 +560,7 @@ function ItemExperiencia({
               {item.instituicao}
             </p>
           )}
+
           <div className="text-sm text-neutral-600 dark:text-neutral-300 flex gap-3 flex-wrap">
             {typeof item.horas === "number" && <span>{item.horas}h</span>}
             {item.ano && <span>{item.ano}</span>}
@@ -599,7 +633,10 @@ function CardsResumo({
             className="h-full rounded-2xl border border-neutral-200/70 dark:border-white/10 bg-white/60 dark:bg-white/5 backdrop-blur p-4 flex items-center gap-3"
           >
             <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white dark:bg-white/10">
-              <it.icon className="text-neutral-700 dark:text-neutral-200" size={18} />
+              <it.icon
+                className="text-neutral-700 dark:text-neutral-200"
+                size={18}
+              />
             </div>
             <div className="leading-tight">
               <p className="text-sm text-neutral-600 dark:text-neutral-300">
@@ -629,7 +666,7 @@ function CardsResumo({
 ========================================================= */
 export default function ExperienciaTab() {
   const { user } = useAuth();
-  const userId = user?.id || "";
+  const userId = user?.id || ""; // usado só para decidir "tem usuário" na tela
 
   const [loading, setLoading] = useState(true);
   const [lista, setLista] = useState<Experiencia[]>([]);
@@ -646,7 +683,6 @@ export default function ExperienciaTab() {
   const [q, setQ] = useState("");
   const [filtro, setFiltro] = useState<Categoria | "todos">("todos");
 
-  // Carregamento inicial (RLS filtra pelo usuário)
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -658,7 +694,6 @@ export default function ExperienciaTab() {
       try {
         setLoading(true);
 
-        // Resumo agregado
         const { data: resumoData, error: rErr } = await supabase
           .from("experiencias_resumo")
           .select("*")
@@ -674,7 +709,6 @@ export default function ExperienciaTab() {
           });
         }
 
-        // Lista (confia no RLS da tabela)
         const { data: expData, error: expErr } = await supabase
           .from("experiencias")
           .select("*")
@@ -688,6 +722,7 @@ export default function ExperienciaTab() {
         if (mounted) setLoading(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
@@ -731,12 +766,10 @@ export default function ExperienciaTab() {
     try {
       let finalUrl = form.comprovante_url || null;
 
-      // se vier arquivo, faz upload e guarda o PATH
-      if (form.__file && userId) {
-        finalUrl = await uploadComprovanteAndReturnPath(form.__file, userId);
+      if (form.__file) {
+        finalUrl = await uploadComprovanteAndReturnPath(form.__file);
       }
 
-      // RPC segura (RLS + vínculo em profissionais)
       const { data, error } = await supabase.rpc("experiencia_add", {
         p_categoria: form.categoria,
         p_nome: form.nome,
@@ -761,9 +794,9 @@ export default function ExperienciaTab() {
 
       await reloadResumo();
       setModalAdd(false);
-    } catch (e) {
-      console.error(e);
-      alert("Falha ao salvar. Verifique os dados e tente novamente.");
+    } catch (e: any) {
+      console.error("[ADD] erro:", e);
+      alert(`Falha ao salvar.\n\nErro: ${e?.message || "desconhecido"}`);
     } finally {
       setSubmitting(false);
     }
@@ -776,10 +809,14 @@ export default function ExperienciaTab() {
   ) {
     if (!editItem) return;
     setSubmitting(true);
+
+    const oldUrl = editItem.comprovante_url || null;
+
     try {
-      let finalUrl = form.comprovante_url || editItem.comprovante_url || null;
-      if (form.__file && userId) {
-        finalUrl = await uploadComprovanteAndReturnPath(form.__file, userId);
+      let finalUrl = form.comprovante_url || oldUrl || null;
+
+      if (form.__file) {
+        finalUrl = await uploadComprovanteAndReturnPath(form.__file);
       }
 
       const payload: Omit<
@@ -808,32 +845,43 @@ export default function ExperienciaTab() {
           prev.map((x) => (x.id === editItem.id ? (data as any) : x))
         );
       }
+
+      // se trocou o comprovante por upload novo, apaga o antigo (se era path)
+      if (form.__file && oldUrl && oldUrl !== finalUrl) {
+        await deleteComprovanteIfStoragePath(oldUrl);
+      }
+
       await reloadResumo();
       setEditItem(null);
-    } catch (e) {
-      console.error(e);
-      alert("Falha ao salvar. Tente novamente.");
+    } catch (e: any) {
+      console.error("[EDIT] erro:", e);
+      alert(`Falha ao salvar.\n\nErro: ${e?.message || "desconhecido"}`);
     } finally {
       setSubmitting(false);
     }
   }
 
   async function removeExp(id: string) {
+    const exp = lista.find((x) => x.id === id);
     if (!window.confirm("Remover este registro?")) return;
+
     try {
       const { error } = await supabase.from("experiencias").delete().eq("id", id);
       if (error) throw error;
+
+      // remove arquivo do storage (se existir e for path)
+      await deleteComprovanteIfStoragePath(exp?.comprovante_url);
+
       setLista((prev) => prev.filter((x) => x.id !== id));
       await reloadResumo();
-    } catch (e) {
-      console.error(e);
-      alert("Falha ao remover. Tente novamente.");
+    } catch (e: any) {
+      console.error("[DELETE] erro:", e);
+      alert(`Falha ao remover.\n\nErro: ${e?.message || "desconhecido"}`);
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho + Resumo */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Cursos & certificados</h2>
       </div>
@@ -846,7 +894,6 @@ export default function ExperienciaTab() {
         onAdd={() => setModalAdd(true)}
       />
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
         <div className="flex gap-2 flex-wrap">
           <FiltroChip active={filtro === "todos"} onClick={() => setFiltro("todos")}>
@@ -883,7 +930,6 @@ export default function ExperienciaTab() {
         </div>
       </div>
 
-      {/* Lista */}
       {loading ? (
         <div className="space-y-3">
           <SkeletonRow />
@@ -914,7 +960,6 @@ export default function ExperienciaTab() {
         </div>
       )}
 
-      {/* FAB Mobile */}
       <button
         onClick={() => setModalAdd(true)}
         className="fixed bottom-5 right-5 sm:hidden shadow-xl rounded-full p-4 bg-blue-600 text-white"
@@ -923,7 +968,6 @@ export default function ExperienciaTab() {
         <Plus size={20} />
       </button>
 
-      {/* Modal Adicionar */}
       <Modal
         open={modalAdd}
         onClose={() => setModalAdd(false)}
@@ -933,7 +977,6 @@ export default function ExperienciaTab() {
         <FormExperiencia onSubmit={addExp} submitting={submitting} />
       </Modal>
 
-      {/* Modal Editar */}
       <Modal
         open={!!editItem}
         onClose={() => setEditItem(null)}

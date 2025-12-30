@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 
 export default function VagasDisponiveis() {
   const { user } = useAuth();
+
   const [search, setSearch] = useState("");
   const [categoria, setCategoria] = useState("todas");
   const [experiencia, setExperiencia] = useState("todos");
@@ -28,26 +29,87 @@ export default function VagasDisponiveis() {
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
 
-  // 🔹 Carregar vagas do Supabase
-  useEffect(() => {
-    async function fetchVagas() {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("vagas")
-        .select("*")
-        .eq("status", "ativa")
-        .order("criada_em", { ascending: false });
+  // 🔹 Modal de sucesso pós-candidatura
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [vagaSucesso, setVagaSucesso] = useState<any | null>(null);
 
-      if (error) {
-        console.error("Erro ao buscar vagas:", error);
-      } else {
-        setVagas(data || []);
+  // 🔹 Carregar vagas + candidaturas do profissional
+  useEffect(() => {
+    // id real do auth (auth.users.id)
+    const authId = (user as any)?.auth_id || user?.id;
+    if (!authId) return;
+
+    async function fetchVagas() {
+      try {
+        setLoading(true);
+
+        // 1) Buscar profissional ligado ao authId
+        const { data: prof, error: profError } = await supabase
+          .from("profissionais")
+          .select("id")
+          .eq("user_id", authId)
+          .maybeSingle();
+
+        if (profError) {
+          console.error("Erro ao buscar profissional:", profError.message);
+        }
+
+        // 2) Buscar vagas ativas
+        const { data: vagasData, error: vagasError } = await supabase
+          .from("vagas")
+          .select("*")
+          .eq("status", "ativa")
+          .order("criada_em", { ascending: false });
+
+        if (vagasError) {
+          console.error("Erro ao buscar vagas:", vagasError.message);
+          setVagas([]);
+          setLoading(false);
+          return;
+        }
+
+        // Se não achou profissional, mostra vagas mas sem marcar candidaturas
+        if (!prof) {
+          const comFlag = (vagasData || []).map((v) => ({
+            ...v,
+            _candidatado: false,
+          }));
+          setVagas(comFlag);
+          setLoading(false);
+          return;
+        }
+
+        // 3) Buscar candidaturas desse profissional
+        const { data: candidaturasData, error: candError } = await supabase
+          .from("vagas_candidaturas")
+          .select("vaga_id")
+          .eq("profissional_id", prof.id);
+
+        if (candError) {
+          console.error("Erro ao buscar candidaturas:", candError.message);
+        }
+
+        const vagasJaCandidatadas = new Set(
+          (candidaturasData || []).map((c: any) => c.vaga_id)
+        );
+
+        // 4) Marcar flag _candidatado nas vagas
+        const comFlag = (vagasData || []).map((v) => ({
+          ...v,
+          _candidatado: vagasJaCandidatadas.has(v.id),
+        }));
+
+        setVagas(comFlag);
+      } catch (err) {
+        console.error("Erro inesperado ao carregar vagas:", err);
+        setVagas([]);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
 
     fetchVagas();
-  }, []);
+  }, [user]);
 
   // 🔹 Filtro de vagas
   const vagasFiltradas = vagas.filter(
@@ -71,7 +133,9 @@ export default function VagasDisponiveis() {
 
   // 🔹 Enviar candidatura
   async function enviarCandidatura() {
-    if (!user?.id) {
+    const authId = (user as any)?.auth_id || user?.id;
+
+    if (!authId) {
       alert("Aguarde um momento, seu perfil ainda está sendo carregado.");
       return;
     }
@@ -81,13 +145,13 @@ export default function VagasDisponiveis() {
     setEnviando(true);
 
     try {
-      console.log("Usuário logado:", user.id, user.email);
+      console.log("Usuário logado (authId):", authId, user?.email);
 
-      // 🔸 Busca o profissional vinculado ao user.id
+      // 🔸 Busca o profissional vinculado ao authId
       const { data: prof, error: profError } = await supabase
         .from("profissionais")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", authId)
         .maybeSingle();
 
       if (profError) {
@@ -122,12 +186,23 @@ export default function VagasDisponiveis() {
         console.error("Erro ao enviar candidatura:", insertError.message);
         alert("Erro ao enviar candidatura. Tente novamente.");
       } else {
+        // Marca como enviado (estado do botão dentro do modal)
         setEnviado(true);
-        setTimeout(() => {
-          setVagaSelecionada(null);
-          setObservacao("");
-          setEnviado(false);
-        }, 2000);
+
+        // Atualiza a lista de vagas para marcar que essa já foi candidata
+        setVagas((prev) =>
+          prev.map((v) =>
+            v.id === vagaSelecionada.id ? { ...v, _candidatado: true } : v
+          )
+        );
+
+        // Guarda vaga para mostrar no modal de sucesso
+        setVagaSucesso(vagaSelecionada);
+        setShowSuccessModal(true);
+
+        // Fecha o modal da vaga e limpa observação
+        setVagaSelecionada(null);
+        setObservacao("");
       }
     } catch (err) {
       console.error("Erro inesperado:", err);
@@ -135,6 +210,8 @@ export default function VagasDisponiveis() {
     }
 
     setEnviando(false);
+    // reseta estado "enviado" para o próximo envio
+    setEnviado(false);
   }
 
   return (
@@ -238,46 +315,57 @@ export default function VagasDisponiveis() {
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-8">
-            {vagasFiltradas.map((vaga) => (
-              <div
-                key={vaga.id}
-                className="group bg-white dark:bg-slate-800/80 
-                p-4 md:p-6 rounded-2xl border border-gray-200 dark:border-slate-700 
-                shadow-[0_2px_10px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]
-                hover:shadow-[0_4px_20px_rgba(59,130,246,0.25)]
-                transition-all duration-300 hover:-translate-y-1"
-              >
-                <div className="flex items-center justify-between mb-3 md:mb-4">
-                  <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white">
-                    {vaga.titulo}
-                  </h3>
-                  {getIcon(vaga.categoria)}
-                </div>
+            {vagasFiltradas.map((vaga) => {
+              const jaCandidatado = vaga._candidatado;
 
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  {vaga.localizacao} • {vaga.experiencia}
-                </p>
-
-                <p className="text-blue-600 dark:text-blue-400 font-bold text-base md:text-lg mb-3">
-                  € {vaga.valor_dia}/dia
-                </p>
-
-                <button
-                  onClick={() => setVagaSelecionada(vaga)}
-                  className="w-full bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-500 
-                  text-white py-2 md:py-2.5 rounded-lg font-medium hover:scale-[1.02] 
-                  transition-transform shadow-sm hover:shadow-lg text-sm md:text-base"
+              return (
+                <div
+                  key={vaga.id}
+                  className="group bg-white dark:bg-slate-800/80 
+                  p-4 md:p-6 rounded-2xl border border-gray-200 dark:border-slate-700 
+                  shadow-[0_2px_10px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]
+                  hover:shadow-[0_4px_20px_rgba(59,130,246,0.25)]
+                  transition-all duration-300 hover:-translate-y-1"
                 >
-                  Candidatar-se
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center justify-between mb-3 md:mb-4">
+                    <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white">
+                      {vaga.titulo}
+                    </h3>
+                    {jaCandidatado ? (
+                      <CheckCircle2 className="text-emerald-500" size={22} />
+                    ) : (
+                      getIcon(vaga.categoria)
+                    )}
+                  </div>
+
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    {vaga.localizacao} • {vaga.experiencia}
+                  </p>
+
+                  <p className="text-blue-600 dark:text-blue-400 font-bold text-base md:text-lg mb-3">
+                    € {vaga.valor_dia}/dia
+                  </p>
+
+                  <button
+                    onClick={() => !jaCandidatado && setVagaSelecionada(vaga)}
+                    disabled={jaCandidatado}
+                    className={`w-full py-2 md:py-2.5 rounded-lg font-medium text-sm md:text-base transition-all shadow-sm ${
+                      jaCandidatado
+                        ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/60 cursor-default"
+                        : "bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-500 text-white hover:scale-[1.02] hover:shadow-lg"
+                    }`}
+                  >
+                    {jaCandidatado ? "Você já se candidatou" : "Candidatar-se"}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Modal */}
+        {/* Modal de detalhes da vaga + envio */}
         {vagaSelecionada && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end md:items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end md:items-center justify-center z-40">
             <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-t-3xl md:rounded-2xl shadow-2xl w-full md:w-[90%] md:max-w-md relative border border-gray-200 dark:border-slate-700 max-h-[90vh] overflow-y-auto">
               <button
                 onClick={() => setVagaSelecionada(null)}
@@ -296,10 +384,18 @@ export default function VagasDisponiveis() {
               </p>
 
               <div className="space-y-1 mb-3 text-sm text-gray-700 dark:text-gray-300">
-                <p>📍 <strong>Local:</strong> {vagaSelecionada.localizacao}</p>
-                <p>⏳ <strong>Duração:</strong> {vagaSelecionada.duracao}</p>
-                <p>🚀 <strong>Início:</strong> {vagaSelecionada.inicio}</p>
-                <p>🧰 <strong>Experiência:</strong> {vagaSelecionada.experiencia}</p>
+                <p>
+                  📍 <strong>Local:</strong> {vagaSelecionada.localizacao}
+                </p>
+                <p>
+                  ⏳ <strong>Duração:</strong> {vagaSelecionada.duracao}
+                </p>
+                <p>
+                  🚀 <strong>Início:</strong> {vagaSelecionada.inicio}
+                </p>
+                <p>
+                  🧰 <strong>Experiência:</strong> {vagaSelecionada.experiencia}
+                </p>
               </div>
 
               <p className="text-gray-700 dark:text-gray-300 mb-4 leading-relaxed text-sm">
@@ -315,12 +411,10 @@ export default function VagasDisponiveis() {
               />
 
               <button
-                disabled={enviando || enviado}
+                disabled={enviando}
                 onClick={enviarCandidatura}
                 className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-white shadow-md transition-all text-sm md:text-base ${
-                  enviado
-                    ? "bg-emerald-600"
-                    : enviando
+                  enviando
                     ? "bg-blue-600 opacity-80"
                     : "bg-gradient-to-r from-green-500 to-emerald-600 hover:brightness-110"
                 }`}
@@ -329,19 +423,44 @@ export default function VagasDisponiveis() {
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" /> Enviando...
                   </>
-                ) : enviado ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5" /> Candidatura enviada!
-                  </>
                 ) : (
                   "Enviar Candidatura"
                 )}
               </button>
 
               <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center mt-3">
-                🔒 Seus dados são usados apenas para recrutamento.  
-                A Acrobatas nunca cobra taxas para candidaturas.
+                🔒 Seus dados são usados apenas para recrutamento. A Acrobatas
+                nunca cobra taxas para candidaturas.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de sucesso */}
+        {showSuccessModal && vagaSucesso && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-slate-800 px-6 py-7 rounded-2xl shadow-2xl w-[92%] max-w-sm border border-emerald-500/40 text-center">
+              <div className="flex justify-center mb-3">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Candidatura enviada!
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+                Você se candidatou para{" "}
+                <strong>{vagaSucesso.titulo}</strong>. Agora é só aguardar a
+                análise da empresa.
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
+                Você pode acompanhar o andamento em{" "}
+                <strong>Minhas Candidaturas</strong>.
+              </p>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors"
+              >
+                OK, entendi
+              </button>
             </div>
           </div>
         )}

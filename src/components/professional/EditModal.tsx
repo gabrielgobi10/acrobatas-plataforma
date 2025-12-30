@@ -121,7 +121,7 @@ export default function EditModal({
         data_nascimento: dados.dataNasc,
         nacionalidade: dados.nacionalidade,
         idiomas: dados.idiomas || [],
-        area_principal: dados.areaPrincipal?.[0] || null,
+        area_id: dados.areaPrincipal?.[0] || null,
         nivel: dados.nivel,
         anos_experiencia: anosExpMap[dados.anosExp] ?? null,
         disponibilidade: dados.disponibilidade,

@@ -136,6 +136,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       const rpc = await supabase.rpc("minha_empresa_id");
       if (!rpc.error) empresaId = (rpc.data as string) ?? null;
       if (!empresaId) empresaId = (user?.user_metadata?.empresa_id as string) || null;
+
       if (!empresaId) {
         setStats({
           obrasAtivas: 0,
@@ -203,6 +204,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       const somaCustoPorObra = new Map<string, number>();
       let custoMesAtualTotal = 0;
       const agoraYM = new Date().toISOString().slice(0, 7);
+
       if (obraIds.length) {
         const { data: custos } = await supabase
           .from<CustoObra>("custos_obra")
@@ -248,9 +250,7 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       const totalProfsAtivos = ativas.reduce((a, o) => a + (o.profissionais || 0), 0);
       const totalObras = linhas.length;
       const atrasadas = linhas.filter((l) => l.status === "Atrasada").length;
-      const eficiencia = totalObras
-        ? Math.round(((totalObras - atrasadas) / totalObras) * 100)
-        : 0;
+      const eficiencia = totalObras ? Math.round(((totalObras - atrasadas) / totalObras) * 100) : 0;
 
       setStats({
         obrasAtivas: ativas.length,
@@ -321,8 +321,8 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
   const temMaisQueMax = obrasAtivas.length > MAX_OBRAS;
 
   return (
-    <div className="w-full mx-auto px-6 flex flex-col gap-6 max-w-[1180px] 2xl:max-w-[1200px]">
-      {/* HEADER - mesma cor do sidebar no dark */}
+    <div className="w-full min-w-0 flex flex-col gap-6">
+      {/* HEADER */}
       <div className="bg-white dark:bg-[#020617] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-slate-800/80">
         <h2 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
           👋 Bem-vindo, {nomeEmpresa}.
@@ -333,55 +333,35 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         </p>
       </div>
 
-      {/* KPIs MOBILE - gradiente, ícone menor */}
-      <div className="sm:hidden grid grid-cols-2 gap-3">
+      {/* KPIs: grid único (melhor em monitores menores/zoom) */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 min-w-0">
         {KPIs.map((kpi, i) => (
           <motion.div
             key={i}
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
             onClick={() => navigate(kpi.link)}
-            className={`rounded-2xl p-4 text-white bg-gradient-to-br ${kpi.color} shadow-md cursor-pointer flex flex-col justify-between h-[110px]`}
-          >
-            <div className="flex justify-between items-start">
-              <p className="text-xs opacity-80 font-medium">{kpi.label}</p>
-              <kpi.icon className="w-5 h-5 opacity-90" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold leading-none">{kpi.value}</h2>
-              <p className="text-[11px] opacity-80 mt-1">{kpi.sub}</p>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* KPIs DESKTOP - gradiente como antes */}
-      <section className="hidden sm:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-5">
-        {KPIs.map((kpi, i) => (
-          <motion.div
-            key={i}
-            whileHover={{ scale: 1.02 }}
-            onClick={() => navigate(kpi.link)}
-            className={`cursor-pointer rounded-2xl p-5 sm:p-6 text-white shadow-md bg-gradient-to-br ${kpi.color} relative overflow-hidden hover:shadow-lg transition-all`}
+            className={`cursor-pointer rounded-2xl p-4 sm:p-6 text-white shadow-md bg-gradient-to-br ${kpi.color} relative overflow-hidden hover:shadow-lg transition-all min-w-0`}
           >
             <div className="absolute inset-0 bg-white/10 dark:bg-white/5 backdrop-blur-[1px]" />
-            <div className="flex justify-between items-start relative z-10 gap-3">
-              <div>
-                <p className="text-xs sm:text-sm opacity-90">{kpi.label}</p>
-                <h2 className="text-xl sm:text-3xl font-bold mt-1 leading-tight">
+            <div className="relative z-10 flex items-start justify-between gap-3 min-w-0">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm opacity-90 truncate">{kpi.label}</p>
+                <h2 className="mt-1 text-xl sm:text-3xl font-bold leading-tight truncate">
                   {kpi.value}
                 </h2>
-                <p className="text-[11px] sm:text-xs opacity-80 mt-1">
+                <p className="mt-1 text-[11px] sm:text-xs opacity-80 truncate">
                   {kpi.sub}
                 </p>
               </div>
-              <kpi.icon className="w-6 h-6 sm:w-8 sm:h-8 opacity-90" />
+              <kpi.icon className="w-5 h-5 sm:w-8 sm:h-8 opacity-90 shrink-0" />
             </div>
           </motion.div>
         ))}
       </section>
 
       {/* GRÁFICOS DESKTOP */}
-      <div className="hidden sm:block overflow-x-hidden">
+      <div className="hidden sm:block min-w-0">
         <GraficosPainel
           obrasMes={obrasMes}
           custosMes={custosMes}
@@ -390,35 +370,35 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
       </div>
 
       {/* GRÁFICOS MOBILE */}
-      <div className="sm:hidden w-full flex flex-col items-center">
+      <div className="sm:hidden w-full min-w-0 flex flex-col items-center">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 text-center">
           Painel de Ações e Indicadores
         </h3>
-        <div className="w-full relative flex items-center justify-center min-h-[240px] overflow-hidden">
-          <div className="w-full">
-            {graficoIndex === 0 && (
-              <GraficosPainel
-                obrasMes={obrasMes}
-                custosMes={[]}
-                onQuickAction={handleQuick}
-              />
-            )}
-            {graficoIndex === 1 && (
-              <GraficosPainel
-                obrasMes={[]}
-                custosMes={custosMes}
-                onQuickAction={handleQuick}
-              />
-            )}
-            {graficoIndex === 2 && (
-              <GraficosPainel
-                obrasMes={[]}
-                custosMes={[]}
-                onQuickAction={handleQuick}
-              />
-            )}
-          </div>
+
+        <div className="w-full min-w-0">
+          {graficoIndex === 0 && (
+            <GraficosPainel
+              obrasMes={obrasMes}
+              custosMes={[]}
+              onQuickAction={handleQuick}
+            />
+          )}
+          {graficoIndex === 1 && (
+            <GraficosPainel
+              obrasMes={[]}
+              custosMes={custosMes}
+              onQuickAction={handleQuick}
+            />
+          )}
+          {graficoIndex === 2 && (
+            <GraficosPainel
+              obrasMes={[]}
+              custosMes={[]}
+              onQuickAction={handleQuick}
+            />
+          )}
         </div>
+
         <div className="flex justify-center gap-2 mt-4">
           {graficosMobile.map((_, idx) => (
             <button
@@ -434,8 +414,8 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
         </div>
       </div>
 
-      {/* OBRAS ATIVAS - mesma cor do sidebar no dark */}
-      <div className="bg-white dark:bg-[#020617] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-slate-800/80">
+      {/* OBRAS ATIVAS */}
+      <div className="bg-white dark:bg-[#020617] rounded-2xl p-4 sm:p-6 shadow border border-gray-100 dark:border-slate-800/80 min-w-0">
         <h3 className="font-semibold mb-4 text-gray-700 dark:text-gray-200 flex items-center gap-2 text-base sm:text-lg">
           <Building2 className="w-5 h-5 text-blue-500" /> Obras Ativas
         </h3>
@@ -447,11 +427,11 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
               key={obra.id}
               className="rounded-xl border border-gray-200 dark:border-slate-800/80 bg-white/70 dark:bg-[#0f1520] p-3"
             >
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">
                   {obra.nome || "—"}
                 </p>
-                <span className="px-2 py-0.5 rounded-full text-[11px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
+                <span className="shrink-0 px-2 py-0.5 rounded-full text-[11px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
                   {obra.status}
                 </span>
               </div>
@@ -475,11 +455,11 @@ export default function EmpresaPainel({ onQuickAction }: Props) {
           ))}
         </div>
 
-        {/* Desktop: tabela (máx. 5) */}
+        {/* Desktop: tabela com scroll horizontal quando necessário */}
         {obrasAtivas.length > 0 && (
-          <div className="hidden sm:block md:overflow-x-visible">
-            <table className="w-full text-sm border-b mb-2">
-              <thead className="sticky top-0 bg-white dark:bg-[#020617]">
+          <div className="hidden sm:block overflow-x-auto -mx-4 sm:mx-0">
+            <table className="min-w-[980px] w-full text-sm border-b mb-2">
+              <thead className="bg-white dark:bg-[#020617]">
                 <tr className="text-left text-gray-500 dark:text-gray-400 border-b dark:border-slate-800/80">
                   <th className="pb-2 font-medium">Obra</th>
                   <th className="pb-2 font-medium">Local</th>

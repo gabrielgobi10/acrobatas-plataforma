@@ -1,43 +1,62 @@
 // src/components/professional/documentos/MeusDocumentos.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type ChangeEvent,
+} from "react";
+import { motion } from "framer-motion";
 import {
   FileText,
   CheckCircle2,
   AlertTriangle,
   XCircle,
-  Plus,
   Eye,
   Upload,
   Filter as FilterIcon,
   Search,
   Calendar,
   Clock4,
-  Download,
   RefreshCcw,
   ChevronDown,
   SortAsc,
   SortDesc,
-  Info,
+  Lock,
+  Shield,
+  User as UserIcon,
+  X,
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 /* ======================
    Tipos
 ====================== */
-type Documento = {
-  id: string;
-  nome: string;
-  categoria: string;
-  validade?: string | null; // "dd/mm/yyyy"
-  status: "Válido" | "Pendente" | "Vencido";
-  atualizado_em?: string | null; // "dd/mm/yyyy"
-  url?: string | null;
-};
-
+type Status = "Válido" | "Pendente" | "Vencido" | "Reprovado";
 type SortKey = "nome" | "categoria" | "validade" | "atualizado_em" | "status";
+type Responsabilidade = "profissional" | "acrobatas" | "ambos";
+
+type Documento = {
+  id: string; // doc_id na view (id em documentos_acrobatas)
+  profissional_id: string;
+  tipo_id: string;
+  nome: string;
+  categoria: string | null;
+  validade?: string | null; // dd/mm/yyyy
+  status: Status;
+  atualizado_em?: string | null; // dd/mm/yyyy
+  url?: string | null;
+  obrigatorio?: boolean | null;
+  responsabilidade: Responsabilidade;
+  prof_pode_enviar?: boolean | null;
+  bloqueado?: boolean | null;
+  comentario_admin?: string | null;
+};
 
 /* ======================
    Helpers de data
@@ -46,199 +65,146 @@ function parsePTDate(d?: string | null): Date | null {
   if (!d) return null;
   const [dd, mm, yyyy] = d.split("/").map((v) => parseInt(v, 10));
   if (!dd || !mm || !yyyy) return null;
-  return new Date(yyyy, mm - 1, dd, 12); // 12h evita timezone edge
+  return new Date(yyyy, mm - 1, dd, 12);
 }
 
 function daysUntil(dateStr?: string | null): number | null {
   const dt = parsePTDate(dateStr);
   if (!dt) return null;
-  const today = new Date();
-  const ms = dt.setHours(0, 0, 0, 0) - today.setHours(0, 0, 0, 0);
+  const t0 = new Date();
+  const ms = dt.setHours(0, 0, 0, 0) - t0.setHours(0, 0, 0, 0);
   return Math.ceil(ms / (1000 * 60 * 60 * 24));
 }
 
 /* ======================
-   Badges e cartões
+   Helpers de ficheiro
 ====================== */
-function StatusBadge({ status }: { status: Documento["status"] }) {
-  const classes =
+function getFileNameFromUrl(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split("/").pop() || "";
+    return decodeURIComponent(last);
+  } catch {
+    const parts = url.split("/");
+    return decodeURIComponent(parts[parts.length - 1] || "");
+  }
+}
+
+function shortenFileName(name: string, max = 40): string {
+  if (name.length <= max) return name;
+  return name.slice(0, max - 3) + "...";
+}
+
+/* ======================
+   UI helpers
+====================== */
+function StatusBadge({ status }: { status: Status }) {
+  const cls =
     status === "Válido"
       ? "bg-green-100 text-green-700 dark:bg-green-700/30 dark:text-green-400"
       : status === "Pendente"
       ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-700/30 dark:text-yellow-400"
+      : status === "Reprovado"
+      ? "bg-rose-100 text-rose-700 dark:bg-rose-700/30 dark:text-rose-300"
       : "bg-red-100 text-red-700 dark:bg-red-700/30 dark:text-red-400";
 
   return (
-    <span className={`px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold rounded-full ${classes}`}>
+    <span
+      className={`px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold rounded-full ${cls}`}
+    >
       {status}
     </span>
   );
 }
 
-function ResumoCard({
-  titulo,
-  valor,
-  cor,
-  icone,
-}: {
-  titulo: string;
-  valor: number | string;
-  cor: string;
-  icone: any;
-}) {
+function VencimentoBadge({ validade }: { validade?: string | null }) {
+  const d = daysUntil(validade);
+  if (d === null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
+        <Calendar size={14} /> Sem validade
+      </span>
+    );
+  }
+  if (d < 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-red-600">
+        <Calendar size={14} /> Vencido há {Math.abs(d)}d
+      </span>
+    );
+  }
+  const near = d <= 15;
   return (
-    <motion.div
-      whileHover={{ scale: 1.04 }}
-      className="rounded-xl p-3 sm:p-4 text-center shadow-sm hover:shadow-md transition bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700"
+    <span
+      className={`inline-flex items-center gap-1 text-xs ${
+        near ? "text-yellow-600" : "text-zinc-600 dark:text-zinc-300"
+      }`}
     >
-      <div className={`flex justify-center mb-1 sm:mb-2 ${cor}`}>{icone}</div>
-      <p className="text-[11px] sm:text-sm text-gray-600 dark:text-gray-400">{titulo}</p>
-      <p className="text-base sm:text-xl font-semibold text-gray-900 dark:text-gray-100">{valor}</p>
-    </motion.div>
+      <Calendar size={14} /> Vence em {d}d
+    </span>
   );
 }
 
-function VencimentoBadge({ validade }: { validade?: string | null }) {
-  const d = daysUntil(validade);
-  if (d === null) return <span className="text-xs text-gray-500">Sem validade</span>;
-
-  const style =
-    d < 0
-      ? "text-red-600"
-      : d <= 15
-      ? "text-yellow-600"
-      : "text-gray-600 dark:text-gray-300";
-
+function ResponsabilidadeBadge({ resp }: { resp: Responsabilidade }) {
+  if (resp === "profissional") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-700/30 dark:text-emerald-300">
+        <UserIcon size={12} /> Você
+      </span>
+    );
+  }
+  if (resp === "acrobatas") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-blue-100 text-blue-700 dark:bg-blue-700/30 dark:text-blue-300">
+        <Shield size={12} /> Acrobatas
+      </span>
+    );
+  }
   return (
-    <span className={`inline-flex items-center gap-1 text-xs ${style}`}>
-      <Calendar size={14} />
-      {d < 0 ? `Vencido há ${Math.abs(d)}d` : `Vence em ${d}d`}
+    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full bg-purple-100 text-purple-700 dark:bg-purple-700/30 dark:text-purple-300">
+      <UserIcon size={12} />
+      <Shield size={12} /> Ambos
     </span>
   );
 }
 
 /* ======================
-   Modais (visuais)
+   Upload “inline”
 ====================== */
-function UploadModal({
-  open,
-  onClose,
-  onConfirm,
-  docAlvo,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: (fakeUrl: string) => void;
-  docAlvo?: Documento | null;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-40 bg-black/50 grid place-items-center px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md rounded-2xl bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 p-5"
-      >
-        <h3 className="text-lg font-semibold mb-1">Enviar documento</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          {docAlvo ? `Atualizar: ${docAlvo.nome}` : "Adicionar novo documento."}
-        </p>
+function useHiddenFilePicker(onPick: (file: File, docId: string) => void) {
+  const ref = useRef<HTMLInputElement>(null);
 
-        <div className="space-y-3">
-          <div className="rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 p-6 text-center">
-            <Upload className="mx-auto mb-2" />
-            <p className="text-sm">Arraste o arquivo aqui ou clique para selecionar</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <Info size={14} />
-              PDF, JPG, PNG — até 10 MB
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <Calendar size={14} />
-              Se tiver validade, atualize depois
-            </div>
-          </div>
-        </div>
+  function open(docId: string) {
+    if (!ref.current) return;
+    ref.current.setAttribute("data-docid", docId);
+    ref.current.click();
+  }
 
-        <div className="flex justify-end gap-2 mt-5">
-          <button
-            className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            onClick={onClose}
-          >
-            Cancelar
-          </button>
-          <button
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-            onClick={() => {
-              onConfirm("https://acrobatas.fake/cdn/documento.pdf");
-              onClose();
-            }}
-          >
-            Enviar
-          </button>
-        </div>
-      </motion.div>
-    </div>
+  function onChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const docId = e.currentTarget.getAttribute("data-docid") || "";
+    if (file && docId) onPick(file, docId);
+    e.currentTarget.value = "";
+  }
+
+  const input = (
+    <input
+      ref={ref}
+      type="file"
+      className="hidden"
+      onChange={onChange}
+      accept=".pdf,.png,.jpg,.jpeg,.heic,.webp"
+    />
   );
-}
-
-function ViewModal({ open, onClose, doc }: { open: boolean; onClose: () => void; doc: Documento | null }) {
-  if (!open || !doc) return null;
-  return (
-    <div className="fixed inset-0 z-40 bg-black/60 grid place-items-center px-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-2xl rounded-2xl bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 p-5"
-      >
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold">{doc.nome}</h3>
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <StatusBadge status={doc.status} />
-              <span>•</span>
-              <span>Categoria: {doc.categoria}</span>
-              <span>•</span>
-              <VencimentoBadge validade={doc.validade} />
-            </div>
-          </div>
-          <button
-            className="px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            onClick={onClose}
-          >
-            Fechar
-          </button>
-        </div>
-
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-gray-50 dark:bg-[#101725] p-6 grid place-items-center min-h-[240px]">
-          {doc.url ? (
-            <div className="text-center space-y-2">
-              <FileText className="mx-auto" />
-              <p className="text-sm text-gray-600 dark:text-gray-400">Pré-visualização indisponível aqui.</p>
-              <a
-                href={doc.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-              >
-                <Download size={16} /> Abrir/baixar
-              </a>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Nenhum arquivo enviado ainda para este documento.
-            </p>
-          )}
-        </div>
-      </motion.div>
-    </div>
-  );
+  return { open, input };
 }
 
 /* ======================
    Barra de filtros
 ====================== */
+type FiltroResp = "todas" | "profissional" | "acrobatas";
+
 function FiltroBar({
   categorias,
   query,
@@ -252,25 +218,32 @@ function FiltroBar({
   sortDir,
   setSortDir,
   onReset,
+  filtroResp,
+  setFiltroResp,
 }: {
   categorias: string[];
   query: string;
   setQuery: (s: string) => void;
   categoria: string;
   setCategoria: (s: string) => void;
-  status: "Todos" | Documento["status"];
-  setStatus: (s: "Todos" | Documento["status"]) => void;
+  status: "Todos" | Status;
+  setStatus: (s: "Todos" | Status) => void;
   sortKey: SortKey;
   setSortKey: (k: SortKey) => void;
   sortDir: "asc" | "desc";
   setSortDir: (d: "asc" | "desc") => void;
   onReset: () => void;
+  filtroResp: FiltroResp;
+  setFiltroResp: (f: FiltroResp) => void;
 }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
       <div className="flex-1 flex items-center gap-2">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70" size={16} />
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70"
+            size={16}
+          />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -293,7 +266,10 @@ function FiltroBar({
                 </option>
               ))}
             </select>
-            <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70" />
+            <ChevronDown
+              size={14}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70"
+            />
           </div>
 
           <div className="relative">
@@ -306,8 +282,12 @@ function FiltroBar({
               <option value="Válido">Válidos</option>
               <option value="Pendente">Pendentes</option>
               <option value="Vencido">Vencidos</option>
+              <option value="Reprovado">Reprovados</option>
             </select>
-            <FilterIcon size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70" />
+            <FilterIcon
+              size={14}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70"
+            />
           </div>
 
           <div className="relative">
@@ -322,11 +302,13 @@ function FiltroBar({
               <option value="categoria">Ordenar por categoria</option>
               <option value="atualizado_em">Ordenar por atualização</option>
             </select>
-            {(sortDir === "asc" ? <SortAsc /> : <SortDesc />) && (
-              <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70">
-                {sortDir === "asc" ? <SortAsc size={14} /> : <SortDesc size={14} />}
-              </div>
-            )}
+            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70">
+              {sortDir === "asc" ? (
+                <SortAsc size={14} />
+              ) : (
+                <SortDesc size={14} />
+              )}
+            </div>
           </div>
 
           <button
@@ -334,7 +316,11 @@ function FiltroBar({
             className="px-2 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             title="Inverter ordem"
           >
-            {sortDir === "asc" ? <SortAsc size={16} /> : <SortDesc size={16} />}
+            {sortDir === "asc" ? (
+              <SortAsc size={16} />
+            ) : (
+              <SortDesc size={16} />
+            )}
           </button>
 
           <button
@@ -347,147 +333,484 @@ function FiltroBar({
         </div>
       </div>
 
-      <div className="flex justify-center sm:justify-end">
-        <button
-          className="flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm sm:text-base"
-          id="btn-upload-top"
-        >
-          <Plus size={18} />
-          Adicionar novo documento
-        </button>
+      <div className="flex justify-center sm:justify-end gap-1 rounded-lg bg-zinc-900/5 dark:bg-zinc-100/5 p-1">
+        <RespToggleItem
+          active={filtroResp === "todas"}
+          onClick={() => setFiltroResp("todas")}
+          label="Todos"
+        />
+        <RespToggleItem
+          active={filtroResp === "profissional"}
+          onClick={() => setFiltroResp("profissional")}
+          label="Você"
+          icon={<UserIcon size={14} />}
+        />
+        <RespToggleItem
+          active={filtroResp === "acrobatas"}
+          onClick={() => setFiltroResp("acrobatas")}
+          label="Acrobatas"
+          icon={<Shield size={14} />}
+        />
       </div>
     </div>
   );
 }
 
+function RespToggleItem({
+  active,
+  onClick,
+  label,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon?: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs sm:text-sm transition ${
+        active
+          ? "bg-blue-600 text-white shadow-sm"
+          : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/60"
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 /* ======================
-   Componente principal
+   Modal: ficheiro já existente
 ====================== */
+type UploadModalState = { doc: Documento } | null;
+
+function UploadExistingModal({
+  doc,
+  onClose,
+  onReplace,
+  onDelete,
+}: {
+  doc: Documento;
+  onClose: () => void;
+  onReplace: () => void;
+  onDelete: () => void;
+}) {
+  const fileName = shortenFileName(
+    getFileNameFromUrl(doc.url) || "Ficheiro atual",
+  );
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="relative w-[95%] max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-zinc-200 dark:border-slate-700 shadow-2xl p-5">
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-slate-800 text-zinc-500"
+        >
+          <X size={16} />
+        </button>
+
+        <h3 className="text-base sm:text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
+          Documento já enviado
+        </h3>
+        <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 mb-3">
+          Já existe um ficheiro para o documento:
+        </p>
+
+        <div className="rounded-xl bg-zinc-50 dark:bg-slate-800/70 border border-zinc-200 dark:border-slate-700 px-3 py-2 mb-4">
+          <p className="text-xs font-medium text-zinc-800 dark:text-zinc-100 line-clamp-2 flex items-center gap-2">
+            <FileText size={14} className="text-blue-500" />
+            {fileName}
+          </p>
+        </div>
+
+        <div className="space-y-2 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 mb-4">
+          <p>
+            • <span className="font-medium">Substituir ficheiro</span>: envia
+            um novo ficheiro e mantém o histórico apenas com o mais recente.
+          </p>
+          <p>
+            • <span className="font-medium">Apagar ficheiro</span>: remove o
+            ficheiro atual. Depois poderás enviar um novo quando quiseres.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row justify-end gap-2 mt-2">
+          <button
+            onClick={onDelete}
+            className="flex-1 sm:flex-none px-3 py-2 rounded-xl text-xs sm:text-sm border border-rose-500 text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-900/30 flex items-center justify-center gap-2"
+          >
+            <Trash2Icon size={16} />
+            Apagar ficheiro
+          </button>
+          <button
+            onClick={onReplace}
+            className="flex-1 sm:flex-none px-3 py-2 rounded-xl text-xs sm:text-sm text-white bg-blue-600 hover:bg-blue-700 flex items-center justify-center gap-2"
+          >
+            <Upload size={16} />
+            Substituir ficheiro
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Trash2Icon(props: any) {
+  return <XCircle {...props} />;
+}
+
+/* ======================
+   Página principal
+====================== */
+const STORAGE_BUCKET = "public";
+
 export default function MeusDocumentos() {
   const { user } = useAuth();
+
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // filtros/estado UI
   const [query, setQuery] = useState("");
   const [categoria, setCategoria] = useState<string>("Todas");
-  const [status, setStatus] = useState<"Todos" | Documento["status"]>("Todos");
+  const [status, setStatus] = useState<"Todos" | Status>("Todos");
   const [sortKey, setSortKey] = useState<SortKey>("validade");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filtroResp, setFiltroResp] = useState<FiltroResp>("todas");
+  const [uploadModal, setUploadModal] = useState<UploadModalState>(null);
 
-  // modais
-  const [openUpload, setOpenUpload] = useState(false);
-  const [openView, setOpenView] = useState(false);
-  const [docSelecionado, setDocSelecionado] = useState<Documento | null>(null);
+  const { open: pickFile, input: hiddenInput } = useHiddenFilePicker(
+    async (file, docId) => {
+      const doc = documentos.find((d) => d.id === docId);
+      if (!doc) return;
+
+      if (
+        doc.responsabilidade === "acrobatas" ||
+        doc.prof_pode_enviar === false ||
+        doc.bloqueado
+      ) {
+        return;
+      }
+
+      try {
+        const originalName = file.name;
+        const extMatch = originalName.match(/\.([a-zA-Z0-9]+)$/);
+        const ext = (extMatch?.[1] || "bin").toLowerCase();
+        const baseName = originalName.replace(/\.[^.]+$/, "");
+
+        const safeBase = baseName
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9-_]/g, "-");
+
+        const path = `${doc.profissional_id}/${doc.tipo_id}-${Date.now()}-${safeBase}.${ext}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(path, file, { upsert: true });
+
+        if (uploadError || !uploadData) {
+          console.error("Erro no upload:", uploadError);
+          alert("Não foi possível carregar o ficheiro.");
+          return;
+        }
+
+        const { data: publicData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(uploadData.path);
+
+        const publicUrl = publicData.publicUrl;
+
+        const { error: updateError } = await supabase
+          .from("documentos_acrobatas")
+          .update({
+            arquivo_url: publicUrl,
+            status: "Pendente",
+            validade: null,
+          })
+          .eq("id", doc.id);
+
+        if (updateError) {
+          console.error("Erro ao atualizar documento:", updateError);
+          alert("Não foi possível atualizar o documento.");
+          return;
+        }
+
+        const hoje = new Intl.DateTimeFormat("pt-PT").format(new Date());
+        setDocumentos((prev) =>
+          prev.map((d) =>
+            d.id === doc.id
+              ? {
+                  ...d,
+                  url: publicUrl,
+                  status: "Pendente",
+                  atualizado_em: hoje,
+                  validade: null,
+                }
+              : d,
+          ),
+        );
+      } catch (err) {
+        console.error(err);
+        alert("Ocorreu um erro ao enviar o documento.");
+      }
+    },
+  );
+
+  async function handleDeleteFile(doc: Documento) {
+    if (!doc.url) return;
+
+    const { error } = await supabase
+      .from("documentos_acrobatas")
+      .update({ arquivo_url: null, status: "Pendente", validade: null })
+      .eq("id", doc.id);
+
+    if (error) {
+      console.error("Erro ao apagar ficheiro:", error);
+      alert("Não foi possível apagar o ficheiro.");
+      return;
+    }
+
+    setDocumentos((prev) =>
+      prev.map((d) =>
+        d.id === doc.id
+          ? { ...d, url: null, status: "Pendente", validade: null }
+          : d,
+      ),
+    );
+  }
 
   useEffect(() => {
+    let ativo = true;
+
     async function carregar() {
       setLoading(true);
-      const dados: Documento[] = [
-        {
-          id: "1",
-          nome: "Cartão de Cidadão",
-          categoria: "Identificação",
-          validade: "12/12/2025",
-          status: "Válido",
-          atualizado_em: "10/09/2024",
-          url: "https://exemplo.com/cc.pdf",
-        },
-        {
-          id: "2",
-          nome: "Certidão Contributiva",
-          categoria: "Fiscal",
-          validade: null,
-          status: "Pendente",
-          atualizado_em: null,
-          url: null,
-        },
-        {
-          id: "3",
-          nome: "Seguro de Responsabilidade Civil",
-          categoria: "Segurança",
-          validade: "22/03/2024",
-          status: "Vencido",
-          atualizado_em: "10/03/2024",
-          url: "https://exemplo.com/seguro.pdf",
-        },
-        {
-          id: "4",
-          nome: "Título de Residência",
-          categoria: "Imigração",
-          validade: "14/01/2026",
-          status: "Válido",
-          atualizado_em: "02/02/2025",
-          url: "https://exemplo.com/titulo.pdf",
-        },
-      ];
-      // simula fetch
-      setTimeout(() => {
-        setDocumentos(dados);
+
+      // Fonte de verdade: auth uid (GoTrue)
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      const uid = authData?.user?.id ?? null;
+
+      console.log("[MeusDocumentos] AuthContext user.id =", user?.id);
+      console.log("[MeusDocumentos] auth.getUser().id   =", uid);
+
+      if (authErr || !uid) {
+        console.error("Sem sessão/auth uid:", authErr);
+        if (ativo) {
+          setDocumentos([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const { data: prof, error: profError } = await supabase
+        .from("profissionais")
+        .select("id")
+        .or(`user_id.eq.${uid},usuario_id.eq.${uid}`)
+        .maybeSingle();
+
+      if (profError || !prof) {
+        console.error("Erro a obter profissional:", profError, { uid, prof });
+        if (ativo) {
+          setDocumentos([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const profissionalId = prof.id;
+
+      async function fetchDocs() {
+        return supabase
+          .from("prof_docs_v")
+          .select("*")
+          .eq("profissional_id", profissionalId)
+          .order("ordem", { ascending: true, nullsFirst: false })
+          .order("documento_nome", { ascending: true });
+      }
+
+      let { data: docsDb, error: docsError } = await fetchDocs();
+
+      if (!ativo) return;
+
+      if (docsError) {
+        console.error("Erro a carregar documentos (RLS/policy):", docsError);
+        setDocumentos([]);
         setLoading(false);
-      }, 250);
+        return;
+      }
+
+      if (!docsDb || docsDb.length === 0) {
+        try {
+          const { error: initError } = await supabase.rpc(
+            "inicializar_docs_profissional",
+            {
+              p_profissional_id: profissionalId,
+            },
+          );
+
+          if (initError) {
+            console.error(
+              "Erro ao inicializar documentos do profissional:",
+              initError,
+            );
+          } else {
+            const segunda = await fetchDocs();
+            if (!segunda.error) docsDb = segunda.data ?? [];
+          }
+        } catch (e) {
+          console.error("Erro inesperado ao inicializar docs:", e);
+        }
+      }
+
+      if (!ativo) return;
+
+      const mapped: Documento[] = [];
+
+      (docsDb || []).forEach((d: any) => {
+        const originalNome: string = d.documento_nome || "";
+
+        // remover "Contactos de emergência" da lista do profissional
+        if (originalNome.toLowerCase().startsWith("contactos de emergência"))
+          return;
+
+        const nomeNormalizado = originalNome.startsWith(
+          "Comprovativo de regularização de trabalhadores estrangeiros",
+        )
+          ? "Comprovativo de regularização de trabalhadores estrangeiros (Título ou Autorização de Residência/CPLP/TR)"
+          : originalNome;
+
+        const validadeStr = d.validade
+          ? new Date(d.validade).toLocaleDateString("pt-PT")
+          : null;
+        const atualizadoStr = d.atualizado_em
+          ? new Date(d.atualizado_em).toLocaleDateString("pt-PT")
+          : null;
+
+        let statusLocal: Status = d.status as Status;
+        if (validadeStr && statusLocal !== "Pendente" && statusLocal !== "Reprovado") {
+          const diff = daysUntil(validadeStr);
+          if (diff !== null && diff < 0) statusLocal = "Vencido";
+        }
+
+        let resp: Responsabilidade;
+        const r = (d.responsavel || "").toLowerCase();
+        if (r === "profissional") resp = "profissional";
+        else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
+        else resp = "ambos";
+
+        // força como Acrobatas em certos docs
+        if (
+          nomeNormalizado.includes("Ficha de Aptidão Médica") ||
+          nomeNormalizado.includes("Registo de distribuição de EPI") ||
+          nomeNormalizado.includes(
+            "Comprovativo de Comunicação de Admissão na Segurança Social",
+          )
+        ) {
+          resp = "acrobatas";
+        }
+
+        mapped.push({
+          id: d.doc_id,
+          profissional_id: d.profissional_id,
+          tipo_id: d.tipo_id,
+          nome: nomeNormalizado,
+          categoria: d.categoria,
+          validade: validadeStr,
+          status: statusLocal,
+          atualizado_em: atualizadoStr,
+          url: d.arquivo_url,
+          obrigatorio: d.obrigatorio,
+          responsabilidade: resp,
+          prof_pode_enviar: d.prof_pode_enviar,
+          bloqueado: d.bloqueado,
+          comentario_admin: d.comentario_admin ?? null,
+        });
+      });
+
+      setDocumentos(mapped);
+      setLoading(false);
     }
+
     carregar();
-  }, [user?.id]);
+
+    return () => {
+      ativo = false;
+    };
+    // intencional: depende do "user" do contexto só para log/reatividade
+  }, [user]);
 
   const resumo = useMemo(() => {
     const validos = documentos.filter((d) => d.status === "Válido").length;
     const pendentes = documentos.filter((d) => d.status === "Pendente").length;
     const vencidos = documentos.filter((d) => d.status === "Vencido").length;
-    const total = documentos.length;
-    const completion = total ? Math.round((validos / total) * 100) : 0;
-    return { validos, pendentes, vencidos, total, completion };
+    const obrigatorios =
+      documentos.filter((d) => d.obrigatorio).length || documentos.length;
+    const completion = obrigatorios
+      ? Math.round((validos / obrigatorios) * 100)
+      : 0;
+    return { validos, pendentes, vencidos, completion };
   }, [documentos]);
 
   const categorias = useMemo(
     () =>
-      Array.from(new Set(documentos.map((d) => d.categoria))).sort((a, b) =>
-        a.localeCompare(b),
-      ),
+      Array.from(
+        new Set(
+          documentos.map((d) => d.categoria).filter(Boolean) as string[],
+        ),
+      ).sort((a, b) => a.localeCompare(b)),
     [documentos],
   );
 
   const filtrados = useMemo(() => {
     let arr = [...documentos];
 
-    // busca
     if (query.trim()) {
       const q = query.toLowerCase();
       arr = arr.filter(
         (d) =>
           d.nome.toLowerCase().includes(q) ||
-          d.categoria.toLowerCase().includes(q) ||
+          (d.categoria || "").toLowerCase().includes(q) ||
           (d.validade || "").includes(q),
       );
     }
+    if (categoria !== "Todas") arr = arr.filter((d) => d.categoria === categoria);
+    if (status !== "Todos") arr = arr.filter((d) => d.status === status);
 
-    // categoria
-    if (categoria !== "Todas") {
-      arr = arr.filter((d) => d.categoria === categoria);
+    if (filtroResp !== "todas") {
+      arr = arr.filter((d) =>
+        filtroResp === "profissional"
+          ? d.responsabilidade !== "acrobatas"
+          : d.responsabilidade === "acrobatas",
+      );
     }
 
-    // status
-    if (status !== "Todos") {
-      arr = arr.filter((d) => d.status === status);
-    }
-
-    // ordenação
     arr.sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       if (sortKey === "validade" || sortKey === "atualizado_em") {
-        const da = parsePTDate(a[sortKey] || "");
-        const db = parsePTDate(b[sortKey] || "");
-        const va = da ? da.getTime() : (sortDir === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
-        const vb = db ? db.getTime() : (sortDir === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
+        const da = parsePTDate((a as any)[sortKey] || "");
+        const db = parsePTDate((b as any)[sortKey] || "");
+        const va = da
+          ? da.getTime()
+          : sortDir === "asc"
+            ? Number.POSITIVE_INFINITY
+            : Number.NEGATIVE_INFINITY;
+        const vb = db
+          ? db.getTime()
+          : sortDir === "asc"
+            ? Number.POSITIVE_INFINITY
+            : Number.NEGATIVE_INFINITY;
         return va > vb ? dir : va < vb ? -dir : 0;
       }
-      const va = String(a[sortKey] ?? "").toLowerCase();
-      const vb = String(b[sortKey] ?? "").toLowerCase();
+      const va = String((a as any)[sortKey] ?? "").toLowerCase();
+      const vb = String((b as any)[sortKey] ?? "").toLowerCase();
       return va > vb ? dir : va < vb ? -dir : 0;
     });
 
     return arr;
-  }, [documentos, query, categoria, status, sortKey, sortDir]);
+  }, [documentos, query, categoria, status, sortKey, sortDir, filtroResp]);
 
   const handleResetFiltros = () => {
     setQuery("");
@@ -495,21 +818,27 @@ export default function MeusDocumentos() {
     setStatus("Todos");
     setSortKey("validade");
     setSortDir("asc");
+    setFiltroResp("todas");
   };
 
-  const abrirUploadNovo = () => {
-    setDocSelecionado(null);
-    setOpenUpload(true);
-  };
+  function openInNewTab(url?: string | null) {
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 
-  // liga o botão da FiltroBar
-  useEffect(() => {
-    const btn = document.getElementById("btn-upload-top");
-    if (!btn) return;
-    const onClick = () => abrirUploadNovo();
-    btn.addEventListener("click", onClick);
-    return () => btn.removeEventListener("click", onClick);
-  }, []);
+  function canUploadDoc(doc: Documento) {
+    return (
+      doc.responsabilidade !== "acrobatas" &&
+      doc.prof_pode_enviar !== false &&
+      !doc.bloqueado
+    );
+  }
+
+  function handleUploadClick(doc: Documento) {
+    if (!canUploadDoc(doc)) return;
+    if (doc.url) setUploadModal({ doc });
+    else pickFile(doc.id);
+  }
 
   if (loading) {
     return (
@@ -520,17 +849,16 @@ export default function MeusDocumentos() {
   }
 
   return (
-    <div className="p-4 sm:p-8 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-      {/* Cabeçalho */}
+    <div className="p-4 sm:p-8 text-zinc-900 dark:text-zinc-100">
       <div className="flex items-center gap-3 mb-2">
         <FileText className="text-blue-500 dark:text-blue-400 w-6 h-6 sm:w-7 sm:h-7" />
         <h1 className="text-lg sm:text-2xl font-semibold">Meus Documentos</h1>
       </div>
-      <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base mb-6">
-        Organize e acompanhe seus documentos pessoais, fiscais e de segurança.
+      <p className="text-zinc-500 dark:text-zinc-400 text-sm sm:text-base mb-6">
+        Acompanhe a sua documentação pessoal. Alguns documentos são da sua
+        responsabilidade e outros são geridos pela equipa Acrobatas.
       </p>
 
-      {/* Cards resumo + progresso */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
         <ResumoCard
           titulo="Válidos"
@@ -551,9 +879,10 @@ export default function MeusDocumentos() {
           icone={<XCircle size={18} />}
         />
       </div>
+
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+          <span className="text-sm text-zinc-600 dark:text-zinc-400">
             Completude do perfil de documentos
           </span>
           <span className="text-sm font-medium">{resumo.completion}%</span>
@@ -566,7 +895,6 @@ export default function MeusDocumentos() {
         </div>
       </div>
 
-      {/* Filtros + ação */}
       <FiltroBar
         categorias={categorias}
         query={query}
@@ -580,19 +908,19 @@ export default function MeusDocumentos() {
         sortDir={sortDir}
         setSortDir={setSortDir}
         onReset={handleResetFiltros}
+        filtroResp={filtroResp}
+        setFiltroResp={setFiltroResp}
       />
 
-      {/* Lista */}
       <div className="bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 sm:p-6 shadow-sm">
         <h2 className="text-sm sm:text-lg font-medium mb-4 flex items-center gap-2 text-blue-500 dark:text-blue-400">
           <FileText size={18} /> Documentos
         </h2>
 
-        {/* Empty state */}
         {filtrados.length === 0 ? (
           <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-8 text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Nenhum documento encontrado com os filtros atuais.
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Nenhum documento encontrado.
             </p>
             <button
               onClick={handleResetFiltros}
@@ -603,65 +931,115 @@ export default function MeusDocumentos() {
           </div>
         ) : (
           <>
-            {/* MOBILE – Cards */}
             <div className="space-y-3 sm:hidden">
-              {filtrados.map((doc) => (
-                <motion.div
-                  key={doc.id}
-                  whileHover={{ scale: 1.02 }}
-                  className="rounded-xl p-3 border border-zinc-200 dark:border-zinc-700 bg-gray-50 dark:bg-[#232c3d]"
-                >
-                  <div className="flex justify-between items-start gap-3 mb-1">
-                    <div>
-                      <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">
-                        {doc.nome}
-                      </p>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                        {doc.categoria}
-                      </p>
+              {filtrados.map((doc) => {
+                const canUpload = canUploadDoc(doc);
+
+                return (
+                  <motion.div
+                    key={doc.id}
+                    whileHover={{ scale: 1.02 }}
+                    className="rounded-xl p-3 border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#232c3d]"
+                  >
+                    <div className="flex justify-between items-start gap-3 mb-1">
+                      <div className="flex-1">
+                        <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">
+                          {doc.nome}
+                        </p>
+                        <div className="flex items-center gap-2 mt-[2px] flex-wrap">
+                          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {doc.categoria || "—"}
+                          </span>
+                          <ResponsabilidadeBadge resp={doc.responsabilidade} />
+                        </div>
+                        <div className="mt-1 text-[11px]">
+                          {doc.url ? (
+                            <button
+                              onClick={() => openInNewTab(doc.url)}
+                              className="inline-flex items-center gap-1 text-blue-400 hover:underline underline-offset-2 break-all"
+                            >
+                              <FileText size={11} />
+                              Ver documento enviado
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                              <FileText size={11} />
+                              Nenhum ficheiro enviado
+                            </span>
+                          )}
+                        </div>
+
+                        {doc.comentario_admin && (
+                          <div className="mt-2">
+                            <div className="rounded-lg border border-blue-500/20 bg-blue-50/80 dark:bg-blue-900/20 px-2.5 py-1.5">
+                              <div className="flex items-start gap-1.5">
+                                <MessageCircle
+                                  size={13}
+                                  className="mt-[2px] text-blue-500 dark:text-blue-300"
+                                />
+                                <p className="text-[11px] leading-snug text-blue-900 dark:text-blue-50">
+                                  {doc.comentario_admin}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <StatusBadge status={doc.status} />
                     </div>
-                    <StatusBadge status={doc.status} />
-                  </div>
 
-                  <div className="flex items-center justify-between mt-2 text-xs">
-                    <VencimentoBadge validade={doc.validade} />
-                    <span className="text-gray-500 dark:text-gray-400">
-                      <Clock4 size={12} className="inline mr-1" />
-                      {doc.atualizado_em ? `Atualizado ${doc.atualizado_em}` : "Nunca atualizado"}
-                    </span>
-                  </div>
+                    <div className="flex items-center justify-between mt-2 text-xs">
+                      <VencimentoBadge validade={doc.validade} />
+                      <span className="text-zinc-500 dark:text-zinc-400">
+                        <Clock4 size={12} className="inline mr-1" />
+                        {doc.atualizado_em
+                          ? `Atualizado ${doc.atualizado_em}`
+                          : "Nunca atualizado"}
+                      </span>
+                    </div>
 
-                  <div className="flex gap-3 mt-3">
-                    <button
-                      onClick={() => {
-                        setDocSelecionado(doc);
-                        setOpenView(true);
-                      }}
-                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md bg-blue-600/90 text-white text-xs hover:bg-blue-700 transition"
-                    >
-                      <Eye size={14} /> Ver
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDocSelecionado(doc);
-                        setOpenUpload(true);
-                      }}
-                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md bg-green-600/90 text-white text-xs hover:bg-green-700 transition"
-                    >
-                      <Upload size={14} /> Enviar
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
+                    <div className="flex gap-3 mt-3">
+                      <button
+                        onClick={() => openInNewTab(doc.url)}
+                        disabled={!doc.url}
+                        className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition ${
+                          doc.url
+                            ? "bg-blue-600/90 text-white hover:bg-blue-700"
+                            : "bg-zinc-400 text-white opacity-70"
+                        }`}
+                      >
+                        <Eye size={14} /> Ver
+                      </button>
+                      <button
+                        disabled={!canUpload}
+                        onClick={() => canUpload && handleUploadClick(doc)}
+                        className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition ${
+                          canUpload
+                            ? "bg-green-600/90 text-white hover:bg-green-700"
+                            : "bg-zinc-500 text-white opacity-60"
+                        }`}
+                        title={
+                          canUpload
+                            ? "Enviar ou atualizar este documento"
+                            : "Este documento é gerido pela Acrobatas"
+                        }
+                      >
+                        {canUpload ? <Upload size={14} /> : <Lock size={14} />}{" "}
+                        {canUpload ? "Enviar" : "Gerido pela Acrobatas"}
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
 
-            {/* DESKTOP – Tabela */}
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="hidden sm:block">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left border-b border-zinc-300 dark:border-zinc-700">
                     <th className="py-3 px-2">Documento</th>
                     <th className="py-3 px-2">Categoria</th>
+                    <th className="py-3 px-2">Responsável</th>
                     <th className="py-3 px-2">Status</th>
                     <th className="py-3 px-2">Validade</th>
                     <th className="py-3 px-2">Atualizado</th>
@@ -669,61 +1047,111 @@ export default function MeusDocumentos() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtrados.map((doc) => (
-                    <motion.tr
-                      key={doc.id}
-                      whileHover={{ scale: 1.01 }}
-                      className="border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-[#243043] transition"
-                    >
-                      <td className="py-3 px-2 font-medium">{doc.nome}</td>
-                      <td className="py-3 px-2">{doc.categoria}</td>
-                      <td className="py-3 px-2">
-                        <StatusBadge status={doc.status} />
-                      </td>
-                      <td className="py-3 px-2">
-                        <div className="flex items-center gap-2">
-                          <span>{doc.validade || "—"}</span>
-                          <VencimentoBadge validade={doc.validade} />
-                        </div>
-                      </td>
-                      <td className="py-3 px-2">{doc.atualizado_em || "—"}</td>
-                      <td className="py-3 px-2 text-center">
-                        <div className="flex justify-center gap-3">
-                          <button
-                            title="Ver documento"
-                            onClick={() => {
-                              setDocSelecionado(doc);
-                              setOpenView(true);
-                            }}
-                            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                          >
-                            <Eye size={18} className="text-blue-500" />
-                          </button>
-                          <button
-                            title="Enviar/atualizar arquivo"
-                            onClick={() => {
-                              setDocSelecionado(doc);
-                              setOpenUpload(true);
-                            }}
-                            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                          >
-                            <Upload size={18} className="text-green-500" />
-                          </button>
-                          {doc.url && (
-                            <a
-                              title="Baixar"
-                              href={doc.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                  {filtrados.map((doc) => {
+                    const canUpload = canUploadDoc(doc);
+
+                    return (
+                      <motion.tr
+                        key={doc.id}
+                        whileHover={{ scale: 1.01 }}
+                        className="border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-[#243043] transition"
+                      >
+                        <td className="py-3 px-2 font-medium align-top">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>{doc.nome}</span>
+                            </div>
+                            <div className="text-[11px]">
+                              {doc.url ? (
+                                <button
+                                  onClick={() => openInNewTab(doc.url)}
+                                  className="inline-flex items-center gap-1 text-blue-400 hover:underline underline-offset-2 break-all"
+                                >
+                                  <FileText size={11} />
+                                  Ver documento enviado
+                                </button>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                                  <FileText size={11} />
+                                  Nenhum ficheiro enviado
+                                </span>
+                              )}
+                            </div>
+
+                            {doc.comentario_admin && (
+                              <div className="mt-2">
+                                <div className="inline-flex max-w-xl">
+                                  <div className="flex items-start gap-2 rounded-lg border border-blue-500/25 bg-blue-50/90 dark:bg-blue-900/20 dark:border-blue-800/60 px-3 py-2">
+                                    <MessageCircle
+                                      size={14}
+                                      className="mt-[2px] text-blue-500 dark:text-blue-300 shrink-0"
+                                    />
+                                    <div className="space-y-0.5">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700/80 dark:text-blue-200/80">
+                                        Observação da equipa Acrobatas
+                                      </p>
+                                      <p className="text-[11px] leading-snug text-blue-900 dark:text-blue-50">
+                                        {doc.comentario_admin}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-2">{doc.categoria || "—"}</td>
+                        <td className="py-3 px-2">
+                          <ResponsabilidadeBadge resp={doc.responsabilidade} />
+                        </td>
+                        <td className="py-3 px-2">
+                          <StatusBadge status={doc.status} />
+                        </td>
+                        <td className="py-3 px-2">
+                          <div className="flex items-center gap-2">
+                            <span>{doc.validade || "—"}</span>
+                            <VencimentoBadge validade={doc.validade} />
+                          </div>
+                        </td>
+                        <td className="py-3 px-2">{doc.atualizado_em || "—"}</td>
+                        <td className="py-3 px-2">
+                          <div className="flex justify-center gap-2">
+                            <button
+                              title={
+                                doc.url ? "Ver (abre em nova aba)" : "Sem ficheiro"
+                              }
+                              onClick={() => openInNewTab(doc.url)}
+                              disabled={!doc.url}
+                              className={`p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 ${
+                                doc.url ? "" : "opacity-50 cursor-not-allowed"
+                              }`}
                             >
-                              <Download size={18} className="text-gray-500" />
-                            </a>
-                          )}
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))}
+                              <Eye size={18} className="text-blue-500" />
+                            </button>
+
+                            <button
+                              title={
+                                canUpload
+                                  ? "Enviar / atualizar"
+                                  : "Este documento é gerido pela equipa Acrobatas"
+                              }
+                              disabled={!canUpload}
+                              onClick={() => canUpload && handleUploadClick(doc)}
+                              className={`p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 ${
+                                canUpload ? "" : "opacity-50 cursor-not-allowed"
+                              }`}
+                            >
+                              {canUpload ? (
+                                <Upload size={18} className="text-green-500" />
+                              ) : (
+                                <Lock size={18} className="text-zinc-500" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -731,33 +1159,59 @@ export default function MeusDocumentos() {
         )}
       </div>
 
-      {/* Rodapé */}
-      <div className="mt-8 sm:mt-10 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
-        Os documentos enviados são analisados pela equipe da Acrobatas para garantir conformidade legal e de segurança. 🔒
+      <div className="mt-8 sm:mt-10 text-center text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-xl mx-auto">
+        Os documentos enviados são analisados pela equipa da Acrobatas para
+        garantir a conformidade legal e de segurança. 🔒
       </div>
 
-      {/* Modais */}
-      <UploadModal
-        open={openUpload}
-        onClose={() => setOpenUpload(false)}
-        docAlvo={docSelecionado}
-        onConfirm={(fakeUrl) => {
-          // Atualização visual do item (mock)
-          setDocumentos((prev) =>
-            prev.map((d) =>
-              d.id === (docSelecionado?.id ?? "-1")
-                ? {
-                    ...d,
-                    url: fakeUrl,
-                    status: "Válido",
-                    atualizado_em: new Intl.DateTimeFormat("pt-PT").format(new Date()),
-                  }
-                : d,
-            ),
-          );
-        }}
-      />
-      <ViewModal open={openView} onClose={() => setOpenView(false)} doc={docSelecionado} />
+      {hiddenInput}
+
+      {uploadModal?.doc && (
+        <UploadExistingModal
+          doc={uploadModal.doc}
+          onClose={() => setUploadModal(null)}
+          onReplace={() => {
+            const d = uploadModal.doc;
+            setUploadModal(null);
+            pickFile(d.id);
+          }}
+          onDelete={async () => {
+            const d = uploadModal.doc;
+            await handleDeleteFile(d);
+            setUploadModal(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/* ======================
+   Card de Resumo
+====================== */
+function ResumoCard({
+  titulo,
+  valor,
+  cor,
+  icone,
+}: {
+  titulo: string;
+  valor: number | string;
+  cor: string;
+  icone: ReactNode;
+}) {
+  return (
+    <motion.div
+      whileHover={{ scale: 1.04 }}
+      className="rounded-xl p-3 sm:p-4 text-center shadow-sm hover:shadow-md transition bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700"
+    >
+      <div className={`flex justify-center mb-1 sm:mb-2 ${cor}`}>{icone}</div>
+      <p className="text-[11px] sm:text-sm text-zinc-600 dark:text-zinc-400">
+        {titulo}
+      </p>
+      <p className="text-base sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+        {valor}
+      </p>
+    </motion.div>
   );
 }

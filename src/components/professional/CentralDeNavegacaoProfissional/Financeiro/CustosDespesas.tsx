@@ -15,7 +15,13 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  PieChart as RePieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 
 type Despesa = {
   id: string;
@@ -50,7 +56,9 @@ export default function CustosEDespesas() {
 
       let query = supabase
         .from("despesas_profissionais")
-        .select(`id, categoria, descricao, valor, data, comprovativo_url, obras (nome)`)
+        .select(
+          `id, categoria, descricao, valor, data, comprovativo_url, obras (nome)`
+        )
         .eq("profissional_id", user.id)
         .order("data", { ascending: false });
 
@@ -66,7 +74,7 @@ export default function CustosEDespesas() {
       }
 
       const { data, error } = await query;
-      if (!error && data) setDespesas(data);
+      if (!error && data) setDespesas(data as Despesa[]);
       setLoading(false);
     }
     carregar();
@@ -74,13 +82,13 @@ export default function CustosEDespesas() {
 
   // 🔹 Estatísticas
   const totalDespesas = despesas.reduce((acc, d) => acc + d.valor, 0);
-  const categorias = ["transporte", "alimentacao", "ferramentas", "outros"];
+  const categorias = ["transporte", "alimentacao", "ferramentas", "outros"] as const;
   const somaPorCategoria = categorias.map((cat) => ({
     name: cat.charAt(0).toUpperCase() + cat.slice(1),
     value: despesas
       .filter((d) => d.categoria === cat)
       .reduce((acc, d) => acc + d.valor, 0),
-    color: cores[cat],
+    color: (cores as any)[cat],
   }));
 
   // ========================================================================
@@ -99,9 +107,12 @@ export default function CustosEDespesas() {
       </p>
 
       {/* Resumo */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
-        <div className="bg-white dark:bg-[#1e2a3a] border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 sm:p-4 text-center shadow-sm">
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Total de Despesas</p>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4 mb-8">
+        {/* Total de despesas – full width no mobile */}
+        <div className="bg-white dark:bg-[#1e2a3a] border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 sm:p-4 text-center shadow-sm col-span-2 md:col-span-1">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+            Total de Despesas
+          </p>
           <p className="text-base sm:text-xl font-semibold text-red-500">
             € {totalDespesas.toFixed(2)}
           </p>
@@ -112,8 +123,13 @@ export default function CustosEDespesas() {
             key={c.name}
             className="bg-white dark:bg-[#1e2a3a] border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 sm:p-4 text-center capitalize shadow-sm"
           >
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{c.name}</p>
-            <p className="text-base sm:text-lg font-semibold" style={{ color: c.color }}>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+              {c.name}
+            </p>
+            <p
+              className="text-base sm:text-lg font-semibold"
+              style={{ color: c.color }}
+            >
               € {c.value.toFixed(2)}
             </p>
           </div>
@@ -171,9 +187,12 @@ export default function CustosEDespesas() {
           {Array.from({ length: 12 }).map((_, i) => {
             const ano = new Date().getFullYear();
             const mes = (i + 1).toString().padStart(2, "0");
-            const label = new Date(`${ano}-${mes}-01`).toLocaleDateString("pt-PT", {
-              month: "long",
-            });
+            const label = new Date(`${ano}-${mes}-01`).toLocaleDateString(
+              "pt-PT",
+              {
+                month: "long",
+              }
+            );
             return (
               <option key={mes} value={`${ano}-${mes}`}>
                 {label.charAt(0).toUpperCase() + label.slice(1)}
@@ -217,7 +236,8 @@ export default function CustosEDespesas() {
                       € {d.valor.toFixed(2)}
                     </p>
                     <p className="text-[11px] sm:text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                      <Calendar size={12} /> {new Date(d.data).toLocaleDateString("pt-PT")}
+                      <Calendar size={12} />{" "}
+                      {new Date(d.data).toLocaleDateString("pt-PT")}
                     </p>
                     {d.obra?.nome && (
                       <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">

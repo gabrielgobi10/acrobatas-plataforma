@@ -1,5 +1,7 @@
+// src/components/professional/PerfilProfissional.tsx
 "use client";
 
+import type React from "react";
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import {
   MapPin,
@@ -27,7 +29,7 @@ import ExperienciaTab from "./perfil/ExperienciaTab";
 import HistoricoTab from "./perfil/HistoricoTab";
 import DocumentosTab from "./perfil/DocumentosTab";
 import AvaliacoesTab from "./perfil/AvaliacoesTab";
-import AtividadeTab from "./perfil/AtividadeTab";
+// ✅ removido: AtividadeTab
 import EditarPerfilModal from "./EditarPerfilModal";
 
 import type {
@@ -54,7 +56,6 @@ function mapDbToPerfil(
 ): Perfil {
   return {
     usuario_id: row.usuario_id ?? userLike?.id ?? null,
-    // não usa mais prefixo do e-mail como nome
     nome_completo: row.nome_completo ?? null,
     email: row.email ?? userLike?.email ?? "",
     telefone: row.telefone ?? null,
@@ -62,8 +63,13 @@ function mapDbToPerfil(
     cidade_base: row.cidade_base ?? null,
     nacionalidade: row.nacionalidade ?? null,
     data_nascimento: row.data_nascimento ?? null,
-    nivel: row.nivel ?? "Profissional",
-    anos_experiencia: row.anos_experiencia ?? 1,
+
+    // alinhado com o onboarding: todos começam em "Aprendiz" com 0 anos
+    nivel: row.nivel ?? "Aprendiz",
+    anos_experiencia: row.anos_experiencia ?? 0,
+
+    area_id: row.area_id ?? null,
+    // alguns ambientes ainda retornam area_principal em vez de area_id
     area_principal: row.area_principal ?? null,
     funcao_obra: row.funcao_obra ?? null,
     tipo_contrato: row.tipo_contrato ?? null,
@@ -102,9 +108,75 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // 🔑 ID alvo para TODAS as queries deste componente
-  const alvoUsuarioId =
-    adminView && forceUsuarioId ? forceUsuarioId : user?.id ?? null;
+  /**
+   * ✅ ID alvo para TODAS as queries deste componente
+   * - Admin: usa forceUsuarioId
+   * - Normal: usa SEMPRE o auth.uid real (supabase.auth.getUser())
+   */
+  const [alvoUsuarioId, setAlvoUsuarioId] = useState<string | null>(
+    adminView && forceUsuarioId ? forceUsuarioId : null
+  );
+
+  useEffect(() => {
+    if (adminView && forceUsuarioId) {
+      setAlvoUsuarioId(forceUsuarioId);
+      return;
+    }
+
+    (async () => {
+      const { data, error } = await supabase.auth.getUser();
+      const uid = data?.user?.id ?? null;
+
+      if (error || !uid) {
+        console.error("AUTH getUser ERROR:", error);
+        setAlvoUsuarioId(null);
+        return;
+      }
+
+      setAlvoUsuarioId(uid);
+    })();
+  }, [adminView, forceUsuarioId]);
+
+  // garante que exista um registro em `profissionais` para este usuário
+  const [sincronizouProfissionais, setSincronizouProfissionais] =
+    useState(false);
+
+  useEffect(() => {
+    if (!alvoUsuarioId || sincronizouProfissionais) return;
+
+    (async () => {
+      try {
+        const { data: existente, error } = await supabase
+          .from("profissionais")
+          .select("id")
+          .eq("usuario_id", alvoUsuarioId)
+          .maybeSingle();
+
+        if (error && (error as any).code !== "PGRST116") {
+          console.error("Erro ao verificar profissionais:", error);
+          return;
+        }
+
+        if (!existente) {
+          const { error: insertError } = await supabase
+            .from("profissionais")
+            .insert({
+              usuario_id: alvoUsuarioId,
+              user_id: alvoUsuarioId, // compatibilidade enquanto a coluna existir
+            });
+
+          if (insertError) {
+            console.error("Erro ao criar profissional base:", insertError);
+            return;
+          }
+        }
+
+        setSincronizouProfissionais(true);
+      } catch (e) {
+        console.error("Falha ao sincronizar profissionais:", e);
+      }
+    })();
+  }, [alvoUsuarioId, sincronizouProfissionais]);
 
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [portfolios, setPortfolios] = useState<PastaPortfolio[]>([]);
@@ -112,6 +184,8 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
   const [historicoObras, setHistoricoObras] = useState<HistoricoObra[]>([]);
+
+  // ✅ removido "atividade"
   const [aba, setAba] = useState<
     | "sobre"
     | "portfolio"
@@ -119,7 +193,6 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
     | "historico"
     | "documentos"
     | "avaliacoes"
-    | "atividade"
   >("sobre");
 
   const [savingBanner, setSavingBanner] = useState(false);
@@ -143,6 +216,7 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
   const tabsRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
+  // ✅ removido ["atividade", "Atividade"]
   const tabs = useMemo(
     () =>
       [
@@ -152,22 +226,28 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
         ["historico", "Histórico de Obras"],
         ["documentos", "Documentos"],
         ["avaliacoes", "Avaliações"],
-        ["atividade", "Atividade"],
       ] as const,
     []
   );
 
   useEffect(() => {
     const btn = tabsRefs.current[aba];
-    if (btn) btn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    if (btn) {
+      btn.scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest",
+      });
+    }
   }, [aba]);
 
   // =======================
-  // CARREGAMENTO DE DADOS
+  // CARREGAMENTO DE DADOS (perfil)
   // =======================
   useEffect(() => {
     (async () => {
       if (!alvoUsuarioId) return;
+
       const { data, error } = await supabase
         .from("profissionais_perfil")
         .select("*")
@@ -176,24 +256,50 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
 
       if (!error && data) {
         setPerfil(
-          mapDbToPerfil(data, { id: alvoUsuarioId, email: user?.email ?? null })
+          mapDbToPerfil(data, {
+            id: alvoUsuarioId,
+            email: user?.email ?? null,
+          })
+        );
+        return;
+      }
+
+      // perfil base quando ainda não existe registro
+      const base: any = {
+        usuario_id: alvoUsuarioId,
+        email: user?.email ?? "",
+        nivel: "Aprendiz",
+        anos_experiencia: 0,
+        disponibilidade: "Imediata",
+        raio_deslocacao: "100 km",
+        pode_viajar: false,
+        pode_alojamento: false,
+        idiomas: [],
+        habilidades: [],
+        perfil_completo: false,
+        data_atualizacao: new Date().toISOString(),
+      };
+
+      const { data: inserted, error: insertError } = await supabase
+        .from("profissionais_perfil")
+        .insert(base)
+        .select()
+        .maybeSingle();
+
+      if (!insertError && inserted) {
+        setPerfil(
+          mapDbToPerfil(inserted, {
+            id: alvoUsuarioId,
+            email: user?.email ?? null,
+          })
         );
       } else {
-        // primeira vez: não usa mais o e-mail como nome
-        setPerfil({
-          usuario_id: alvoUsuarioId,
-          nome_completo: null,
-          email: user?.email ?? "",
-          perfil_completo: false,
-          nivel: "Profissional",
-          anos_experiencia: 1,
-          disponibilidade: "Imediata",
-          raio_deslocacao: "100 km",
-          pode_viajar: false,
-          pode_alojamento: false,
-          idiomas: [],
-          habilidades: [],
-        } as any);
+        setPerfil(
+          mapDbToPerfil(base, {
+            id: alvoUsuarioId,
+            email: user?.email ?? null,
+          })
+        );
       }
     })();
   }, [alvoUsuarioId, user?.email]);
@@ -280,9 +386,7 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
     return publicUrl.publicUrl;
   };
 
-  const handleBannerChange = async (
-    ev: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleBannerChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (!perfil?.usuario_id || !ev.target.files?.[0]) return;
       setSavingBanner(true);
@@ -293,11 +397,14 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
 
       const { data, error } = await supabase
         .from("profissionais_perfil")
-        .update({
-          banner_url: publicUrl,
-          data_atualizacao: new Date().toISOString(),
-        })
-        .eq("usuario_id", perfil.usuario_id)
+        .upsert(
+          {
+            usuario_id: perfil.usuario_id,
+            banner_url: publicUrl,
+            data_atualizacao: new Date().toISOString(),
+          },
+          { onConflict: "usuario_id" }
+        )
         .select()
         .maybeSingle();
 
@@ -347,9 +454,7 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
     }
   };
 
-  const handleAvatarChange = async (
-    ev: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleAvatarChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (!perfil?.usuario_id || !ev.target.files?.[0]) return;
       setSavingAvatar(true);
@@ -360,13 +465,17 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
 
       const { data, error } = await supabase
         .from("profissionais_perfil")
-        .update({
-          avatar_url: publicUrl,
-          data_atualizacao: new Date().toISOString(),
-        })
-        .eq("usuario_id", perfil.usuario_id)
+        .upsert(
+          {
+            usuario_id: perfil.usuario_id,
+            avatar_url: publicUrl,
+            data_atualizacao: new Date().toISOString(),
+          },
+          { onConflict: "usuario_id" }
+        )
         .select()
         .maybeSingle();
+
       if (error) throw error;
       if (data)
         setPerfil(
@@ -443,6 +552,7 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
       "whatsapp",
       "observacoes",
       "bio",
+      "area_id",
     ] as const;
 
     const normalizeBool = (v: any) =>
@@ -464,10 +574,15 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
     if (payload.valor_diario !== undefined)
       payload.valor_diario = normalizeMoney(payload.valor_diario);
 
+    // 👇 se teu onboarding salva "area_id", mantém o "area_principal" por compatibilidade
+    if (!payload.area_principal && payload.area_id && !perfil.area_principal) {
+      payload.area_principal = null;
+    }
+
     payload.perfil_completo = !!(
       payload.nome_completo &&
       payload.telefone &&
-      payload.area_principal &&
+      (payload.area_principal || payload.area_id) &&
       payload.cidade_base
     );
 
@@ -537,19 +652,21 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
   }
 
   const nomeDefinido =
-    !!perfil.nome_completo && perfil.nome_completo.trim().length > 0;
-  const nome = nomeDefinido
-    ? (perfil.nome_completo as string)
-    : "Defina seu nome";
+    !!perfil.nome_completo && (perfil.nome_completo as string).trim().length > 0;
+  const nome = nomeDefinido ? (perfil.nome_completo as string) : "Defina seu nome";
 
   const hasAvatar = !!perfil.avatar_url;
 
-  const bannerFallback =
+  const bannerFallbackUrl =
     "https://images.unsplash.com/photo-1523419409543-4d7f2a0efcc3?q=80&w=1400&auto=format&fit=crop";
   const hasBanner = !!perfil.banner_url;
-  const banner = perfil.banner_url || bannerFallback;
+  const banner = perfil.banner_url || bannerFallbackUrl;
 
-  // visibilidade (hover desktop / toque mobile)
+  // Profissão + função/nível alinhados com a Base Acrobatas
+  const profissaoPrincipal =
+    (perfil as any).area_principal || "Profissional da construção";
+  const labelFuncaoOuNivel = perfil.funcao_obra || perfil.nivel || null;
+
   const bannerActionsBase =
     "transition-opacity inline-flex items-center gap-2 rounded-full px-2.5 py-2 text-[13px] bg-white/70 text-slate-800 border border-black/5 backdrop-blur-sm shadow-sm hover:bg-white/90 dark:bg-slate-900/60 dark:text-slate-100 dark:border-white/10 dark:hover:bg-slate-900/80 disabled:opacity-60";
   const bannerActionOpacity = isTouch
@@ -562,6 +679,8 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
       ? "opacity-100"
       : "opacity-0"
     : "opacity-0 group-hover:opacity-100";
+
+  const anosExp = perfil.anos_experiencia ?? 0;
 
   return (
     <div className="mx-auto max-w-6xl px-3 md:px-6 pb-24">
@@ -636,7 +755,7 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
                 title="Apagar capa"
                 aria-label="Apagar capa"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-4 h-4" />
                 <span className="hidden sm:inline">Apagar capa</span>
               </button>
             )}
@@ -670,7 +789,6 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
                       className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl border-4 border-white dark:border-slate-900 object-cover shadow-xl"
                     />
 
-                    {/* Trocar */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -682,13 +800,12 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
                       aria-label="Alterar foto"
                     >
                       {savingAvatar ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="h-4 h-4 animate-spin" />
                       ) : (
                         <Camera className="w-4 h-4" />
                       )}
                     </button>
 
-                    {/* Apagar */}
                     {perfil.avatar_url && (
                       <button
                         onClick={(e) => {
@@ -740,10 +857,16 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
             {/* Nome + meta */}
             <div className="min-w-0 text-center md:text-left mt-2 md:mt-3">
               <h1 className="text-xl sm:text-2xl md:text-[26px] font-semibold text-gray-900 dark:text-white leading-snug break-words whitespace-normal max-w-lg md:max-w-2xl mx-auto md:mx-0">
-                {nome}
-              </h1>
+  {nome}
+</h1>
+
               <p className="mt-0.5 text-gray-600 dark:text-slate-300 text-sm md:text-[15px]">
-                {perfil.funcao_obra || perfil.area_principal || "Profissional"}
+                {profissaoPrincipal}
+                {labelFuncaoOuNivel && (
+                  <span className="inline-flex items-center gap-1 ml-1 text-gray-500 dark:text-slate-400">
+                    • {labelFuncaoOuNivel}
+                  </span>
+                )}
                 {perfil.cidade_base && (
                   <span className="inline-flex items-center gap-1 ml-2 text-gray-500 dark:text-slate-400">
                     <MapPin className="w-4 h-4" /> {perfil.cidade_base}
@@ -754,12 +877,12 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
               <div className="mt-2 flex flex-wrap justify-center md:justify-start gap-2 text-xs sm:text-[13px]">
                 <Chip
                   icon={<Trophy className="w-3.5 h-3.5" />}
-                  txt={perfil.nivel || "Profissional"}
+                  txt={perfil.nivel || "Aprendiz"}
                   color="indigo"
                 />
                 <Chip
                   icon={<Clock4 className="w-3.5 h-3.5" />}
-                  txt={`${perfil.anos_experiencia ?? 1}+ anos`}
+                  txt={anosExp > 0 ? `${anosExp}+ anos` : "A iniciar na área"}
                   color="emerald"
                 />
                 <Chip
@@ -842,41 +965,42 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
         className="sticky top-0 z-30 mt-6 border-b dark:border-slate-800/60 border-gray-200
                       bg-white/70 dark:bg-slate-900/60 backdrop-blur supports-[backdrop-filter]:bg-white/50"
       >
-        <div
-          ref={tabsContainerRef}
-          className="
-            flex overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth gap-2 px-1
-            touch-pan-x overscroll-x-contain select-none
-          "
-        >
-          {tabs.map(([k, label]) => {
-            const active = aba === k;
-            return (
-              <button
-                key={k}
-                ref={(el) => (tabsRefs.current[k] = el)}
-                onClick={() => setAba(k as any)}
-                className={`
-                  snap-center whitespace-nowrap relative
-                  px-4 py-3 text-sm md:text-[15px] font-medium
-                  transition-colors
-                  ${
-                    active
-                      ? "text-sky-600 dark:text-sky-400"
-                      : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
-                  }
-                `}
-              >
-                {label}
-                <span
+        <div className="relative">
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white/90 dark:from-slate-900/90 to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white/90 dark:from-slate-900/90 to-transparent" />
+
+          <div
+            ref={tabsContainerRef}
+            className="flex overflow-x-auto no-scrollbar scroll-smooth gap-2 px-2 md:px-4 py-1 md:py-2 md:justify-center"
+          >
+            {tabs.map(([k, label]) => {
+              const active = aba === k;
+              return (
+                <button
+                  key={k}
+                  ref={(el) => (tabsRefs.current[k] = el)}
+                  onClick={() => setAba(k as any)}
                   className={`
-                    absolute left-0 right-0 -bottom-[1px] h-[2px] rounded-full transition-all
-                    ${active ? "bg-sky-600 dark:bg-sky-500" : "bg-transparent"}
+                    relative flex-shrink-0 rounded-xl px-3 md:px-4 py-2 md:py-2.5
+                    text-sm md:text-[15px] font-medium transition-all duração-200
+                    ${
+                      active
+                        ? "bg-sky-50 text-sky-700 shadow-[0_1px_0_rgba(15,23,42,0.08)] dark:bg-sky-900/40 dark:text-sky-300"
+                        : "text-gray-500 hover:text-gray-800 hover:bg-gray-50/80 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/70"
+                    }
                   `}
-                />
-              </button>
-            );
-          })}
+                >
+                  {label}
+                  <span
+                    className={`
+                      absolute left-3 right-3 -bottom-[3px] h-[2px] rounded-full transition-all
+                      ${active ? "bg-sky-500 dark:bg-sky-400" : "bg-transparent"}
+                    `}
+                  />
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -896,18 +1020,19 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
             />
           )}
 
-          {/* Portfólio: garante ownerId do profissional aberto */}
-          {aba === "portfolio" && <PortfolioTab ownerId={alvoUsuarioId} />}
+          {aba === "portfolio" && (
+  adminView ? (
+    <PortfolioTab ownerId={alvoProfissionalId ?? undefined} />
+  ) : (
+    <PortfolioTab />
+  )
+)}
 
-          {aba === "experiencia" && (
-            <ExperienciaTab experiencias={experiencias} />
-          )}
+          {aba === "experiencia" && <ExperienciaTab experiencias={experiencias} />}
           {aba === "historico" && <HistoricoTab obras={historicoObras} />}
           {aba === "documentos" && <DocumentosTab docs={documentos} />}
-          {aba === "avaliacoes" && (
-            <AvaliacoesTab avaliacoes={avaliacoes} />
-          )}
-          {aba === "atividade" && <AtividadeTab />}
+          {aba === "avaliacoes" && <AvaliacoesTab avaliacoes={avaliacoes} />}
+          {/* ✅ removido: aba === "atividade" */}
         </Suspense>
       </div>
 
@@ -924,23 +1049,24 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
             data_nascimento: (perfil as any)?.data_nascimento ?? "",
             nacionalidade: (perfil as any)?.nacionalidade ?? "",
             idiomas: perfil?.idiomas ?? [],
-            area_principal: perfil?.area_principal ?? "",
-            nivel: (perfil?.nivel as any) ?? "Profissional",
+            area_id: (perfil as any)?.area_id ?? "",
+            nivel: (perfil?.nivel as any) ?? "Aprendiz",
             anos_experiencia: perfil?.anos_experiencia ?? 0,
             valor_diario: (perfil as any)?.valor_diario ?? "",
             tipo_contrato: (perfil as any)?.tipo_contrato ?? "",
             disponibilidade: (perfil?.disponibilidade as any) ?? "Imediata",
-            funcao: perfil?.funcao_obra ?? perfil?.area_principal ?? "",
-            cidade: perfil?.cidade_base ?? "",
-            pode_viajar: perfil?.pode_viajar ? "Sim" : "Não",
-            pode_alojamento: perfil?.pode_alojamento ? "Sim" : "Não",
-            raio: perfil?.raio_deslocacao ?? "",
-            habilidades: perfil?.habilidades ?? [],
+            funcao:
+              (perfil as any)?.funcao_obra ?? (perfil as any)?.area_principal ?? "",
+            cidade: (perfil as any)?.cidade_base ?? "",
+            pode_viajar: (perfil as any)?.pode_viajar ? "Sim" : "Não",
+            pode_alojamento: (perfil as any)?.pode_alojamento ? "Sim" : "Não",
+            raio: (perfil as any)?.raio_deslocacao ?? "",
+            habilidades: (perfil as any)?.habilidades ?? [],
             observacoes: (perfil as any)?.observacoes ?? "",
-            foto_url: perfil?.avatar_url ?? "",
-            site: perfil?.site ?? "",
-            instagram: perfil?.instagram ?? "",
-            linkedin: perfil?.linkedin ?? "",
+            foto_url: (perfil as any)?.avatar_url ?? "",
+            site: (perfil as any)?.site ?? "",
+            instagram: (perfil as any)?.instagram ?? "",
+            linkedin: (perfil as any)?.linkedin ?? "",
           }}
           onSave={async (data: any) => {
             const mapped = {
@@ -952,8 +1078,8 @@ export default function PerfilProfissional(props: PerfilProfissionalProps) {
               nacionalidade: data.nacionalidade ?? null,
               cidade_base: data.cidade ?? "",
               avatar_url: data.foto_url ?? "",
-              nivel: data.nivel ?? "Profissional",
-              area_principal: data.area_principal ?? "",
+              nivel: data.nivel ?? "Aprendiz",
+              area_id: data.area_id ?? null,
               funcao_obra: data.funcao ?? "",
               anos_experiencia: data.anos_experiencia ?? 0,
               valor_diario: data.valor_diario ?? null,
@@ -1014,8 +1140,7 @@ function Chip({
 
 const linkBase =
   "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium border transition";
-const light =
-  "bg-white text-slate-700 border-gray-200 hover:bg-gray-50";
+const light = "bg-white text-slate-700 border-gray-200 hover:bg-gray-50";
 const dark =
   "dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-700";
 export const btnLink = `${linkBase} ${light} ${dark}`;
@@ -1025,9 +1150,7 @@ function safeHttpUrl(u?: string | null) {
   try {
     const url = new URL(
       u,
-      typeof window !== "undefined"
-        ? window.location.origin
-        : "http://localhost"
+      typeof window !== "undefined" ? window.location.origin : "http://localhost"
     );
     if (url.protocol === "http:" || url.protocol === "https:")
       return url.toString();

@@ -1,12 +1,6 @@
-// src/components/company/Documentos/DocumentosProfissionaisEmpresa.tsx
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -290,9 +284,7 @@ function ResumoCard({
       className="rounded-xl p-3 sm:p-4 text-center shadow-sm hover:shadow-md transition bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700"
     >
       <div className={`flex justify-center mb-1 sm:mb-2 ${cor}`}>{icone}</div>
-      <p className="text-[11px] sm:text-sm text-zinc-600 dark:text-zinc-400">
-        {titulo}
-      </p>
+      <p className="text-[11px] sm:text-sm text-zinc-600 dark:text-zinc-400">{titulo}</p>
       <p className="text-base sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100">
         {valor}
       </p>
@@ -303,7 +295,6 @@ function ResumoCard({
 /* ======================
    Página principal
 ====================== */
-
 export default function DocumentosProfissionaisEmpresa() {
   const { user } = useAuth();
 
@@ -323,9 +314,6 @@ export default function DocumentosProfissionaisEmpresa() {
   const [buscaProf, setBuscaProf] = useState("");
   const [filtroAtividade, setFiltroAtividade] = useState<"todos" | "ativos" | "inativos">("todos");
 
-  /* ======================
-     Carregar dados (empresa + profissionais + docs)
-  ====================== */
   useEffect(() => {
     if (!user?.id) {
       setLoading(false);
@@ -341,17 +329,11 @@ export default function DocumentosProfissionaisEmpresa() {
       setLoading(true);
 
       try {
-        // 1) pega ID da empresa ligada ao utilizador (RPC já usado em Minha Equipa)
-        const { data: empId, error: empErr } = await supabase.rpc(
-          "minha_empresa_id",
-        );
-
-        if (empErr) {
-          throw empErr;
-        }
+        // 1) empresa do user
+        const { data: empId, error: empErr } = await supabase.rpc("minha_empresa_id");
+        if (empErr) throw empErr;
 
         const empresaId = empId as string | null;
-
         if (!empresaId) {
           if (ativo) {
             setDocumentos([]);
@@ -362,22 +344,16 @@ export default function DocumentosProfissionaisEmpresa() {
           return;
         }
 
-        // 2) profissionais vinculados à empresa
+        // 2) profissionais vinculados
         const { data: vinc, error: vincErr } = await supabase
           .from("profissionais_obras")
           .select("profissional_id")
           .eq("empresa_id", empresaId);
 
-        if (vincErr) {
-          throw vincErr;
-        }
+        if (vincErr) throw vincErr;
 
         const idsProfissionais = Array.from(
-          new Set(
-            (vinc || [])
-              .map((v: any) => v.profissional_id)
-              .filter(Boolean) as string[],
-          ),
+          new Set((vinc || []).map((v: any) => v.profissional_id).filter(Boolean) as string[]),
         );
 
         if (idsProfissionais.length === 0) {
@@ -390,40 +366,38 @@ export default function DocumentosProfissionaisEmpresa() {
           return;
         }
 
-        // 3) nomes dos profissionais
+        // 3) nomes
         const { data: profDb, error: profErr } = await supabase
           .from("profissionais")
           .select("id, nome")
           .in("id", idsProfissionais);
 
-        if (profErr) {
-          throw profErr;
-        }
+        if (profErr) throw profErr;
 
-        // 4) documentos desses profissionais (mesma view usada no painel profissional)
+        // 4) DOCUMENTOS (painel empresa deve usar empresa_docs_prof_v)
         const { data: docsDb, error: docsErr } = await supabase
-          .from("admin_docs_prof_v")
-          .select("*")
+          .from("empresa_docs_prof_v")
+          .select(
+            "doc_id, empresa_id, profissional_id, tipo_id, documento_nome, categoria, obrigatorio, responsavel, prof_pode_enviar, status, validade, arquivo_url, atualizado_em, bloqueado, comentario_admin, ordem",
+          )
+          .eq("empresa_id", empresaId)
           .in("profissional_id", idsProfissionais)
           .order("profissional_id", { ascending: true })
+          .order("ordem", { ascending: true })
           .order("documento_nome", { ascending: true });
 
-        if (docsErr) {
-          throw docsErr;
-        }
+        if (docsErr) throw docsErr;
 
         if (!ativo) return;
 
         const mappedDocs: Documento[] = [];
         const profMap = new Map<string, ProfissionalResumo>();
 
-        // cria base dos profissionais
         (profDb || []).forEach((p: any) => {
           const id = p.id as string;
           profMap.set(id, {
             id,
             nome: p.nome || "Profissional",
-            // enquanto não temos flag real, considera todos com vínculo como ativos
             ativoEmObra: true,
             totalDocs: 0,
             pendentes: 0,
@@ -432,7 +406,6 @@ export default function DocumentosProfissionaisEmpresa() {
           });
         });
 
-        // mapeia docs + contagens
         (docsDb || []).forEach((d: any) => {
           const originalNome: string = d.documento_nome || "";
 
@@ -447,39 +420,38 @@ export default function DocumentosProfissionaisEmpresa() {
             ? "Comprovativo de regularização de trabalhadores estrangeiros (Título ou Autorização de Residência/CPLP/TR)"
             : originalNome;
 
-          const validadeStr = d.validade
-            ? new Date(d.validade).toLocaleDateString("pt-PT")
-            : null;
+          const validadeStr = d.validade ? new Date(d.validade).toLocaleDateString("pt-PT") : null;
           const atualizadoStr = d.atualizado_em
             ? new Date(d.atualizado_em).toLocaleDateString("pt-PT")
             : null;
 
           let statusDoc: Status = d.status as Status;
+
+          // recalcula vencido só se tiver validade e não estiver pendente/reprovado
           if (validadeStr && statusDoc !== "Pendente" && statusDoc !== "Reprovado") {
             const diff = daysUntil(validadeStr);
             if (diff !== null && diff < 0) statusDoc = "Vencido";
           }
 
           let resp: Responsabilidade;
-          const r = (d.responsavel || "").toLowerCase();
+          const r = String(d.responsavel || "").toLowerCase();
           if (r === "profissional") resp = "profissional";
           else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
           else resp = "ambos";
 
+          // regra fixa (como você já tinha)
           if (
             nomeNormalizado.includes("Ficha de Aptidão Médica") ||
             nomeNormalizado.includes("Registo de distribuição de EPI") ||
-            nomeNormalizado.includes(
-              "Comprovativo de Comunicação de Admissão na Segurança Social",
-            )
+            nomeNormalizado.includes("Comprovativo de Comunicação de Admissão na Segurança Social")
           ) {
             resp = "acrobatas";
           }
 
           mappedDocs.push({
-            id: d.doc_id,
-            profissional_id: d.profissional_id,
-            tipo_id: d.tipo_id,
+            id: String(d.doc_id),
+            profissional_id: String(d.profissional_id),
+            tipo_id: String(d.tipo_id),
             nome: nomeNormalizado,
             categoria: d.categoria,
             validade: validadeStr,
@@ -492,25 +464,23 @@ export default function DocumentosProfissionaisEmpresa() {
             bloqueado: d.bloqueado,
           });
 
-          const pid = d.profissional_id as string;
-          let resumo = profMap.get(pid);
-          if (!resumo) {
-            resumo = {
-              id: pid,
-              nome: "Profissional",
-              ativoEmObra: true,
-              totalDocs: 0,
-              pendentes: 0,
-              vencidos: 0,
-              validos: 0,
-            };
-            profMap.set(pid, resumo);
-          }
+          const pid = String(d.profissional_id);
+          const resumo = profMap.get(pid) || {
+            id: pid,
+            nome: "Profissional",
+            ativoEmObra: true,
+            totalDocs: 0,
+            pendentes: 0,
+            vencidos: 0,
+            validos: 0,
+          };
 
           resumo.totalDocs += 1;
           if (statusDoc === "Pendente") resumo.pendentes += 1;
           if (statusDoc === "Vencido") resumo.vencidos += 1;
           if (statusDoc === "Válido") resumo.validos += 1;
+
+          profMap.set(pid, resumo);
         });
 
         const profList = Array.from(profMap.values()).sort((a, b) =>
@@ -546,12 +516,8 @@ export default function DocumentosProfissionaisEmpresa() {
     };
   }, [user?.id]);
 
-  // docs do profissional selecionado
   const docsDoProf = useMemo(
-    () =>
-      documentos.filter((d) =>
-        selectedProfId ? d.profissional_id === selectedProfId : false,
-      ),
+    () => documentos.filter((d) => (selectedProfId ? d.profissional_id === selectedProfId : false)),
     [documentos, selectedProfId],
   );
 
@@ -559,19 +525,16 @@ export default function DocumentosProfissionaisEmpresa() {
     const validos = docsDoProf.filter((d) => d.status === "Válido").length;
     const pendentes = docsDoProf.filter((d) => d.status === "Pendente").length;
     const vencidos = docsDoProf.filter((d) => d.status === "Vencido").length;
-    const obrigatorios =
-      docsDoProf.filter((d) => d.obrigatorio).length || docsDoProf.length;
-    const completion = obrigatorios
-      ? Math.round((validos / obrigatorios) * 100)
-      : 0;
+    const obrigatorios = docsDoProf.filter((d) => d.obrigatorio).length || docsDoProf.length;
+    const completion = obrigatorios ? Math.round((validos / obrigatorios) * 100) : 0;
     return { validos, pendentes, vencidos, completion };
   }, [docsDoProf]);
 
   const categorias = useMemo(
     () =>
-      Array.from(
-        new Set(docsDoProf.map((d) => d.categoria).filter(Boolean) as string[]),
-      ).sort((a, b) => a.localeCompare(b)),
+      Array.from(new Set(docsDoProf.map((d) => d.categoria).filter(Boolean) as string[])).sort(
+        (a, b) => a.localeCompare(b),
+      ),
     [docsDoProf],
   );
 
@@ -587,8 +550,7 @@ export default function DocumentosProfissionaisEmpresa() {
           (d.validade || "").includes(q),
       );
     }
-    if (categoria !== "Todas")
-      arr = arr.filter((d) => d.categoria === categoria);
+    if (categoria !== "Todas") arr = arr.filter((d) => d.categoria === categoria);
     if (status !== "Todos") arr = arr.filter((d) => d.status === status);
 
     arr.sort((a, b) => {
@@ -596,16 +558,8 @@ export default function DocumentosProfissionaisEmpresa() {
       if (sortKey === "validade" || sortKey === "atualizado_em") {
         const da = parsePTDate(a[sortKey] || "");
         const db = parsePTDate(b[sortKey] || "");
-        const va = da
-          ? da.getTime()
-          : sortDir === "asc"
-          ? Number.POSITIVE_INFINITY
-          : Number.NEGATIVE_INFINITY;
-        const vb = db
-          ? db.getTime()
-          : sortDir === "asc"
-          ? Number.POSITIVE_INFINITY
-          : Number.NEGATIVE_INFINITY;
+        const va = da ? da.getTime() : sortDir === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+        const vb = db ? db.getTime() : sortDir === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
         return va > vb ? dir : va < vb ? -dir : 0;
       }
       const va = String(a[sortKey] ?? "").toLowerCase();
@@ -624,11 +578,8 @@ export default function DocumentosProfissionaisEmpresa() {
   const profissionaisFiltrados = useMemo(() => {
     let arr = [...profissionais];
 
-    if (filtroAtividade === "ativos") {
-      arr = arr.filter((p) => p.ativoEmObra);
-    } else if (filtroAtividade === "inativos") {
-      arr = arr.filter((p) => !p.ativoEmObra);
-    }
+    if (filtroAtividade === "ativos") arr = arr.filter((p) => p.ativoEmObra);
+    else if (filtroAtividade === "inativos") arr = arr.filter((p) => !p.ativoEmObra);
 
     if (buscaProf.trim()) {
       const q = buscaProf.toLowerCase();
@@ -651,7 +602,6 @@ export default function DocumentosProfissionaisEmpresa() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  // LOADING BONITO AO ENTRAR NA PÁGINA
   if (loading) {
     return (
       <div className="h-[calc(100vh-120px)] flex items-center justify-center">
@@ -660,9 +610,7 @@ export default function DocumentosProfissionaisEmpresa() {
             <Folder className="w-10 h-10 animate-pulse" />
             <Loader2 className="w-4 h-4 animate-spin absolute -bottom-2 -right-2" />
           </div>
-          <span className="text-xs sm:text-sm">
-            A carregar documentos…
-          </span>
+          <span className="text-xs sm:text-sm">A carregar documentos…</span>
         </div>
       </div>
     );
@@ -670,21 +618,16 @@ export default function DocumentosProfissionaisEmpresa() {
 
   return (
     <div className="p-4 sm:p-8 text-zinc-900 dark:text-zinc-100">
-      {/* Título geral */}
       <div className="flex items-center gap-3 mb-2">
         <Users className="text-blue-500 dark:text-blue-400 w-6 h-6 sm:w-7 sm:h-7" />
-        <h1 className="text-lg sm:text-2xl font-semibold">
-          Documentos dos Profissionais
-        </h1>
+        <h1 className="text-lg sm:text-2xl font-semibold">Documentos dos Profissionais</h1>
       </div>
       <p className="text-zinc-500 dark:text-zinc-400 text-sm sm:text-base mb-6 max-w-3xl">
-        Consulte a documentação dos trabalhadores associados à sua empresa,
-        verifique prazos de validade e faça download dos ficheiros quando
-        necessário.
+        Consulte a documentação dos trabalhadores associados à sua empresa, verifique prazos de validade e faça
+        download dos ficheiros quando necessário.
       </p>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Sidebar – lista de profissionais */}
         <aside className="lg:w-72 xl:w-80 bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 shadow-sm flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <Users size={18} className="text-blue-500" />
@@ -741,9 +684,7 @@ export default function DocumentosProfissionaisEmpresa() {
 
           <div className="space-y-2 flex-1 overflow-auto pr-1">
             {profissionaisFiltrados.length === 0 ? (
-              <p className="text-xs text-zinc-500">
-                Nenhum profissional encontrado.
-              </p>
+              <p className="text-xs text-zinc-500">Nenhum profissional encontrado.</p>
             ) : (
               profissionaisFiltrados.map((p) => {
                 const isSelected = p.id === selectedProfId;
@@ -791,7 +732,6 @@ export default function DocumentosProfissionaisEmpresa() {
           </div>
         </aside>
 
-        {/* Conteúdo principal: documentos do profissional selecionado */}
         <main className="flex-1">
           {!profSelecionado ? (
             <div className="h-full flex items-center justify-center">
@@ -801,7 +741,6 @@ export default function DocumentosProfissionaisEmpresa() {
             </div>
           ) : (
             <>
-              {/* Header do profissional */}
               <div className="mb-4">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-3">
@@ -819,8 +758,7 @@ export default function DocumentosProfissionaisEmpresa() {
                         <span className="inline-flex items-center gap-1">
                           {profSelecionado.ativoEmObra ? (
                             <>
-                              <CircleDot size={10} className="text-emerald-500" />{" "}
-                              Ativo em obra
+                              <CircleDot size={10} className="text-emerald-500" /> Ativo em obra
                             </>
                           ) : (
                             <>
@@ -834,7 +772,6 @@ export default function DocumentosProfissionaisEmpresa() {
                 </div>
               </div>
 
-              {/* Cards resumo */}
               <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
                 <ResumoCard
                   titulo="Válidos"
@@ -856,15 +793,12 @@ export default function DocumentosProfissionaisEmpresa() {
                 />
               </div>
 
-              {/* Barra de completude */}
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-zinc-600 dark:text-zinc-400">
                     Completude do perfil de documentos
                   </span>
-                  <span className="text-sm font-medium">
-                    {resumoSelecionado.completion}%
-                  </span>
+                  <span className="text-sm font-medium">{resumoSelecionado.completion}%</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
                   <div
@@ -874,7 +808,6 @@ export default function DocumentosProfissionaisEmpresa() {
                 </div>
               </div>
 
-              {/* Filtros de documentos */}
               <FiltroBar
                 categorias={categorias}
                 query={query}
@@ -890,7 +823,6 @@ export default function DocumentosProfissionaisEmpresa() {
                 onReset={handleResetFiltrosDocs}
               />
 
-              {/* Lista de docs */}
               <div className="bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 sm:p-6 shadow-sm">
                 <h3 className="text-sm sm:text-lg font-medium mb-4 flex items-center gap-2 text-blue-500 dark:text-blue-400">
                   <FileText size={18} /> Documentos
@@ -910,7 +842,6 @@ export default function DocumentosProfissionaisEmpresa() {
                   </div>
                 ) : (
                   <>
-                    {/* MOBILE – Cards */}
                     <div className="space-y-3 sm:hidden">
                       {docsFiltrados.map((doc) => (
                         <motion.div
@@ -927,9 +858,7 @@ export default function DocumentosProfissionaisEmpresa() {
                                 <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
                                   {doc.categoria || "—"}
                                 </span>
-                                <ResponsabilidadeBadge
-                                  resp={doc.responsabilidade}
-                                />
+                                <ResponsabilidadeBadge resp={doc.responsabilidade} />
                               </div>
                               <div className="mt-1 text-[11px]">
                                 {doc.url ? (
@@ -955,9 +884,7 @@ export default function DocumentosProfissionaisEmpresa() {
                             <VencimentoBadge validade={doc.validade} />
                             <span className="text-zinc-500 dark:text-zinc-400">
                               <Clock4 size={12} className="inline mr-1" />
-                              {doc.atualizado_em
-                                ? `Atualizado ${doc.atualizado_em}`
-                                : "Nunca atualizado"}
+                              {doc.atualizado_em ? `Atualizado ${doc.atualizado_em}` : "Nunca atualizado"}
                             </span>
                           </div>
 
@@ -978,7 +905,6 @@ export default function DocumentosProfissionaisEmpresa() {
                       ))}
                     </div>
 
-                    {/* DESKTOP – Tabela */}
                     <div className="hidden sm:block">
                       <table className="min-w-full text-sm">
                         <thead>
@@ -1022,13 +948,9 @@ export default function DocumentosProfissionaisEmpresa() {
                                   </div>
                                 </div>
                               </td>
+                              <td className="py-3 px-2">{doc.categoria || "—"}</td>
                               <td className="py-3 px-2">
-                                {doc.categoria || "—"}
-                              </td>
-                              <td className="py-3 px-2">
-                                <ResponsabilidadeBadge
-                                  resp={doc.responsabilidade}
-                                />
+                                <ResponsabilidadeBadge resp={doc.responsabilidade} />
                               </td>
                               <td className="py-3 px-2">
                                 <StatusBadge status={doc.status} />
@@ -1039,23 +961,15 @@ export default function DocumentosProfissionaisEmpresa() {
                                   <VencimentoBadge validade={doc.validade} />
                                 </div>
                               </td>
-                              <td className="py-3 px-2">
-                                {doc.atualizado_em || "—"}
-                              </td>
+                              <td className="py-3 px-2">{doc.atualizado_em || "—"}</td>
                               <td className="py-3 px-2">
                                 <div className="flex justify-center">
                                   <button
-                                    title={
-                                      doc.url
-                                        ? "Ver (abre em nova aba)"
-                                        : "Sem ficheiro"
-                                    }
+                                    title={doc.url ? "Ver (abre em nova aba)" : "Sem ficheiro"}
                                     onClick={() => openInNewTab(doc.url)}
                                     disabled={!doc.url}
                                     className={`p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 ${
-                                      doc.url
-                                        ? ""
-                                        : "opacity-50 cursor-not-allowed"
+                                      doc.url ? "" : "opacity-50 cursor-not-allowed"
                                     }`}
                                   >
                                     <Eye size={18} className="text-blue-500" />
@@ -1072,9 +986,8 @@ export default function DocumentosProfissionaisEmpresa() {
               </div>
 
               <div className="mt-8 sm:mt-10 text-center text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-xl">
-                Os documentos são enviados pelos profissionais ou pela equipa
-                Acrobatas e analisados para garantir a conformidade legal e de
-                segurança. A empresa tem acesso apenas para consulta e download.
+                Os documentos são enviados pelos profissionais ou pela equipa Acrobatas e analisados para garantir a
+                conformidade legal e de segurança. A empresa tem acesso apenas para consulta e download.
               </div>
             </>
           )}

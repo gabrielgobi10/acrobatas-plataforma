@@ -1,15 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
-/**
- * Configuração central do Supabase (front)
- */
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-
-// 🔐 Segurança básica: não sobe app sem variáveis
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
     [
@@ -21,23 +14,27 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// 🌐 Log só da URL em ambiente de desenvolvimento
-if (import.meta.env.DEV) {
-  console.log("🌐 [SUPABASE] URL:", supabaseUrl);
-  // não precisa logar a chave
-}
+type GlobalWithSupabase = typeof globalThis & {
+  __supabase?: ReturnType<typeof createClient>;
+};
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-  global: {
-    headers: {
-      "x-client-info": "acrobatas-platform",
+const g = globalThis as GlobalWithSupabase;
+
+export const supabase =
+  g.__supabase ??
+  createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
     },
-  },
-});
+    global: {
+      headers: {
+        "x-client-info": "acrobatas-platform",
+      },
+    },
+  });
+
+if (!g.__supabase) g.__supabase = supabase;
 
 export default supabase;

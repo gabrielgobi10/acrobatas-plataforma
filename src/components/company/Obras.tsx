@@ -1,3 +1,4 @@
+// src/components/company/ObrasPage.tsx
 import { useState, useEffect } from "react";
 import {
   Building2,
@@ -88,56 +89,85 @@ export default function ObrasPage() {
 
   useEffect(() => {
     async function fetchObras() {
-      setLoading(true);
+      try {
+        setLoading(true);
 
-      const { data, error } = await supabase
-        .from("obras")
-        .select(`
-          id,
-          nome,
-          cidade,
-          local,
-          status,
-          data_inicio,
-          data_fim,
-          progresso_total,
-          custo_total,
-          profissionais_obras (profissional_id)
-        `);
+        // empresa da sessão
+        const { data: empresaData, error: empresaErr } = await supabase.rpc(
+          "minha_empresa_id"
+        );
 
-      if (error) {
-        console.error("Erro ao carregar obras:", error);
+        if (empresaErr) {
+          console.error("[ObrasPage] minha_empresa_id ->", empresaErr);
+          setObras([]);
+          return;
+        }
+
+        const empresaId = (empresaData as string) ?? null;
+
+        if (!empresaId) {
+          setObras([]);
+          return;
+        }
+
+        // obras só dessa empresa
+        const { data, error } = await supabase
+          .from("obras")
+          .select(
+            `
+            id,
+            nome,
+            cidade,
+            local,
+            endereco,
+            status,
+            data_inicio,
+            data_fim,
+            progresso_total,
+            custo_total,
+            empresa_id,
+            profissionais_obras (profissional_id)
+          `
+          )
+          .eq("empresa_id", empresaId);
+
+        if (error) {
+          console.error("[ObrasPage] Erro ao carregar obras:", error);
+          setObras([]);
+        } else {
+          const obrasFormatadas: ObraCard[] = (data || []).map((obra: any) => ({
+            id: obra.id,
+            nome: obra.nome || "—",
+            local:
+              obra.local ||
+              obra.cidade ||
+              obra.endereco ||
+              "Local não informado",
+            status:
+              obra.status === "ativa"
+                ? "Em andamento"
+                : obra.status === "concluida"
+                ? "Concluída"
+                : obra.status === "atrasada"
+                ? "Atrasada"
+                : (obra.status as string) || "Em andamento",
+            progresso: Number(obra.progresso_total || 0),
+            custo_total: Number(obra.custo_total || 0),
+            profissionais: obra.profissionais_obras?.length || 0,
+            prazo:
+              obra.data_fim && obra.data_inicio
+                ? new Date(obra.data_fim).toLocaleDateString("pt-PT")
+                : "—",
+          }));
+
+          setObras(obrasFormatadas);
+        }
+      } catch (e: any) {
+        console.error("[ObrasPage] Erro inesperado:", e?.message || e);
         setObras([]);
-      } else {
-        const obrasFormatadas: ObraCard[] = (data || []).map((obra: any) => ({
-          id: obra.id,
-          nome: obra.nome || "—",
-          local:
-            obra.local ||
-            obra.cidade ||
-            obra.endereco ||
-            "Local não informado",
-          status:
-            obra.status === "ativa"
-              ? "Em andamento"
-              : obra.status === "concluida"
-              ? "Concluída"
-              : obra.status === "atrasada"
-              ? "Atrasada"
-              : (obra.status as string) || "Em andamento",
-          progresso: Number(obra.progresso_total || 0),
-          custo_total: Number(obra.custo_total || 0),
-          profissionais: obra.profissionais_obras?.length || 0,
-          prazo:
-            obra.data_fim && obra.data_inicio
-              ? new Date(obra.data_fim).toLocaleDateString("pt-PT")
-              : "—",
-        }));
-
-        setObras(obrasFormatadas);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     }
 
     fetchObras();
@@ -147,7 +177,7 @@ export default function ObrasPage() {
     filtro === "Todas" ? obras : obras.filter((o) => o.status === filtro);
 
   return (
-    <div className="p-4 sm:p-6 space-y-8 sm:space-y-10 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-8 sm:space-10 max-w-6xl mx-auto">
       {/* HEADER */}
       <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-5 sm:p-8 rounded-2xl shadow-lg">
         <h1 className="text-xl sm:text-3xl font-bold flex items-center gap-2">
@@ -206,15 +236,13 @@ export default function ObrasPage() {
                 transition={{ type: "spring", stiffness: 160 }}
                 className="relative group cursor-default sm:cursor-pointer"
               >
-                {/* BARRA COLORIDA com animação */}
+                {/* BARRA COLORIDA */}
                 <div
-                  className={`
-                    bg-gradient-to-b ${
-                      statusColors[obra.status] || "from-blue-400 to-blue-600"
-                    } rounded-t-2xl ${RIBBON_H} w-[94%] mx-auto
+                  className={`bg-gradient-to-b ${
+                    statusColors[obra.status] || "from-blue-400 to-blue-600"
+                  } rounded-t-2xl ${RIBBON_H} w-[94%] mx-auto
                     transform transition-transform duration-200 ease-out
-                    group-hover:-translate-y-1 active:-translate-y-0.5
-                  `}
+                    group-hover:-translate-y-1 active:-translate-y-0.5`}
                 />
 
                 {/* CARD */}

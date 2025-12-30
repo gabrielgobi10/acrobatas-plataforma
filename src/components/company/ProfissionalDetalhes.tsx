@@ -16,10 +16,14 @@ import {
   ShieldCheck,
   X,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
+import toast from "react-hot-toast";
 
-// Tabs
+/* ===== Tabs ===== */
 import SobreTab from "@/components/company/perfil/tabs/SobreTab";
 import TrabalhosTab from "@/components/company/perfil/tabs/TrabalhosTab";
 import HistoricoTab from "@/components/company/perfil/tabs/HistoricoTab";
@@ -31,9 +35,10 @@ import DocumentosTab from "@/components/company/perfil/tabs/DocumentosTab";
 ========================= */
 type Nivel = "Aprendiz" | "Profissional" | "Oficial" | "Mestre";
 
+/** ATENÇÃO: a view tem `usuario_id` (não `user_id`) */
 type HeaderFromCardsView = {
-  profissional_id: string;
-  user_id: string | null;
+  profissional_id: string | null;
+  usuario_id: string | null;
   nome: string | null;
   funcao: string | null;
   cidade: string | null;
@@ -66,7 +71,12 @@ type AvaliacaoRow = {
   obra?: string | null;
 };
 
-type PortfolioMidia = { id: string; url: string; tipo?: "foto" | "video"; thumb?: string };
+type PortfolioMidia = {
+  id: string;
+  url: string;
+  tipo?: "foto" | "video";
+  thumb?: string;
+};
 type PortfolioPastaRow = {
   id: string;
   titulo: string | null;
@@ -99,13 +109,20 @@ export type PerfilView = {
   obras: number;
   avaliacao: number;
 
-  foto_url: string;
+  foto_url: string; // pode ser "" se não houver foto
   capa_url: string;
   skills: string[];
 
   documentos: Documento[];
   portfolio: Midia[];
-  timeline: Array<{ id: string; titulo: string; subtitulo: string; inicio: string; fim?: string; descricao?: string }>;
+  timeline: Array<{
+    id: string;
+    titulo: string;
+    subtitulo: string;
+    inicio: string;
+    fim?: string;
+    descricao?: string;
+  }>;
 
   // CAMPOS DO “SOBRE”
   area_principal?: string | null;
@@ -153,7 +170,9 @@ function nivelBadgeClass(nivel: Nivel) {
 const Estrela = ({ n }: { n: number }) => (
   <span className="inline-flex items-center gap-1 text-yellow-500">
     <Star className="w-4 h-4 fill-yellow-500" />
-    <span className="text-sm text-slate-800 dark:text-slate-200">{n.toFixed(1)}</span>
+    <span className="text-sm text-slate-800 dark:text-slate-200">
+      {n.toFixed(1)}
+    </span>
   </span>
 );
 
@@ -163,6 +182,16 @@ const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </span>
 );
 
+/** Iniciais do nome (até 2 letras) */
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]!.toUpperCase())
+    .join("");
+}
+
 /* =========================
    Componente
 ========================= */
@@ -170,14 +199,14 @@ const TAB_KEYS = ["sobre", "trabalhos", "historico", "avaliacoes", "docs"] as co
 type TabKey = (typeof TAB_KEYS)[number];
 
 export default function ProfissionalDetalhes() {
-  const { id: idParam } = useParams();
+  const { id: idParam } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [tab, setTab] = useState<TabKey>("sobre");
   const [loading, setLoading] = useState(true);
   const [prof, setProf] = useState<PerfilView | null>(null);
 
-  // refs para as abas (pra dar scrollIntoView)
   const tabButtonRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({
     sobre: null,
     trabalhos: null,
@@ -191,6 +220,11 @@ export default function ProfissionalDetalhes() {
   const [carregandoObras, setCarregandoObras] = useState(false);
   const [obras, setObras] = useState<ObraRow[]>([]);
   const [obraSelecionada, setObraSelecionada] = useState<string>("");
+  const [mensagemConvite, setMensagemConvite] = useState<string>("");
+  const [enviandoConvite, setEnviandoConvite] = useState(false);
+
+  // Feedback central depois de enviar convite
+  const [feedbackConvite, setFeedbackConvite] = useState<"success" | null>(null);
 
   const handleKeyTabs = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -202,12 +236,9 @@ export default function ProfissionalDetalhes() {
     [tab]
   );
 
-  // sempre que mudar de aba no mobile, faz a aba ativa deslizar pro centro
   useEffect(() => {
     const btn = tabButtonRefs.current[tab];
     if (!btn) return;
-
-    // só faz isso em telas pequenas
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       btn.scrollIntoView({
         behavior: "smooth",
@@ -217,37 +248,50 @@ export default function ProfissionalDetalhes() {
     }
   }, [tab]);
 
+  // Auto-fechar feedback depois de alguns segundos
+  useEffect(() => {
+    if (feedbackConvite === "success") {
+      const t = setTimeout(() => setFeedbackConvite(null), 3500);
+      return () => clearTimeout(t);
+    }
+  }, [feedbackConvite]);
+
+  /* =========================
+     Carregar dados do perfil
+  ========================== */
   useEffect(() => {
     let mounted = true;
 
     (async () => {
       if (!idParam) return;
-
       setLoading(true);
 
-      // Resolver IDs pela mesma view dos cards
       let header: HeaderFromCardsView | null = null;
 
+      // 1) Tenta por USUARIO_ID (robusto contra duplicados) — v3
       {
-        const { data, error } = await supabase
-          .from("profissionais_publico_cards_v1")
+        const { data: r1 } = await supabase
+          .from("profissionais_publico_cards_v3")
           .select(
-            "profissional_id,user_id,nome,funcao,cidade,nivel,experiencia,descricao_curta,foto_url,capa_url,obras,em_obra"
+            "profissional_id,usuario_id,nome,funcao,cidade,nivel,experiencia,descricao_curta,foto_url,capa_url,obras,em_obra"
           )
-          .eq("user_id", idParam)
-          .maybeSingle();
-        if (!error && data) header = data as HeaderFromCardsView;
+          .eq("usuario_id", idParam)
+          .limit(1);
+
+        if (r1 && r1.length) header = r1[0] as HeaderFromCardsView;
       }
 
+      // 2) Fallback: PROFISSIONAL_ID — v3
       if (!header) {
-        const { data, error } = await supabase
-          .from("profissionais_publico_cards_v1")
+        const { data: r2 } = await supabase
+          .from("profissionais_publico_cards_v3")
           .select(
-            "profissional_id,user_id,nome,funcao,cidade,nivel,experiencia,descricao_curta,foto_url,capa_url,obras,em_obra"
+            "profissional_id,usuario_id,nome,funcao,cidade,nivel,experiencia,descricao_curta,foto_url,capa_url,obras,em_obra"
           )
           .eq("profissional_id", idParam)
-          .maybeSingle();
-        if (!error && data) header = data as HeaderFromCardsView;
+          .limit(1);
+
+        if (r2 && r2.length) header = r2[0] as HeaderFromCardsView;
       }
 
       if (!header) {
@@ -258,20 +302,32 @@ export default function ProfissionalDetalhes() {
         return;
       }
 
-      const usuarioId = header.user_id || "";
+      const usuarioId = header.usuario_id || "";
       const profissionalId = header.profissional_id || null;
 
-      const [vinculosRes, avaliacoesRes, docsRes, pastasRes, histRes, perfilRes] = await Promise.all([
+      const [
+        vinculosRes,
+        resumoAvalRes,
+        docsRes,
+        pastasRes,
+        histRes,
+        perfilRes,
+      ] = await Promise.all([
         profissionalId
-          ? supabase.from("profissionais_obras").select("profissional_id,status").eq("profissional_id", profissionalId)
-          : Promise.resolve({ data: [] } as any),
-        usuarioId
           ? supabase
-              .from("profissionais_avaliacoes")
-              .select("id,avaliador,comentario,nota,data,obra")
-              .eq("usuario_id", usuarioId)
-              .order("data", { ascending: false })
+              .from("profissionais_obras")
+              .select("profissional_id,status")
+              .eq("profissional_id", profissionalId)
           : Promise.resolve({ data: [] } as any),
+
+        profissionalId
+          ? supabase
+              .from("profissional_avaliacao_resumo_v1")
+              .select("avaliacao_media,total_avaliacoes")
+              .eq("profissional_id", profissionalId)
+              .maybeSingle()
+          : Promise.resolve({ data: null } as any),
+
         usuarioId
           ? supabase
               .from("profissionais_documentos")
@@ -294,7 +350,7 @@ export default function ProfissionalDetalhes() {
 
         usuarioId
           ? supabase
-              .from("profissionais_perfil")
+              .from("profissionais_perfil_publico_v2")
               .select(`
                 area_principal,
                 funcao_obra,
@@ -307,7 +363,9 @@ export default function ProfissionalDetalhes() {
                 pode_viajar,
                 pode_alojamento,
                 nacionalidade,
-                idiomas
+                idiomas,
+                avatar_url,
+                banner_url
               `)
               .eq("usuario_id", usuarioId)
               .maybeSingle()
@@ -315,11 +373,14 @@ export default function ProfissionalDetalhes() {
       ]);
 
       const vinculos: VinculoRow[] = (vinculosRes.data as any) ?? [];
-      const obrasCount = header.obras ?? vinculos.filter((v) => v.profissional_id).length;
+      const obrasCount =
+        header.obras ?? vinculos.filter((v) => v.profissional_id).length;
 
-      const avs: AvaliacaoRow[] = (avaliacoesRes.data as any) ?? [];
-      const avaliacaoMedia =
-        avs.length > 0 ? avs.reduce((acc, a) => acc + (a.nota ?? 0), 0) / Math.max(1, avs.length) : 0;
+      const resumoAvalData: any = (resumoAvalRes as any)?.data || null;
+      const avaliacaoMedia: number =
+        resumoAvalData && typeof resumoAvalData.avaliacao_media === "number"
+          ? Number(resumoAvalData.avaliacao_media)
+          : 0;
 
       const docsRaw: DocumentoRow[] = (docsRes.data as any) ?? [];
       const documentos: Documento[] = docsRaw.map((d) => ({
@@ -358,20 +419,95 @@ export default function ProfissionalDetalhes() {
 
       const perfilData: any = (perfilRes as any)?.data || {};
 
+      // ======== DERIVAÇÃO DOS CAMPOS USANDO PERFIL + HEADER ========
+      const areaPrincipalPerfil: string | null =
+        (perfilData?.area_principal as string) || null;
+
+      const funcao_obraPerfil: string | null =
+        (perfilData?.funcao_obra as string) || null;
+
+      const anosExpPerfil: number | null =
+        typeof perfilData?.anos_experiencia === "number"
+          ? perfilData.anos_experiencia
+          : null;
+
+      const nivelPerfil: Nivel | null = (perfilData?.nivel as Nivel) || null;
+
+      const avatarPerfil: string | null =
+        typeof perfilData?.avatar_url === "string"
+          ? (perfilData.avatar_url as string)
+          : null;
+
+      const bannerPerfil: string | null =
+        typeof perfilData?.banner_url === "string"
+          ? (perfilData.banner_url as string)
+          : null;
+
       const nome = header.nome || "Profissional";
-      const funcao = header.funcao || "Profissional";
-      const cidade = header.cidade || "-";
-      const nivel: Nivel = (header.nivel as Nivel) || "Profissional";
-      const experiencia = header.experiencia ?? 0;
+
+      const funcaoFromView =
+        (header.funcao && header.funcao.trim()) || "Profissional da construção";
+      const funcao = funcaoFromView;
+
+      let cidadeHeader =
+        typeof header.cidade === "string" ? header.cidade.trim() : "";
+
+      if (!cidadeHeader && usuarioId) {
+        try {
+          const { data: linhasMesmoUsuario } = await supabase
+            .from("profissionais_publico_cards_v3")
+            .select("cidade")
+            .eq("usuario_id", usuarioId)
+            .limit(5);
+          const linhaComCidade = (linhasMesmoUsuario || []).find(
+            (r: any) =>
+              typeof r.cidade === "string" &&
+              r.cidade.trim() !== "" &&
+              r.cidade.trim().toLowerCase() !== "não informado"
+          );
+          if (linhaComCidade?.cidade) {
+            cidadeHeader = String(linhaComCidade.cidade).trim();
+          }
+        } catch (e) {
+          console.error("[perfil] erro ao tentar recuperar cidade da view:", e);
+        }
+      }
+
+      const cidadePerfil =
+        typeof perfilData?.cidade_base === "string"
+          ? (perfilData.cidade_base as string).trim()
+          : "";
+
+      const cidadeFinal = cidadeHeader || cidadePerfil || "Não informado";
+
+      const nivel: Nivel = (nivelPerfil || header.nivel || "Profissional") as Nivel;
+
+      const experiencia =
+        anosExpPerfil !== null && !Number.isNaN(anosExpPerfil)
+          ? anosExpPerfil
+          : header.experiencia ?? 0;
+
+      const cidadeDesc =
+        cidadeFinal && cidadeFinal !== "Não informado"
+          ? cidadeFinal.toLowerCase()
+          : "não informado";
+
       const descricao =
         (header.descricao_curta || "").trim() ||
-        `Profissional ${funcao.toLowerCase()} com ${experiencia || 0}+ anos de experiência.`;
+        `Profissional ${funcao.toLowerCase()} em ${cidadeDesc}, com ${
+          experiencia || 0
+        }+ anos de experiência.`;
 
+      // FOTO: tenta foto da view, depois avatar do perfil público
       const foto_url =
         storagePublicUrlMaybe(header.foto_url) ||
-        "https://images.unsplash.com/photo-1527980965255-d3b416303d12?q=80&w=256&auto=format&fit=crop";
+        storagePublicUrlMaybe(avatarPerfil) ||
+        "";
+
+      // CAPA: tenta capa da view, depois banner do perfil público, depois fallback
       const capa_url =
         storagePublicUrlMaybe(header.capa_url) ||
+        storagePublicUrlMaybe(bannerPerfil) ||
         "https://images.unsplash.com/photo-1523419409543-4d7f2a0efcc3?q=80&w=1400&auto=format&fit=crop";
 
       const view: PerfilView = {
@@ -379,7 +515,7 @@ export default function ProfissionalDetalhes() {
         profissionalId,
         nome,
         funcao,
-        cidade,
+        cidade: cidadeFinal,
         nivel,
         experiencia,
         obras: obrasCount ?? 0,
@@ -392,23 +528,43 @@ export default function ProfissionalDetalhes() {
         portfolio,
         timeline,
 
-        area_principal: perfilData?.area_principal ?? null,
-        funcao_obra: perfilData?.funcao_obra ?? null,
-        anos_experiencia:
-          typeof perfilData?.anos_experiencia === "number" ? perfilData.anos_experiencia : null,
-        nivel_perfil: perfilData?.nivel ?? null,
-        habilidades: Array.isArray(perfilData?.habilidades) ? perfilData.habilidades : [],
+        area_id: areaPrincipalPerfil,
+        funcao_obra: funcao_obraPerfil,
+        anos_experiencia: anosExpPerfil,
+        nivel_perfil: nivelPerfil,
+        habilidades: Array.isArray(perfilData?.habilidades)
+          ? (perfilData.habilidades as string[])
+          : [],
+
         disponibilidade_text: perfilData?.disponibilidade ?? null,
 
-        cidade_base: perfilData?.cidade_base ?? null,
+        cidade_base: (perfilData?.cidade_base as string) ?? null,
         raio_deslocacao:
-          typeof perfilData?.raio_deslocacao === "string" ? perfilData.raio_deslocacao : null,
-        pode_viajar: typeof perfilData?.pode_viajar === "boolean" ? perfilData.pode_viajar : null,
+          typeof perfilData?.raio_deslocacao === "string"
+            ? perfilData.raio_deslocacao
+            : null,
+
+        pode_viajar:
+          typeof perfilData?.pode_viajar === "boolean"
+            ? perfilData.pode_viajar
+            : perfilData?.pode_viajar === "true"
+            ? true
+            : perfilData?.pode_viajar === "false"
+            ? false
+            : null,
         pode_alojamento:
-          typeof perfilData?.pode_alojamento === "boolean" ? perfilData.pode_alojamento : null,
+          typeof perfilData?.pode_alojamento === "boolean"
+            ? perfilData.pode_alojamento
+            : perfilData?.pode_alojamento === "true"
+            ? true
+            : perfilData?.pode_alojamento === "false"
+            ? false
+            : null,
 
         nacionalidade: perfilData?.nacionalidade ?? null,
-        idiomas: Array.isArray(perfilData?.idiomas) ? perfilData.idiomas : [],
+        idiomas: Array.isArray(perfilData?.idiomas)
+          ? (perfilData.idiomas as string[])
+          : [],
       };
 
       if (mounted) {
@@ -423,6 +579,82 @@ export default function ProfissionalDetalhes() {
   }, [idParam]);
 
   /* =========================
+     Helper para resolver profissional_id base (usar RPC)
+  ========================== */
+  const resolverProfissionalBaseId = useCallback(
+    async (): Promise<string | null> => {
+      // 1) Se a view já trouxe um profissionalId, tenta usar direto
+      if (prof?.profissionalId) {
+        try {
+          const { data, error } = await supabase
+            .from("profissionais")
+            .select("id")
+            .eq("id", prof.profissionalId)
+            .maybeSingle();
+          if (error) {
+            console.error(
+              "[convite_obra] erro ao verificar profissional por id direto:",
+              error
+            );
+          } else if (data?.id) {
+            return data.id;
+          } else {
+            console.warn(
+              "[convite_obra] profissionalId da view não existe em profissionais, vou tentar RPC."
+            );
+          }
+        } catch (e) {
+          console.error(
+            "[convite_obra] erro inesperado ao checar profissional por id direto:",
+            e
+          );
+        }
+      }
+
+      // 2) Se não tiver profissionalId válido, usar RPC com usuarios.id (idParam)
+      if (!idParam) {
+        console.warn("[convite_obra] sem idParam na URL.");
+        toast.error("Não foi possível localizar o cadastro base deste profissional.");
+        return null;
+      }
+
+      try {
+        const { data: baseId, error } = await supabase.rpc(
+          "profissional_base_id_por_usuario",
+          { p_usuario_id: idParam }
+        );
+
+        if (error) {
+          console.error(
+            "[convite_obra] erro no RPC profissional_base_id_por_usuario:",
+            error
+          );
+          toast.error("Erro ao localizar o cadastro base deste profissional. Tente novamente.");
+          return null;
+        }
+
+        if (!baseId) {
+          console.warn("[convite_obra] RPC não encontrou profissional base para esse usuario.");
+          toast.error(
+            "Não foi possível localizar o cadastro base deste profissional. Verifique se ele concluiu o cadastro."
+          );
+          return null;
+        }
+
+        return baseId as string;
+      } catch (e) {
+        console.error(
+          "[convite_obra] erro inesperado ao chamar RPC profissional_base_id_por_usuario:",
+          e
+        );
+        toast.error("Erro ao localizar o cadastro base deste profissional. Tente novamente.");
+        return null;
+      }
+    },
+    [idParam, prof]
+  );
+
+  /* =========================
      Convidar para Obra (modal)
   ========================== */
   const abrirModalConvidar = async () => {
@@ -433,6 +665,7 @@ export default function ProfissionalDetalhes() {
       if (rpcErr) throw rpcErr;
 
       if (!empId) {
+        console.warn("[convite_obra] empresa não encontrada para o usuário atual.");
         setObras([]);
       } else {
         const { data, error } = await supabase
@@ -444,33 +677,92 @@ export default function ProfissionalDetalhes() {
         setObras((data || []) as ObraRow[]);
       }
     } catch (e) {
-      console.error(e);
+      console.error("Erro ao carregar obras para convite:", e);
       setObras([]);
+      toast.error("Não foi possível carregar suas obras. Tente novamente.");
     } finally {
       setCarregandoObras(false);
     }
   };
 
   const confirmarConvite = async () => {
-    if (!prof?.profissionalId || !obraSelecionada) return;
+    if (!prof) {
+      toast.error("Não foi possível identificar o profissional para convite.");
+      return;
+    }
+    if (!obraSelecionada) {
+      toast.error("Selecione uma obra antes de enviar o convite.");
+      return;
+    }
+
     try {
+      setEnviandoConvite(true);
+
       const { data: empId, error: rpcErr } = await supabase.rpc("minha_empresa_id");
       if (rpcErr) throw rpcErr;
+      if (!empId) {
+        toast.error("Não foi possível identificar sua empresa.");
+        return;
+      }
 
-      const { error } = await supabase.from("profissionais_obras").insert({
+      const obra = obras.find((o) => o.id === obraSelecionada);
+
+      const profissionalIdValido = await resolverProfissionalBaseId();
+      if (!profissionalIdValido) return;
+
+      const { data: conviteExistente, error: conviteCheckErr } = await supabase
+        .from("obras_convites")
+        .select("id,status")
+        .eq("obra_id", obraSelecionada)
+        .eq("profissional_id", profissionalIdValido)
+        .in("status", ["pendente"])
+        .maybeSingle();
+
+      if (conviteCheckErr && (conviteCheckErr as any).code !== "PGRST116") {
+        throw conviteCheckErr;
+      }
+
+      if (conviteExistente) {
+        toast("Já existe um convite pendente para este profissional nesta obra.");
+        return;
+      }
+
+      const { error: conviteErr } = await supabase.from("obras_convites").insert({
         obra_id: obraSelecionada,
-        profissional_id: prof.profissionalId,
-        empresa_id: empId || null,
-        status: "ativo",
+        empresa_id: empId,
+        profissional_id: profissionalIdValido,
+        mensagem: mensagemConvite || null,
+        status: "pendente",
+        criado_por: user?.id ?? null,
       });
-      if (error) throw error;
+
+      if (conviteErr) throw conviteErr;
+
+      if (prof.usuarioId) {
+        try {
+          await supabase.from("notificacoes_realtime").insert({
+            usuario_id: prof.usuarioId,
+            tipo: "convite_obra",
+            titulo: "Novo convite para obra",
+            conteudo: `Você foi convidado para participar da obra ${obra?.nome || ""}.`,
+            icone: "briefcase",
+            url_destino: null,
+            lida: false,
+          });
+        } catch (e) {
+          console.error("Erro ao criar notificação de convite:", e);
+        }
+      }
 
       setAbrirConvidar(false);
       setObraSelecionada("");
-      alert("Profissional convidado/adicionado à obra com sucesso.");
+      setMensagemConvite("");
+      setFeedbackConvite("success");
     } catch (e) {
-      console.error(e);
-      alert("Não foi possível convidar. Tente novamente.");
+      console.error("Erro ao enviar convite:", e);
+      toast.error("Não foi possível enviar o convite. Tente novamente.");
+    } finally {
+      setEnviandoConvite(false);
     }
   };
 
@@ -489,7 +781,7 @@ export default function ProfissionalDetalhes() {
 
   if (!prof) {
     return (
-      <div className="px-4 md:px-8 max-w-3xl mx-auto py-16 text-center text-slate-500">
+      <div className="px-4 md:px-8 max-w-3xl mx:auto py-16 text-center text-slate-500">
         Perfil não encontrado.
       </div>
     );
@@ -497,14 +789,16 @@ export default function ProfissionalDetalhes() {
 
   return (
     <div className="min-h-screen">
-      {/* ===== CAPA (mantida) ===== */}
+      {/* CAPA */}
       <section className="relative w-full">
         <div className="relative h-44 md:h-56">
           <div
             className="absolute inset-0 rounded-3xl overflow-hidden ring-1 ring-slate-200/60 dark:ring-white/10 shadow-sm"
             style={{
-              WebkitMaskImage: "linear-gradient(to bottom, black 90%, rgba(0,0,0,0) 100%)",
-              maskImage: "linear-gradient(to bottom, black 90%, rgba(0,0,0,0) 100%)",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, black 90%, rgba(0,0,0,0) 100%)",
+              maskImage:
+                "linear-gradient(to bottom, black 90%, rgba(0,0,0,0) 100%)",
             }}
           >
             <div
@@ -523,29 +817,37 @@ export default function ProfissionalDetalhes() {
             </button>
           </div>
 
-          {/* Avatar fora do container arredondado (não é cortado) */}
           <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-1/2 z-10">
-            <img
-              src={prof.foto_url}
-              alt={prof.nome}
-              className="w-24 h-24 md:w-28 md:h-28 rounded-full object-cover ring-4 ring-white dark:ring-slate-950 shadow-xl"
-            />
+            {prof.foto_url ? (
+              <img
+                src={prof.foto_url}
+                alt={prof.nome}
+                className="w-24 h-24 md:w-28 md:h-28 rounded-full object-cover ring-4 ring-white dark:ring-slate-950 shadow-xl"
+              />
+            ) : (
+              <div className="w-24 h-24 md:w-28 md:h-28 rounded-full ring-4 ring-white dark:ring-slate-950 shadow-xl bg-slate-600 flex items-center justify-center text-white text-xl font-semibold">
+                {getInitials(prof.nome)}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* HEADER */}
         <div className="px-4 md:px-8 max-w-6xl mx-auto pt-14 md:pt-16 text-center">
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">{prof.nome}</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
+            {prof.nome}
+          </h1>
           <div className="mt-1 inline-flex items-center justify-center gap-2 px-2 py-1 rounded-full bg-white/70 dark:bg-slate-800/60 backdrop-blur ring-1 ring-slate-200/80 dark:ring-slate-700/70">
             <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span className="font-medium text-blue-700 dark:text-blue-300">{prof.funcao}</span>
+            <span className="font-medium text-blue-700 dark:text-blue-300">
+              {prof.funcao}
+            </span>
           </div>
 
           <p className="mt-2 text-[13px] md:text-sm text-slate-600 dark:text-slate-300 max-w-3xl mx-auto line-clamp-2">
             {prof.descricao}
           </p>
 
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <div className="mt-4 flex flex-wrap.items-center justify-center gap-2">
             <Chip>
               <Estrela n={prof.avaliacao} />
               <span className="text-slate-500 dark:text-slate-300">/ 5</span>
@@ -586,7 +888,7 @@ export default function ProfissionalDetalhes() {
         </div>
       </section>
 
-      {/* ===== ABAS ===== */}
+      {/* ABAS */}
       <div
         className="sticky top-[56px] z-30 mt-6"
         role="tablist"
@@ -595,7 +897,6 @@ export default function ProfissionalDetalhes() {
       >
         <div className="max-w-6xl mx-auto px-2 md:px-4">
           <nav className="w-full flex justify-center">
-            {/* wrapper rolável no mobile */}
             <div className="w-full md:w-auto overflow-x-auto">
               <div
                 className="inline-flex min-w-max md:min-w-0 items-center gap-1 rounded-full px-1 py-1
@@ -640,14 +941,16 @@ export default function ProfissionalDetalhes() {
       {/* CONTEÚDO das tabs */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 py-6">
         {tab === "sobre" && <SobreTab prof={prof} />}
-
         {tab === "trabalhos" && (
           <TrabalhosTab profissionalId={prof.profissionalId} usuarioId={prof.usuarioId} />
         )}
-
         {tab === "historico" && <HistoricoTab timeline={prof.timeline} />}
         {tab === "avaliacoes" && (
-          <AvaliacoesTab usuarioId={prof.usuarioId} media={prof.avaliacao} />
+          <AvaliacoesTab
+            profissionalId={prof.profissionalId}
+            usuarioId={prof.usuarioId}
+            mediaGeralHeader={prof.avaliacao}
+          />
         )}
         {tab === "docs" && (
           <DocumentosTab documentos={prof.documentos} usuarioId={prof.usuarioId} />
@@ -676,32 +979,81 @@ export default function ProfissionalDetalhes() {
               <div className="text-sm text-slate-500">Nenhuma obra encontrada para sua empresa.</div>
             ) : (
               <div className="space-y-3">
-                <label className="text-sm">Selecione a obra</label>
-                <select
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                  value={obraSelecionada}
-                  onChange={(e) => setObraSelecionada(e.target.value)}
-                >
-                  <option value="">-- escolher --</option>
-                  {obras.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.nome || o.id}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Selecione a obra</label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                    value={obraSelecionada}
+                    onChange={(e) => setObraSelecionada(e.target.value)}
+                  >
+                    <option value="">-- escolher --</option>
+                    {obras.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nome || o.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Mensagem (opcional)</label>
+                  <textarea
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm min-h-[80px] resize-y"
+                    placeholder="Ex.: Descrição rápida da obra, horário, valor por dia, etc."
+                    value={mensagemConvite}
+                    onChange={(e) => setMensagemConvite(e.target.value)}
+                  />
+                </div>
 
                 <button
-                  disabled={!obraSelecionada}
+                  disabled={!obraSelecionada || enviandoConvite}
                   onClick={confirmarConvite}
                   className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 text-sm font-semibold enabled:shadow-lg enabled:shadow-blue-600/20 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/70 transition"
                 >
-                  Convidar
+                  {enviandoConvite && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {enviandoConvite ? "Enviando convite..." : "Enviar convite"}
                 </button>
               </div>
             )}
           </div>
         </div>
       )}
+
+      {/* FEEDBACK CENTRAL DE CONVITE ENVIADO */}
+      <AnimatePresence>
+        {feedbackConvite === "success" && (
+          <motion.div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ duration: 0.18 }}
+              className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-950 shadow-2xl border border-slate-200/80 dark:border-slate-800 px-6 py-6 text-center"
+            >
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Convite enviado
+              </h3>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Você receberá uma notificação assim que o profissional aceitar ou recusar o seu pedido.
+              </p>
+              <button
+                onClick={() => setFeedbackConvite(null)}
+                className="mt-5 inline-flex items-center justify-center px-5 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-600/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/70 active:scale-[0.98] transition"
+              >
+                Fechar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

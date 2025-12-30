@@ -1,11 +1,8 @@
 // src/components/professional/CentralDeNavegacaoProfissional/Carreira/CarreiraPageVisual.tsx
-// ============================================================================
-// 🧭 Painel de Carreira Profissional — versão aprimorada com Modal de Critérios
-// ============================================================================
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Award, ClipboardList } from "lucide-react";
+import { Award, ClipboardList, Info, Sparkles } from "lucide-react";
 
 import Card from "./ui/Card";
 import AciGauge from "./ui/AciGauge";
@@ -32,11 +29,15 @@ import {
   MOCK,
 } from "./mock";
 
-export default function CarreiraPageVisual() {
+type Props = {
+  onVoltar?: () => void;
+};
+
+export default function CarreiraPageVisual({ onVoltar }: Props) {
   const progressoPct = Math.round((MOCK.xpAtual / MOCK.xpProximo) * 100);
 
   // 🔹 Simula o ID do nível atual (em produção virá do Supabase)
-  const MOCK_LEVELS = {
+  const MOCK_LEVELS: Record<number, string> = {
     1: "a1-id-falso",
     2: "a2-id-falso",
     3: "a3-id-falso",
@@ -49,9 +50,109 @@ export default function CarreiraPageVisual() {
   // 🔹 Controle do modal
   const [mostrarCriterios, setMostrarCriterios] = useState(false);
 
+  // ✅ Voltar: usa callback do Dashboard; se não existir, tenta histórico; senão /profissional
+  const handleVoltar = () => {
+    if (typeof onVoltar === "function") {
+      onVoltar();
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      if (window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+      window.location.href = "/profissional";
+    }
+  };
+
+  // =========================================================
+  // ✅ MODO "EM DESENVOLVIMENTO" (não renderiza o conteúdo abaixo)
+  // =========================================================
   return (
     <div className="p-3 sm:p-4 md:p-8 text-slate-900 dark:text-slate-100 relative">
-      {/* ===== HEADER ===== */}
+      <div className="mx-auto w-full max-w-3xl">
+        <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/40 backdrop-blur-xl shadow-xl overflow-hidden">
+          <div className="p-5 sm:p-7">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-2xl p-2.5 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40">
+                <Info className="w-5 h-5 text-blue-500" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-base sm:text-lg font-semibold">
+                    Área em desenvolvimento
+                  </h1>
+                  <span className="text-[11px] sm:text-xs px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/25 dark:text-blue-200 dark:border-blue-900/40">
+                    Disponível em breve
+                  </span>
+                </div>
+
+                <p className="mt-2 text-sm sm:text-[15px] text-slate-600 dark:text-slate-300">
+                  Estamos a finalizar a página de <b>Progresso de Carreira</b>.
+                  Em breve você vai conseguir acompanhar sua evolução com nível,
+                  XP, metas e recomendações personalizadas.
+                </p>
+
+                <div className="mt-4 rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/70 dark:bg-slate-950/30 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-blue-500" />
+                    <p className="text-sm font-semibold">O que vai ter aqui</p>
+                  </div>
+
+                  <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <li className="flex gap-2">
+                      <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      Critérios de promoção e progresso por nível.
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      Indicadores (obras, avaliações, pontualidade e relatórios).
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      Gráficos de evolução e histórico.
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      Alertas de compliance e recomendações automáticas.
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="mt-5">
+                  <button
+                    onClick={handleVoltar}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition text-sm font-medium"
+                  >
+                    Voltar
+                  </button>
+                </div>
+
+                <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                  Esta área está temporariamente indisponível enquanto
+                  finalizamos a implementação e a integração com os seus dados.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* =========================================================
+          Conteúdo completo já está abaixo (mantido no arquivo),
+          mas NÃO aparece porque retornamos acima.
+         ========================================================= */}
+    </div>
+  );
+
+  /* ======================================================================
+     ✅ CÓDIGO ORIGINAL (mantido) — não aparece agora, mas fica pronto
+     ======================================================================
+
+  return (
+    <div className="p-3 sm:p-4 md:p-8 text-slate-900 dark:text-slate-100 relative">
       <div
         className="
           flex flex-col sm:flex-row sm:items-center sm:justify-between 
@@ -78,9 +179,7 @@ export default function CarreiraPageVisual() {
         </div>
       </div>
 
-      {/* ===== HERO (ACI + Nível/XP) ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* ACI */}
         <Card className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
           <AciGauge value={MOCK.aci} />
           <div className="flex-1 text-center sm:text-left">
@@ -106,7 +205,6 @@ export default function CarreiraPageVisual() {
           </div>
         </Card>
 
-        {/* Nível & XP */}
         <Card className="p-4 sm:p-6 relative">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -158,7 +256,6 @@ export default function CarreiraPageVisual() {
             ))}
           </div>
 
-          {/* 🔹 Botão de Critérios de Promoção */}
           <button
             onClick={() => setMostrarCriterios(true)}
             className="mt-4 text-sm text-blue-500 hover:text-blue-400 inline-flex items-center gap-1"
@@ -166,7 +263,6 @@ export default function CarreiraPageVisual() {
             <ClipboardList className="w-4 h-4" /> Ver critérios de promoção
           </button>
 
-          {/* 🔹 Modal via Portal */}
           {mostrarCriterios &&
             createPortal(
               <div className="fixed inset-0 z-[999]">
@@ -185,26 +281,18 @@ export default function CarreiraPageVisual() {
         </Card>
       </div>
 
-      {/* ===== KPIs ===== */}
       <div className="mt-5 sm:mt-6">
         <KPIGroup kpis={KPIS} />
       </div>
 
-      {/* ===== Gráficos ===== */}
       <div className="mt-5 sm:mt-6">
-        <ChartsTabs
-          xp={SERIES_XP}
-          rating={SERIES_RATING}
-          horas={SERIES_HORAS}
-        />
+        <ChartsTabs xp={SERIES_XP} rating={SERIES_RATING} horas={SERIES_HORAS} />
       </div>
 
-      {/* ===== Diagnóstico ===== */}
       <div className="mt-5 sm:mt-6">
         <Diagnostics items={DIAGNOSTICOS} />
       </div>
 
-      {/* ===== Faixa de hora ===== */}
       <div className="mt-5 sm:mt-6">
         <ProfitBand
           mercado={FAIXA.mercado as [number, number]}
@@ -213,17 +301,14 @@ export default function CarreiraPageVisual() {
         />
       </div>
 
-      {/* ===== Recomendações ===== */}
       <div className="mt-5 sm:mt-6">
         <Recommendations items={RECOMENDACOES} />
       </div>
 
-      {/* ===== Timeline + Avaliações ===== */}
       <div className="mt-5 sm:mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <TimelineReviews timeline={TIMELINE} avaliacoes={AVALIACOES} />
       </div>
 
-      {/* ===== Accordions ===== */}
       <div className="mt-5 sm:mt-6 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         <DetailsAccordion
           title="Detalhe • Qualidade & Habilidade"
@@ -262,10 +347,11 @@ export default function CarreiraPageVisual() {
         </DetailsAccordion>
       </div>
 
-      {/* ===== Trilha de evolução ===== */}
       <div className="mt-5 sm:mt-6">
         <EvolutionTrail />
       </div>
     </div>
   );
+
+  ====================================================================== */
 }

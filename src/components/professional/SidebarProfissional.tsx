@@ -159,6 +159,8 @@ export default function SidebarProfissional({
                 <NavItem label="Relatórios do Dia" section="obras_relatorios" />
                 <NavItem label="Faltas e Presenças" section="obras_presencas" />
                 <NavItem label="Histórico de Obras" section="obras_historico" />
+                {/* 🔹 Novo item: Convites de Obra */}
+                <NavItem label="Convites de Obra" section="obras_convites" />
               </motion.ul>
             )}
           </AnimatePresence>
@@ -265,13 +267,10 @@ export default function SidebarProfissional({
                 className="pl-7 mt-1 space-y-1"
               >
                 <NavItem label="Meus Documentos" section="documentos_meus" />
-                {/* ❌ Removido: Alertas de Validade */}
               </motion.ul>
             )}
           </AnimatePresence>
         </div>
-
-        {/* ❌ Removido bloco Comunicação (Notificações / Bate-papo / Suporte) */}
       </nav>
 
       {/* Rodapé */}

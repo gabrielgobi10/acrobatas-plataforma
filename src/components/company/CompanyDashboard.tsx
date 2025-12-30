@@ -89,9 +89,7 @@ type Canon = "em_analise" | "aprovado" | "recusado" | "cancelado";
 function canonStatus(s?: string | null): Canon {
   const v = norm(s);
   if (
-    ["em_analise", "em avaliacao", "em_avaliacao", "pendente", "pending"].includes(
-      v
-    )
+    ["em_analise", "em avaliacao", "em_avaliacao", "pendente", "pending"].includes(v)
   )
     return "em_analise";
   if (
@@ -132,7 +130,6 @@ function dedupeSort(list: Noti[]): Noti[] {
   );
 }
 
-/** Mesma lógica de iniciais usada no PerfilEmpresa */
 function initialsFrom(name?: string | null) {
   const base = (name || "").trim() || "Nome da empresa";
   const parts = base.split(/\s+/);
@@ -140,11 +137,9 @@ function initialsFrom(name?: string | null) {
   const last = parts[1]?.[0] ?? parts[0]?.[1] ?? "";
   return (first + last).toUpperCase();
 }
-
 function hueFrom(text: string) {
   let h = 0;
-  for (let i = 0; i < text.length; i++)
-    h = (h * 31 + text.charCodeAt(i)) % 360;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) % 360;
   return h;
 }
 
@@ -156,19 +151,14 @@ export default function CompanyDashboard() {
   const { theme, toggleTheme } = useDarkMode();
 
   const [profile, setProfile] = useState<any>(null);
-  const [empresaHeader, setEmpresaHeader] =
-    useState<EmpresaHeaderState | null>(null);
+  const [empresaHeader, setEmpresaHeader] = useState<EmpresaHeaderState | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [section, setSection] = useState<string>("painel");
 
   const seenNotiIdsRef = useRef<Set<string>>(new Set());
-  const pedidosChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
-    null
-  );
-  const notisChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
-    null
-  );
+  const pedidosChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const notisChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const recentNotiKeysRef = useRef<Set<string>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
 
@@ -194,10 +184,7 @@ export default function CompanyDashboard() {
 
   const [notis, setNotis] = useState<Noti[]>([]);
   const [loadingNotis, setLoadingNotis] = useState<boolean>(false);
-  const unreadCount = useMemo(
-    () => notis.filter((n) => !n.lida).length,
-    [notis]
-  );
+  const unreadCount = useMemo(() => notis.filter((n) => !n.lida).length, [notis]);
 
   const [toast, setToast] = useState<{
     titulo: string;
@@ -221,77 +208,52 @@ export default function CompanyDashboard() {
   const isProfissionalDetalhe = isInside("/empresa/profissional");
   const isObrasChild = isInside("/empresa/obras");
 
-  // === Mapeamento de rota → seção
   useEffect(() => {
     const p = location.pathname;
 
-    // PEDIDOS
     if (p.includes("/empresa/pedidos/aprovados")) return setSection("aprovados");
-    if (p.includes("/empresa/pedidos/em-avaliacao"))
-      return setSection("em-avaliacao");
+    if (p.includes("/empresa/pedidos/em-avaliacao")) return setSection("em-avaliacao");
     if (p.includes("/empresa/pedidos/novos")) return setSection("novos-pedidos");
 
-    // OBRAS
     if (p.includes("/empresa/obras/ativas")) return setSection("obras-ativas");
     if (p.includes("/empresa/obras/historico")) return setSection("historico");
-    if (p.includes("/empresa/obras/adicionar"))
-      return setSection("adicionar-obra");
+    if (p.includes("/empresa/obras/adicionar")) return setSection("adicionar-obra");
     if (p.includes("/empresa/obras")) return setSection("obras");
 
-    // PROFISSIONAIS
-    if (p.includes("/empresa/profissionais/equipes"))
-      return setSection("equipes-em-campo");
-    if (p.includes("/empresa/profissionais/adicionar"))
-      return setSection("adicionar-profissional");
-    if (p.includes("/empresa/profissionais/faltas"))
-      return setSection("faltas-presencas");
+    if (p.includes("/empresa/profissionais/equipes")) return setSection("equipes-em-campo");
+    if (p.includes("/empresa/profissionais/adicionar")) return setSection("adicionar-profissional");
+    if (p.includes("/empresa/profissionais/faltas")) return setSection("faltas-presencas");
     if (p.includes("/empresa/profissionais")) return setSection("profissionais");
 
-    // RELATÓRIOS
-    if (p.includes("/empresa/relatorios/custos"))
-      return setSection("custos-mensais");
-    if (p.includes("/empresa/relatorios/desempenho"))
-      return setSection("desempenho");
-    if (p.includes("/empresa/relatorios/financeiro"))
-      return setSection("financeiro");
+    if (p.includes("/empresa/relatorios/custos")) return setSection("custos-mensais");
+    if (p.includes("/empresa/relatorios/desempenho")) return setSection("desempenho");
+    if (p.includes("/empresa/relatorios/financeiro")) return setSection("financeiro");
     if (p.includes("/empresa/relatorios")) return setSection("relatorios");
 
-    // DOCUMENTOS
-    if (p.includes("/empresa/documentos/acrobatas"))
-      return setSection("documentos-acrobatas");
-    if (p.includes("/empresa/documentos/profissionais"))
-      return setSection("documentos-profissionais");
-    if (p.includes("/empresa/documentos/meus"))
-      return setSection("documentos-meus");
+    if (p.includes("/empresa/documentos/acrobatas")) return setSection("documentos-acrobatas");
+    if (p.includes("/empresa/documentos/profissionais")) return setSection("documentos-profissionais");
+    if (p.includes("/empresa/documentos/meus")) return setSection("documentos-meus");
     if (p.includes("/empresa/documentos")) return setSection("documentos");
 
-    // FATURAS (novo)
     if (p.includes("/empresa/faturas")) return setSection("faturas");
 
-    // CHAT / PERFIL / NOTIFICAÇÕES
     if (p.includes("/empresa/chat")) return setSection("chat");
     if (p.includes("/empresa/perfil")) return setSection("perfil-empresa");
-    if (p.includes("/empresa/notificacoes"))
-      return setSection("notificacoes");
+    if (p.includes("/empresa/notificacoes")) return setSection("notificacoes");
 
-    // GENÉRICO PEDIDOS
     if (p.includes("/empresa/pedidos")) return setSection("novos-pedidos");
 
-    // DEFAULT
     return setSection("painel");
   }, [location.pathname]);
 
-  // Navegação por chave
   const gotoSection = useCallback(
     (key: string) => {
       setSection(key);
       switch (key) {
-        // raiz
         case "painel":
           navigate("/empresa");
           break;
 
-        // obras
         case "obras":
           navigate("/empresa/obras");
           break;
@@ -305,7 +267,6 @@ export default function CompanyDashboard() {
           navigate("/empresa/obras/adicionar");
           break;
 
-        // profissionais
         case "profissionais":
           navigate("/empresa/profissionais");
           break;
@@ -319,7 +280,6 @@ export default function CompanyDashboard() {
           navigate("/empresa/profissionais/faltas");
           break;
 
-        // relatórios
         case "relatorios":
           navigate("/empresa/relatorios");
           break;
@@ -333,7 +293,6 @@ export default function CompanyDashboard() {
           navigate("/empresa/relatorios/financeiro");
           break;
 
-        // pedidos
         case "novos-pedidos":
           navigate("/empresa/pedidos/novos");
           break;
@@ -344,7 +303,6 @@ export default function CompanyDashboard() {
           navigate("/empresa/pedidos/aprovados");
           break;
 
-        // documentos
         case "documentos":
           navigate("/empresa/documentos");
           break;
@@ -358,12 +316,10 @@ export default function CompanyDashboard() {
           navigate("/empresa/documentos/meus");
           break;
 
-        // faturas (novo)
         case "faturas":
           navigate("/empresa/faturas");
           break;
 
-        // outros
         case "chat":
           navigate("/empresa/chat");
           break;
@@ -383,7 +339,6 @@ export default function CompanyDashboard() {
     [navigate]
   );
 
-  // perfil do utilizador + dados básicos da empresa para o header
   useEffect(() => {
     async function fetchProfile() {
       if (!user?.email) return;
@@ -404,10 +359,7 @@ export default function CompanyDashboard() {
 
         if (empresa) {
           const anyEmpresa = empresa as any;
-          const nomeBase =
-            anyEmpresa.nome_legal ||
-            anyEmpresa.nome_comercial ||
-            null;
+          const nomeBase = anyEmpresa.nome_legal || anyEmpresa.nome_comercial || null;
 
           setEmpresaHeader({
             nome: nomeBase,
@@ -423,71 +375,47 @@ export default function CompanyDashboard() {
     fetchProfile();
   }, [user?.email]);
 
-  // ouve eventos do PerfilEmpresa (logo / nome atualizados)
   useEffect(() => {
     const handler = (event: Event) => {
-      const custom = event as CustomEvent<{
-        nome?: string | null;
-        url_logo?: string | null;
-      }>;
+      const custom = event as CustomEvent<{ nome?: string | null; url_logo?: string | null }>;
       const detail = custom.detail || {};
       setEmpresaHeader((prev) => ({
-        nome:
-          detail.nome !== undefined
-            ? (detail.nome || null)
-            : prev?.nome || null,
+        nome: detail.nome !== undefined ? (detail.nome || null) : prev?.nome || null,
         url_logo:
-          detail.url_logo !== undefined
-            ? (detail.url_logo || null)
-            : prev?.url_logo || null,
+          detail.url_logo !== undefined ? (detail.url_logo || null) : prev?.url_logo || null,
       }));
     };
 
     window.addEventListener("empresa-header-updated", handler as EventListener);
-    return () =>
-      window.removeEventListener(
-        "empresa-header-updated",
-        handler as EventListener
-      );
+    return () => window.removeEventListener("empresa-header-updated", handler as EventListener);
   }, []);
 
-  // nome da empresa mostrado no topo:
   const rawEmpresaName = useMemo(() => {
     const n = empresaHeader?.nome?.trim();
     if (n && n.length > 0) return n;
-    // mesmo placeholder do PerfilEmpresa
     return "Nome da empresa";
   }, [empresaHeader?.nome]);
 
-  // apenas a primeira palavra para não ficar gigante
   const shortEmpresaName = useMemo(() => {
     const base = (rawEmpresaName || "").trim();
     const parts = base.split(/\s+/);
     return parts[0] || "Empresa";
   }, [rawEmpresaName]);
 
-  // avatar baseado na empresa (mesma lógica do PerfilEmpresa)
-  const avatarHue = useMemo(
-    () => hueFrom(rawEmpresaName),
-    [rawEmpresaName]
-  );
+  const avatarHue = useMemo(() => hueFrom(rawEmpresaName), [rawEmpresaName]);
   const avatarBg = { backgroundColor: `hsl(${avatarHue} 70% 45%)` };
-  const avatarInitials = useMemo(
-    () => initialsFrom(rawEmpresaName),
-    [rawEmpresaName]
-  );
+  const avatarInitials = useMemo(() => initialsFrom(rawEmpresaName), [rawEmpresaName]);
 
   const fetchNotifications = useCallback(async () => {
     if (!profile?.empresa_id && !profile?.id) return;
     setLoadingNotis(true);
     const { data } = await supabase
       .from("notificacoes_realtime")
-      .select(
-        "id, titulo, conteudo, icone, url_destino, lida, criado_em, empresa_id, usuario_id"
-      )
+      .select("id, titulo, conteudo, icone, url_destino, lida, criado_em, empresa_id, usuario_id")
       .or(`empresa_id.eq.${profile?.empresa_id},usuario_id.eq.${profile?.id}`)
       .order("criado_em", { ascending: false })
       .limit(80);
+
     if (data) {
       const arr = dedupeSort(data as Noti[]);
       setNotis(arr);
@@ -506,9 +434,8 @@ export default function CompanyDashboard() {
       supabase.removeChannel(notisChannelRef.current);
       notisChannelRef.current = null;
     }
-    const channelName = `notis_empresa_realtime_company_${
-      profile?.empresa_id || profile?.id
-    }`;
+
+    const channelName = `notis_empresa_realtime_company_${profile?.empresa_id || profile?.id}`;
     const channel = supabase
       .channel(channelName)
       .on(
@@ -517,15 +444,13 @@ export default function CompanyDashboard() {
         (payload: any) => {
           const novo: Noti | undefined = payload?.new;
           const antigo: Noti | undefined = payload?.old;
+
           const pertence =
-            (novo &&
-              profile?.empresa_id &&
-              novo.empresa_id === profile.empresa_id) ||
+            (novo && profile?.empresa_id && novo.empresa_id === profile.empresa_id) ||
             (novo && profile?.id && novo.usuario_id === profile.id) ||
-            (antigo &&
-              profile?.empresa_id &&
-              antigo.empresa_id === profile.empresa_id) ||
+            (antigo && profile?.empresa_id && antigo.empresa_id === profile.empresa_id) ||
             (antigo && profile?.id && antigo.usuario_id === profile.id);
+
           if (!pertence) return;
 
           setNotis((prev) => {
@@ -534,44 +459,37 @@ export default function CompanyDashboard() {
               return dedupeSort(prev.filter((n) => n.id !== antigo.id));
             }
             if (payload.eventType === "UPDATE" && novo) {
-              if (!seenNotiIdsRef.current.has(novo.id))
-                seenNotiIdsRef.current.add(novo.id);
-              return dedupeSort(
-                prev.map((n) => (n.id === novo.id ? (novo as Noti) : n))
-              );
+              if (!seenNotiIdsRef.current.has(novo.id)) seenNotiIdsRef.current.add(novo.id);
+              return dedupeSort(prev.map((n) => (n.id === novo.id ? (novo as Noti) : n)));
             }
             if (payload.eventType === "INSERT" && novo) {
               if (seenNotiIdsRef.current.has(novo.id)) return prev;
+
               const kNew = getNotiKey(novo as Noti);
               const already = prev.find((x) => getNotiKey(x) === kNew);
+
               if (already) {
-                const replaced = prev.map((x) =>
-                  getNotiKey(x) === kNew ? (novo as Noti) : x
-                );
+                const replaced = prev.map((x) => (getNotiKey(x) === kNew ? (novo as Noti) : x));
                 seenNotiIdsRef.current.add(novo.id);
                 if (novo.titulo)
                   showToast({
                     titulo: novo.titulo,
                     conteudo: novo.conteudo || undefined,
                     url: novo.url_destino || undefined,
-                    icon:
-                      (novo.icone || "").toLowerCase() === "xcircle"
-                        ? "x"
-                        : "ok",
+                    icon: (novo.icone || "").toLowerCase() === "xcircle" ? "x" : "ok",
                   });
                 return dedupeSort(replaced).slice(0, 80);
               }
+
               seenNotiIdsRef.current.add(novo.id);
               if (novo.titulo)
                 showToast({
                   titulo: novo.titulo,
                   conteudo: novo.conteudo || undefined,
                   url: novo.url_destino || undefined,
-                  icon:
-                    (novo.icone || "").toLowerCase() === "xcircle"
-                      ? "x"
-                      : "ok",
+                  icon: (novo.icone || "").toLowerCase() === "xcircle" ? "x" : "ok",
                 });
+
               return dedupeSort([novo as Noti, ...prev]).slice(0, 80);
             }
             return prev;
@@ -579,6 +497,7 @@ export default function CompanyDashboard() {
         }
       )
       .subscribe();
+
     notisChannelRef.current = channel;
     return () => {
       if (notisChannelRef.current) {
@@ -594,6 +513,7 @@ export default function CompanyDashboard() {
       supabase.removeChannel(pedidosChannelRef.current);
       pedidosChannelRef.current = null;
     }
+
     const chName = `pedidos_status_watch_${profile.empresa_id}`;
     const ch = supabase
       .channel(chName)
@@ -608,34 +528,29 @@ export default function CompanyDashboard() {
         async (payload: any) => {
           const novo = payload.new as any;
           const antigo = payload.old as any;
+
           const was = canonStatus(antigo?.status);
           const now = canonStatus(novo?.status);
+
           const saiuDeAnalise = was === "em_analise";
           const virouAprovado = now === "aprovado";
           const virouRecusado = now === "recusado";
           if (!(saiuDeAnalise && (virouAprovado || virouRecusado))) return;
 
-          const titulo = virouAprovado
-            ? "Pedido aprovado"
-            : "Pedido recusado";
+          const titulo = virouAprovado ? "Pedido aprovado" : "Pedido recusado";
           const icone = virouAprovado ? "CheckCircle2" : "XCircle";
-          const conteudo = `${novo?.tipo_profissional || "Pedido"} (${
-            novo?.quantidade || 1
-          }) — ${novo?.local || ""}`;
+          const conteudo = `${novo?.tipo_profissional || "Pedido"} (${novo?.quantidade || 1}) — ${
+            novo?.local || ""
+          }`;
           const url = `/empresa/pedidos/em-avaliacao?focus=${novo?.id}&status=${now}`;
 
           const memKey = `${profile.empresa_id}|${url}|${titulo}`;
           if (recentNotiKeysRef.current.has(memKey)) return;
           recentNotiKeysRef.current.add(memKey);
-          setTimeout(
-            () => recentNotiKeysRef.current.delete(memKey),
-            60_000
-          );
+          setTimeout(() => recentNotiKeysRef.current.delete(memKey), 60_000);
 
           try {
-            const sinceIso = new Date(
-              Date.now() - 10 * 60 * 1000
-            ).toISOString();
+            const sinceIso = new Date(Date.now() - 10 * 60 * 1000).toISOString();
             const { data: already } = await supabase
               .from("notificacoes_realtime")
               .select("id")
@@ -644,6 +559,7 @@ export default function CompanyDashboard() {
               .eq("titulo", titulo)
               .gte("criado_em", sinceIso)
               .limit(1);
+
             if (!already || already.length === 0) {
               const { data } = await supabase
                 .from("notificacoes_realtime")
@@ -674,6 +590,7 @@ export default function CompanyDashboard() {
         }
       )
       .subscribe();
+
     pedidosChannelRef.current = ch;
     return () => {
       if (pedidosChannelRef.current) {
@@ -690,22 +607,13 @@ export default function CompanyDashboard() {
   }, [fetchNotifications]);
 
   const markAsRead = useCallback(async (id: string) => {
-    setNotis((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, lida: true } : n))
-    );
-    await supabase
-      .from("notificacoes_realtime")
-      .update({ lida: true })
-      .eq("id", id);
+    setNotis((prev) => prev.map((n) => (n.id === id ? { ...n, lida: true } : n)));
+    await supabase.from("notificacoes_realtime").update({ lida: true }).eq("id", id);
   }, []);
   const markAllAsRead = useCallback(async () => {
     setNotis((prev) => prev.map((n) => ({ ...n, lida: true })));
     const ids = notis.filter((n) => !n.lida).map((n) => n.id);
-    if (ids.length)
-      await supabase
-        .from("notificacoes_realtime")
-        .update({ lida: true })
-        .in("id", ids);
+    if (ids.length) await supabase.from("notificacoes_realtime").update({ lida: true }).in("id", ids);
   }, [notis]);
 
   const openNotification = useCallback(
@@ -714,14 +622,9 @@ export default function CompanyDashboard() {
       if (n.url_destino) {
         if (n.url_destino.startsWith("/empresa/chat")) setSection("chat");
         const u = new URL(n.url_destino, window.location.origin);
-        const focus =
-          u.searchParams.get("focus") ||
-          u.searchParams.get("novo") ||
-          undefined;
+        const focus = u.searchParams.get("focus") || u.searchParams.get("novo") || undefined;
         const status = (u.searchParams.get("status") as any) || undefined;
-        navigate(u.pathname + u.search, {
-          state: { highlightId: focus, status },
-        });
+        navigate(u.pathname + u.search, { state: { highlightId: focus, status } });
       } else {
         setSection("notificacoes");
         navigate("/empresa/notificacoes");
@@ -746,9 +649,7 @@ export default function CompanyDashboard() {
       case "checkcircle2":
       case "aprovado":
       case "check":
-        return (
-          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-        );
+        return <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />;
       case "xcircle":
       case "recusado":
       case "x":
@@ -775,24 +676,18 @@ export default function CompanyDashboard() {
       const days = Math.floor(h / 24);
       return `${days} d`;
     };
+
     return (
-      <div
-        id="notifications-overlay"
-        className="absolute z-[1000] mt-2 right-3 top-12 w-[92vw] max-w-[420px]"
-      >
+      <div id="notifications-overlay" className="absolute z-[1000] mt-2 right-3 top-12 w-[92vw] max-w-[420px]">
         <div
           className={`rounded-2xl border shadow-xl ${
-            theme === "dark"
-              ? "bg-[#050819]/95 border-slate-800/70"
-              : "bg-white/95 border-zinc-200/80"
+            theme === "dark" ? "bg-[#050819]/95 border-slate-800/70" : "bg-white/95 border-zinc-200/80"
           } backdrop-blur-xl`}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b dark:border-slate-800/60 border-zinc-200/60">
             <div className="flex items-center gap-2">
               <Bell className="h-4 w-4" />
-              <span className="text-sm font-semibold">
-                Notificações {unreadCount > 0 ? `(${unreadCount})` : ""}
-              </span>
+              <span className="text-sm font-semibold">Notificações {unreadCount > 0 ? `(${unreadCount})` : ""}</span>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -813,6 +708,7 @@ export default function CompanyDashboard() {
               </button>
             </div>
           </div>
+
           <div className="max-h-[60vh] overflow-y-auto divide-y dark:divide-slate-800/60 divide-zinc-200/60">
             {loadingNotis ? (
               <div className="flex items-center gap-2 px-4 py-4 text-sm opacity-80">
@@ -820,9 +716,7 @@ export default function CompanyDashboard() {
                 Carregando…
               </div>
             ) : latest.length === 0 ? (
-              <div className="px-4 py-6 text-sm opacity-80">
-                Sem novas notificações.
-              </div>
+              <div className="px-4 py-6 text-sm opacity-80">Sem novas notificações.</div>
             ) : (
               latest.map((n) => {
                 const isUnread = !n.lida;
@@ -831,9 +725,7 @@ export default function CompanyDashboard() {
                     key={n.id}
                     onClick={() => openNotification(n)}
                     className={`w-full px-4 py-3 text-left transition-colors ${
-                      isUnread
-                        ? "bg-sky-500/3 hover:bg-sky-500/10"
-                        : "hover:bg-slate-100/70 dark:hover:bg-slate-900"
+                      isUnread ? "bg-sky-500/3 hover:bg-sky-500/10" : "hover:bg-slate-100/70 dark:hover:bg-slate-900"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -842,18 +734,10 @@ export default function CompanyDashboard() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-sm font-semibold">
-                            {n.titulo || "Nova notificação"}
-                          </p>
-                          <span className="text-[10px] opacity-60">
-                            {timeAgo(n.criado_em)}
-                          </span>
+                          <p className="truncate text-sm font-semibold">{n.titulo || "Nova notificação"}</p>
+                          <span className="text-[10px] opacity-60">{timeAgo(n.criado_em)}</span>
                         </div>
-                        {n.conteudo ? (
-                          <p className="mt-1 line-clamp-2 text-xs opacity-80">
-                            {n.conteudo}
-                          </p>
-                        ) : null}
+                        {n.conteudo ? <p className="mt-1 line-clamp-2 text-xs opacity-80">{n.conteudo}</p> : null}
                         <div className="mt-2 flex items-center justify-between">
                           {isUnread ? (
                             <span className="rounded-full bg-sky-500/15 px-2 py-[2px] text-[11px] text-sky-600 dark:text-sky-300">
@@ -865,9 +749,7 @@ export default function CompanyDashboard() {
                               <span className="text-[11px]">Lida</span>
                             </div>
                           )}
-                          <span className="text-[11px] text-sky-600 dark:text-sky-300 underline underline-offset-2">
-                            Ver detalhes
-                          </span>
+                          <span className="text-[11px] text-sky-600 dark:text-sky-300 underline underline-offset-2">Ver detalhes</span>
                         </div>
                       </div>
                     </div>
@@ -881,13 +763,13 @@ export default function CompanyDashboard() {
     );
   };
 
+  const SIDEBAR_W_CLASS = "md:pl-[304px]"; // reserva exata para a sidebar no desktop
+
   return (
-    <div className={`flex min-h-screen ${backgroundClass}`}>
-      <div className="hidden md:flex">
-        <SidebarDock
-          onSelectSection={gotoSection}
-          activeSection={section}
-        />
+    <div className={`relative min-h-screen ${backgroundClass}`}>
+      {/* DESKTOP SIDEBAR: fixa e fora do fluxo */}
+      <div className="hidden md:block fixed left-0 top-0 h-screen w-[304px] z-50">
+        <SidebarDock onSelectSection={gotoSection} activeSection={section} />
       </div>
 
       {/* MOBILE SIDEBAR */}
@@ -898,29 +780,19 @@ export default function CompanyDashboard() {
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
-          <div
-            className="fixed left-0 top-0 z-[999] h-full w-[304px]"
-            role="dialog"
-            aria-modal="true"
-          >
-            <SidebarDock
-              onSelectSection={gotoSection}
-              onCloseMobile={() => setSidebarOpen(false)}
-              activeSection={section}
-            />
+          <div className="fixed left-0 top-0 z-[999] h-full w-[304px]" role="dialog" aria-modal="true">
+            <SidebarDock onSelectSection={gotoSection} onCloseMobile={() => setSidebarOpen(false)} activeSection={section} />
           </div>
         </>
       ) : null}
 
-      <div className="relative flex min-h-screen flex-1 flex-col overflow-hidden">
-        {/* HEADER */}
-        <header
-          className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
-            theme === "dark"
-              ? "bg-[#050816]/85 border-slate-800/70"
-              : "bg-white/80 border-zinc-200/80"
-          }`}
-        >
+      {/* HEADER (FULL-WIDTH) — remove o “buraco” aplicando o padding da sidebar só no conteúdo interno */}
+      <header
+        className={`sticky top-0 z-40 border-b backdrop-blur-xl w-full ${
+          theme === "dark" ? "bg-[#050816]/85 border-slate-800/70" : "bg-white/80 border-zinc-200/80"
+        }`}
+      >
+        <div className={`relative ${SIDEBAR_W_CLASS}`}>
           <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 sm:px-5 py-2.5">
             <div className="flex items-center gap-3">
               <button
@@ -946,15 +818,11 @@ export default function CompanyDashboard() {
                     key={key}
                     onClick={() => gotoSection(key)}
                     className={`relative pb-1 ${
-                      isActive
-                        ? "font-semibold text-sky-500"
-                        : "text-slate-600 hover:text-sky-500 dark:text-slate-300"
+                      isActive ? "font-semibold text-sky-500" : "text-slate-600 hover:text-sky-500 dark:text-slate-300"
                     }`}
                   >
                     {label}
-                    {isActive && (
-                      <span className="absolute -bottom-[2px] left-0 right-0 h-[2px] rounded-full bg-sky-500" />
-                    )}
+                    {isActive && <span className="absolute -bottom-[2px] left-0 right-0 h-[2px] rounded-full bg-sky-500" />}
                   </button>
                 );
               })}
@@ -966,11 +834,7 @@ export default function CompanyDashboard() {
                 className="rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
                 aria-label="Alternar tema"
               >
-                {theme === "dark" ? (
-                  <Sun className="h-5 w-5 text-amber-300" />
-                ) : (
-                  <Moon className="h-5 w-5 text-slate-700" />
-                )}
+                {theme === "dark" ? <Sun className="h-5 w-5 text-amber-300" /> : <Moon className="h-5 w-5 text-slate-700" />}
               </button>
 
               <span className="mx-2 hidden h-6 w-px md:block bg-slate-200/70 dark:bg-slate-700/70" />
@@ -1011,33 +875,21 @@ export default function CompanyDashboard() {
                     style={empresaHeader?.url_logo ? undefined : avatarBg}
                   >
                     {empresaHeader?.url_logo ? (
-                      <img
-                        src={empresaHeader.url_logo}
-                        alt="Logótipo da empresa"
-                        className="h-full w-full object-cover"
-                      />
+                      <img src={empresaHeader.url_logo} alt="Logótipo da empresa" className="h-full w-full object-cover" />
                     ) : (
-                      <span className="text-[12px] font-semibold">
-                        {avatarInitials}
-                      </span>
+                      <span className="text-[12px] font-semibold">{avatarInitials}</span>
                     )}
                   </div>
                   <div className="hidden flex-col leading-tight text-left min-w-0 sm:flex">
-                    <span className="text-sm font-medium truncate">
-                      {shortEmpresaName}
-                    </span>
-                    <span className="text-xs opacity-70 truncate">
-                      {profile?.email || user?.email}
-                    </span>
+                    <span className="text-sm font-medium truncate">{shortEmpresaName}</span>
+                    <span className="text-xs opacity-70 truncate">{profile?.email || user?.email}</span>
                   </div>
                 </button>
 
                 {userMenuOpen && (
                   <div
                     className={`absolute z-[1001] right-0 top-11 w-64 rounded-2xl border shadow-xl overflow-hidden ${
-                      theme === "dark"
-                        ? "bg-[#050819]/95 border-slate-800/70"
-                        : "bg-white/95 border-zinc-200/80"
+                      theme === "dark" ? "bg-[#050819]/95 border-slate-800/70" : "bg-white/95 border-zinc-200/80"
                     } backdrop-blur-xl`}
                   >
                     <div className="flex items-center gap-3 px-4 pt-4 pb-3">
@@ -1046,33 +898,17 @@ export default function CompanyDashboard() {
                         style={empresaHeader?.url_logo ? undefined : avatarBg}
                       >
                         {empresaHeader?.url_logo ? (
-                          <img
-                            src={empresaHeader.url_logo}
-                            alt="Logótipo da empresa"
-                            className="h-full w-full object-cover"
-                          />
+                          <img src={empresaHeader.url_logo} alt="Logótipo da empresa" className="h-full w-full object-cover" />
                         ) : (
-                          <span className="text-[12px] font-semibold">
-                            {avatarInitials}
-                          </span>
+                          <span className="text-[12px] font-semibold">{avatarInitials}</span>
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold truncate">
-                          {shortEmpresaName}
-                        </div>
-                        <div className="text-xs opacity-70 truncate">
-                          {profile?.email || user?.email}
-                        </div>
+                        <div className="text-sm font-semibold truncate">{shortEmpresaName}</div>
+                        <div className="text-xs opacity-70 truncate">{profile?.email || user?.email}</div>
                       </div>
                     </div>
-                    <div
-                      className={
-                        theme === "dark"
-                          ? "border-t border-slate-800/60"
-                          : "border-t border-zinc-200/60"
-                      }
-                    >
+                    <div className={theme === "dark" ? "border-t border-slate-800/60" : "border-t border-zinc-200/60"}>
                       <button
                         onClick={() => {
                           setUserMenuOpen(false);
@@ -1108,72 +944,59 @@ export default function CompanyDashboard() {
               {!isMobile && <NotificationsOverlay />}
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
-        <main className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-400/20 max-w-[1400px] w-full mx-auto px-4 sm:px-6 md:px-8 py-5 sm:py-6 min-h-[calc(100vh-5rem)] flex flex-col gap-6 md:pb-0 pb-24">
+      {/* CONTEÚDO */}
+      <div className={`relative flex flex-col min-w-0 ${SIDEBAR_W_CLASS}`}>
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-auto scrollbar-thin scrollbar-thumb-slate-400/20 max-w-[1400px] w-full mx-auto px-4 sm:px-6 md:px-8 py-5 sm:py-6 min-h-[calc(100vh-5rem)] flex flex-col gap-6 md:pb-0 pb-24">
           {(isObrasChild || isProfissionaisChild || isProfissionalDetalhe) ? (
             <Outlet />
           ) : (
             (() => {
               const map: Record<string, JSX.Element> = {
-                painel: (
-                  <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
-                ),
+                painel: <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />,
                 obras: <Outlet />,
                 profissionais: <Profissionais />,
                 relatorios: <Relatorios />,
                 chat: <ChatComEquipa />,
 
-                // pedidos
                 "novos-pedidos": <NovosPedidos setSection={setSection} />,
                 "em-avaliacao": <EmAvaliacao />,
                 aprovados: <Aprovados />,
 
-                // obras
                 "obras-ativas": <ObrasAtivas />,
                 historico: <Historico />,
                 "adicionar-obra": <AdicionarObra />,
 
-                // relatórios
                 "custos-mensais": <CustosMensais />,
                 desempenho: <Desempenho />,
                 financeiro: <Financeiro />,
 
-                // documentos
                 documentos: <Documentos />,
                 "documentos-acrobatas": <Acrobatas />,
                 "documentos-profissionais": <ProfissionaisDocs />,
                 "documentos-meus": <MeusDocumentos />,
 
-                // faturas
                 faturas: <FaturasEmpresa />,
 
-                // outros
                 configuracoes: <Configuracoes />,
                 notificacoes: <Notificacoes />,
                 "perfil-empresa": <PerfilEmpresa />,
 
-                // profissionais (sub)
                 "equipes-em-campo": <EquipesEmCampo />,
                 "adicionar-profissional": <AdicionarProfissional />,
                 "faltas-presencas": <FaltasPresencas />,
               };
-              return (
-                map[section] || (
-                  <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />
-                )
-              );
+              return map[section] || <EmpresaPainel onQuickAction={(s) => gotoSection(s)} />;
             })()
           )}
           <div className="h-10 sm:h-0" />
         </main>
 
-        {/* Bottom nav mobile */}
         <nav
           className={`md:hidden fixed bottom-0 inset-x-0 z-10 border-t ${
-            theme === "dark"
-              ? "bg-[#050816]/95 border-slate-800/70"
-              : "bg-white/95 border-zinc-200/70"
+            theme === "dark" ? "bg-[#050816]/95 border-slate-800/70" : "bg-white/95 border-zinc-200/70"
           } pb-[env(safe-area-inset-bottom)]`}
         >
           <div className="mx-auto max-w-[720px] px-4 py-2 flex justify-between">
@@ -1190,9 +1013,7 @@ export default function CompanyDashboard() {
                   key={key}
                   onClick={() => gotoSection(key)}
                   className={`relative flex flex-col items-center gap-0.5 text-[11px] font-medium px-2 py-1 rounded-xl ${
-                    isActive
-                      ? "text-sky-400"
-                      : "text-slate-400 hover:text-sky-400"
+                    isActive ? "text-sky-400" : "text-slate-400 hover:text-sky-400"
                   }`}
                 >
                   <Icon className="relative h-5 w-5" />
@@ -1205,37 +1026,34 @@ export default function CompanyDashboard() {
             })}
           </div>
         </nav>
-      </div>
 
-      {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-[1100] max-w-xs rounded-2xl border border-slate-200/70 bg-white/95 dark:border-slate-800/70 dark:bg-[#050819]/95 shadow-lg px-4 py-3 text-sm backdrop-blur-xl">
-          <div className="flex items-start gap-2">
-            {toast.icon === "x" ? (
-              <XCircle className="h-4 w-4 text-rose-500 mt-[2px]" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-[2px]" />
-            )}
-            <div className="flex-1">
-              <p className="font-semibold">{toast.titulo}</p>
-              {toast.conteudo && (
-                <p className="mt-1 text-xs opacity-80">{toast.conteudo}</p>
+        {toast && (
+          <div className="fixed bottom-4 right-4 z-[1100] max-w-xs rounded-2xl border border-slate-200/70 bg-white/95 dark:border-slate-800/70 dark:bg-[#050819]/95 shadow-lg px-4 py-3 text-sm backdrop-blur-xl">
+            <div className="flex items-start gap-2">
+              {toast.icon === "x" ? (
+                <XCircle className="h-4 w-4 text-rose-500 mt-[2px]" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-[2px]" />
               )}
-              {toast.url && (
-                <button
-                  onClick={() => {
-                    setToast(null);
-                    navigate(toast.url!);
-                  }}
-                  className="mt-2 text-xs text-sky-600 underline underline-offset-2 dark:text-sky-300"
-                >
-                  Ver detalhes
-                </button>
-              )}
+              <div className="flex-1">
+                <p className="font-semibold">{toast.titulo}</p>
+                {toast.conteudo && <p className="mt-1 text-xs opacity-80">{toast.conteudo}</p>}
+                {toast.url && (
+                  <button
+                    onClick={() => {
+                      setToast(null);
+                      navigate(toast.url!);
+                    }}
+                    className="mt-2 text-xs text-sky-600 underline underline-offset-2 dark:text-sky-300"
+                  >
+                    Ver detalhes
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   Calendar,
   Users,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "../../../../lib/supabase";
 import toast from "react-hot-toast";
@@ -288,13 +289,70 @@ export default function AdicionarObra() {
     try {
       setLoading(true);
 
-      const { data: empresaRPC, error: empErr } =
-        await supabase.rpc("minha_empresa_id");
-      if (empErr) throw empErr;
+      // garante que temos utilizador autenticado
+      if (!user?.id) {
+        toast.error("Sessão inválida. Inicie sessão novamente.");
+        setLoading(false);
+        return;
+      }
+
+      // usa a RPC que recebe o auth_uid
+      const { data: empresaRPC, error: empErr } = await supabase.rpc(
+        "minha_empresa_id_by_auth",
+        { auth_uid: user.id }
+      );
+
+      if (empErr) {
+        console.error("Erro RPC minha_empresa_id_by_auth:", empErr);
+        toast.error("Não foi possível encontrar a empresa desta conta.");
+        setLoading(false);
+        return;
+      }
+
       const empresaId = (empresaRPC as string) || null;
 
+      // 🔔 caso não exista empresa associada, mostra alerta bonito e não cria obra
       if (!empresaId) {
-        toast.error("Empresa não encontrada para esta conta.");
+        toast.custom((t) => (
+          <div
+            className={`max-w-sm w-full bg-amber-50 border border-amber-200 rounded-xl shadow-lg p-4 flex gap-3 ${
+              t.visible ? "animate-enter" : "animate-leave"
+            }`}
+          >
+            <div className="mt-1">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-900">
+                Complete o perfil da empresa
+              </p>
+              <p className="mt-1 text-xs text-amber-800">
+                Para criar obras, é necessário concluir o registo da empresa e
+                associar esta conta a uma empresa ativa.
+              </p>
+
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => {
+                    toast.dismiss(t.id);
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-amber-200 text-amber-800 hover:bg-amber-100 transition"
+                >
+                  Agora não
+                </button>
+                <button
+                  onClick={() => {
+                    toast.dismiss(t.id);
+                    navigate("/empresa/configuracoes/perfil");
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition"
+                >
+                  Ir para o perfil da empresa
+                </button>
+              </div>
+            </div>
+          </div>
+        ));
         setLoading(false);
         return;
       }
@@ -384,8 +442,6 @@ export default function AdicionarObra() {
       } else {
         navigate(`/empresa/obras/ativas`, { replace: true });
       }
-
-      return;
     } catch (e: any) {
       console.error("Erro ao criar obra:", e?.message || e);
       toast.error("Erro inesperado ao criar obra.");
@@ -705,7 +761,7 @@ export default function AdicionarObra() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
                 <FileText className="w-4 h-4" />
               </div>
-            <div>
+              <div>
                 <h2 className="text-sm md:text-base font-semibold text-slate-900 dark:text-slate-50">
                   Descrição / Observações
                 </h2>

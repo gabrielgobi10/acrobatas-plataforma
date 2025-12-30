@@ -14,6 +14,7 @@ import {
   Search,
   X,
   CalendarDays,
+  Lock,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -77,6 +78,9 @@ function isoToPt(d?: string | null) {
 }
 
 export default function OcorrenciasObra({ obraId }: { obraId: string }) {
+  // ✅ Bloqueio total (preview sem interação) — muda para false quando lançar
+  const BLOQUEADO = true;
+
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [ocorrencias, setOcorrencias] = useState<OcorrenciaRow[]>([]);
@@ -277,255 +281,298 @@ export default function OcorrenciasObra({ obraId }: { obraId: string }) {
   ];
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Resumo + período */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-            Ocorrências da Obra
-          </h2>
-          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 max-w-xl">
-            Registo de situações fora do normal, incidentes e não conformidades
-            relacionadas com esta obra.
-          </p>
-        </div>
+    <div className="relative">
+      {/* ✅ Conteúdo normal (fica com preview visual, mas sem interação quando bloqueado) */}
+      <div
+        className={
+          BLOQUEADO
+            ? "pointer-events-none select-none opacity-60 blur-[0.2px]"
+            : ""
+        }
+      >
+        <div className="space-y-6 sm:space-y-8">
+          {/* Resumo + período */}
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg sm:text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+                Ocorrências da Obra
+              </h2>
+              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 max-w-xl">
+                Registo de situações fora do normal, incidentes e não conformidades
+                relacionadas com esta obra.
+              </p>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
-          <div className="flex items-center gap-2 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-[#020617] px-3 py-1.5">
-            <CalendarDays className="w-4 h-4 text-blue-500" />
-            <span className="hidden sm:inline text-zinc-500 dark:text-zinc-400">
-              Período de análise:
-            </span>
-            <select
-              className="bg-transparent outline-none text-zinc-900 dark:text-zinc-100"
-              value={mes}
-              onChange={(e) => setMes(Number(e.target.value))}
-            >
-              {meses.map((m, idx) => (
-                <option key={m} value={idx + 1}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <select
-              className="bg-transparent outline-none text-zinc-900 dark:text-zinc-100"
-              value={ano}
-              onChange={(e) => setAno(Number(e.target.value))}
-            >
-              {Array.from({ length: 5 }).map((_, i) => {
-                const y = new Date().getFullYear() - 2 + i;
-                return (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
+              <div className="flex items-center gap-2 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-[#020617] px-3 py-1.5">
+                <CalendarDays className="w-4 h-4 text-blue-500" />
+                <span className="hidden sm:inline text-zinc-500 dark:text-zinc-400">
+                  Período de análise:
+                </span>
+                <select
+                  className="bg-transparent outline-none text-zinc-900 dark:text-zinc-100"
+                  value={mes}
+                  onChange={(e) => setMes(Number(e.target.value))}
+                >
+                  {meses.map((m, idx) => (
+                    <option key={m} value={idx + 1}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="bg-transparent outline-none text-zinc-900 dark:text-zinc-100"
+                  value={ano}
+                  onChange={(e) => setAno(Number(e.target.value))}
+                >
+                  {Array.from({ length: 5 }).map((_, i) => {
+                    const y = new Date().getFullYear() - 2 + i;
+                    return (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
 
-          <button
-            onClick={carregarOcorrencias}
-            className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-4 py-1.5 text-xs sm:text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-          >
-            Atualizar
-          </button>
-        </div>
-      </div>
-
-      {/* Cards resumo */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <ResumoCard
-          icon={<AlertCircle className="w-5 h-5 text-amber-500" />}
-          titulo="Ocorrências abertas"
-          label="Ainda sem resolução ou cancelamento."
-          valor={resumo.abertas}
-        />
-        <ResumoCard
-          icon={<AlertTriangle className="w-5 h-5 text-rose-500" />}
-          titulo="Críticas"
-          label="Severidade crítica registada."
-          valor={resumo.criticas}
-        />
-        <ResumoCard
-          icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-          titulo="Resolvidas no período"
-          label="Fechadas neste mês."
-          valor={resumo.resolvidas}
-        />
-        <ResumoCard
-          icon={<FileWarning className="w-5 h-5 text-red-500" />}
-          titulo="Prazo vencido"
-          label="Prazo de resolução ultrapassado."
-          valor={resumo.prazoVencido}
-        />
-      </div>
-
-      {/* Filtros lista */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#020617] px-3 py-3 sm:px-4 sm:py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="w-full sm:max-w-md relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input
-            value={filtros.search}
-            onChange={(e) =>
-              setFiltros((f) => ({ ...f, search: e.target.value }))
-            }
-            placeholder="Pesquisar por título, descrição ou categoria…"
-            className="w-full rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-          <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
-            <Filter className="w-4 h-4" /> Filtros:
-          </span>
-
-          <select
-            value={filtros.status}
-            onChange={(e) =>
-              setFiltros((f) => ({ ...f, status: e.target.value as any }))
-            }
-            className="rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-1.5"
-          >
-            <option value="Todos">Todos status</option>
-            <option value="Aberta">Abertas</option>
-            <option value="Em análise">Em análise</option>
-            <option value="Resolvida">Resolvidas</option>
-            <option value="Cancelada">Canceladas</option>
-          </select>
-
-          <select
-            value={filtros.severidade}
-            onChange={(e) =>
-              setFiltros((f) => ({
-                ...f,
-                severidade: e.target.value as any,
-              }))
-            }
-            className="rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-1.5"
-          >
-            <option value="Todas">Todas severidades</option>
-            <option value="Baixa">Baixa</option>
-            <option value="Média">Média</option>
-            <option value="Alta">Alta</option>
-            <option value="Crítica">Crítica</option>
-          </select>
-
-          <select
-            value={filtros.categoria}
-            onChange={(e) =>
-              setFiltros((f) => ({ ...f, categoria: e.target.value }))
-            }
-            className="rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-1.5"
-          >
-            <option value="Todas">Todas categorias</option>
-            {categoriasMock.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={() =>
-              setFiltros({
-                search: "",
-                status: "Todos",
-                severidade: "Todas",
-                categoria: "Todas",
-              })
-            }
-            className="rounded-full border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          >
-            Limpar
-          </button>
-        </div>
-      </div>
-
-      {/* Lista + botão nova */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#020617] p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <h3 className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-            <Clock4 className="w-4 h-4 text-blue-500" />
-            Ocorrências registadas
-          </h3>
-
-          <button
-            onClick={abrirModalNova}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            Nova ocorrência
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            A carregar ocorrências…
-          </div>
-        ) : ocorrenciasFiltradas.length === 0 ? (
-          <div className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            Ainda não há ocorrências registadas para este período.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {ocorrenciasFiltradas.map((o) => (
-              <motion.div
-                key={o.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-3 sm:px-4 sm:py-3 flex flex-col gap-2"
+              <button
+                onClick={carregarOcorrencias}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-4 py-1.5 text-xs sm:text-sm font-medium text-white shadow-sm hover:bg-blue-700"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm sm:text-base font-medium text-zinc-900 dark:text-zinc-50">
-                      {o.titulo}
-                    </p>
-                    <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 line-clamp-2">
-                      {o.descricao}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <StatusChip status={o.status} />
-                    <SeveridadeChip severidade={o.severidade} />
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400">
-                  <span>
-                    {isoToPt(o.data_ocorrencia)}{" "}
-                    {o.zona ? `• ${o.zona}` : null}
-                  </span>
-                  {o.categoria && (
-                    <span className="rounded-full bg-zinc-200/70 dark:bg-zinc-700/70 px-2 py-[2px]">
-                      {o.categoria}
-                    </span>
-                  )}
-                  {o.prazo_resolucao && (
-                    <span className="inline-flex items-center gap-1">
-                      <Clock4 className="w-3 h-3" />
-                      Prazo: {isoToPt(o.prazo_resolucao)}
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            ))}
+                Atualizar
+              </button>
+            </div>
           </div>
-        )}
+
+          {/* Cards resumo */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <ResumoCard
+              icon={<AlertCircle className="w-5 h-5 text-amber-500" />}
+              titulo="Ocorrências abertas"
+              label="Ainda sem resolução ou cancelamento."
+              valor={resumo.abertas}
+            />
+            <ResumoCard
+              icon={<AlertTriangle className="w-5 h-5 text-rose-500" />}
+              titulo="Críticas"
+              label="Severidade crítica registada."
+              valor={resumo.criticas}
+            />
+            <ResumoCard
+              icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+              titulo="Resolvidas no período"
+              label="Fechadas neste mês."
+              valor={resumo.resolvidas}
+            />
+            <ResumoCard
+              icon={<FileWarning className="w-5 h-5 text-red-500" />}
+              titulo="Prazo vencido"
+              label="Prazo de resolução ultrapassado."
+              valor={resumo.prazoVencido}
+            />
+          </div>
+
+          {/* Filtros lista */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#020617] px-3 py-3 sm:px-4 sm:py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="w-full sm:max-w-md relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+              <input
+                value={filtros.search}
+                onChange={(e) =>
+                  setFiltros((f) => ({ ...f, search: e.target.value }))
+                }
+                placeholder="Pesquisar por título, descrição ou categoria…"
+                className="w-full rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+              <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                <Filter className="w-4 h-4" /> Filtros:
+              </span>
+
+              <select
+                value={filtros.status}
+                onChange={(e) =>
+                  setFiltros((f) => ({ ...f, status: e.target.value as any }))
+                }
+                className="rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-1.5"
+              >
+                <option value="Todos">Todos status</option>
+                <option value="Aberta">Abertas</option>
+                <option value="Em análise">Em análise</option>
+                <option value="Resolvida">Resolvidas</option>
+                <option value="Cancelada">Canceladas</option>
+              </select>
+
+              <select
+                value={filtros.severidade}
+                onChange={(e) =>
+                  setFiltros((f) => ({
+                    ...f,
+                    severidade: e.target.value as any,
+                  }))
+                }
+                className="rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-1.5"
+              >
+                <option value="Todas">Todas severidades</option>
+                <option value="Baixa">Baixa</option>
+                <option value="Média">Média</option>
+                <option value="Alta">Alta</option>
+                <option value="Crítica">Crítica</option>
+              </select>
+
+              <select
+                value={filtros.categoria}
+                onChange={(e) =>
+                  setFiltros((f) => ({ ...f, categoria: e.target.value }))
+                }
+                className="rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-1.5"
+              >
+                <option value="Todas">Todas categorias</option>
+                {categoriasMock.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={() =>
+                  setFiltros({
+                    search: "",
+                    status: "Todos",
+                    severidade: "Todas",
+                    categoria: "Todas",
+                  })
+                }
+                className="rounded-full border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Limpar
+              </button>
+            </div>
+          </div>
+
+          {/* Lista + botão nova */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#020617] p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <h3 className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                <Clock4 className="w-4 h-4 text-blue-500" />
+                Ocorrências registadas
+              </h3>
+
+              <button
+                onClick={abrirModalNova}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                Nova ocorrência
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                A carregar ocorrências…
+              </div>
+            ) : ocorrenciasFiltradas.length === 0 ? (
+              <div className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                Ainda não há ocorrências registadas para este período.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {ocorrenciasFiltradas.map((o) => (
+                  <motion.div
+                    key={o.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-3 sm:px-4 sm:py-3 flex flex-col gap-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm sm:text-base font-medium text-zinc-900 dark:text-zinc-50">
+                          {o.titulo}
+                        </p>
+                        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 line-clamp-2">
+                          {o.descricao}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <StatusChip status={o.status} />
+                        <SeveridadeChip severidade={o.severidade} />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400">
+                      <span>
+                        {isoToPt(o.data_ocorrencia)}{" "}
+                        {o.zona ? `• ${o.zona}` : null}
+                      </span>
+                      {o.categoria && (
+                        <span className="rounded-full bg-zinc-200/70 dark:bg-zinc-700/70 px-2 py-[2px]">
+                          {o.categoria}
+                        </span>
+                      )}
+                      {o.prazo_resolucao && (
+                        <span className="inline-flex items-center gap-1">
+                          <Clock4 className="w-3 h-3" />
+                          Prazo: {isoToPt(o.prazo_resolucao)}
+                        </span>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* MODAL NOVA OCORRÊNCIA */}
+          <AnimatePresence>
+            {modalAberto && (
+              <NovaOcorrenciaModal
+                form={form}
+                setForm={setForm}
+                onClose={() => (!salvando ? setModalAberto(false) : null)}
+                onSave={handleSalvarNova}
+                salvando={salvando}
+                categorias={categoriasMock}
+              />
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
-      {/* MODAL NOVA OCORRÊNCIA */}
-      <AnimatePresence>
-        {modalAberto && (
-          <NovaOcorrenciaModal
-            form={form}
-            setForm={setForm}
-            onClose={() => (!salvando ? setModalAberto(false) : null)}
-            onSave={handleSalvarNova}
-            salvando={salvando}
-            categorias={categoriasMock}
-          />
-        )}
-      </AnimatePresence>
+      {/* ✅ Overlay de bloqueio (mantém a página bonita e impede qualquer clique) */}
+      {BLOQUEADO && (
+        <div className="absolute inset-0 z-[60] flex items-start justify-center px-4 pt-4 sm:pt-6">
+          <div className="w-full max-w-2xl rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-[#020617]/85 backdrop-blur-md shadow-sm">
+            <div className="p-4 sm:p-5 flex items-start gap-3">
+              <div className="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-2">
+                <Lock className="w-5 h-5 text-blue-600 dark:text-blue-300" />
+              </div>
+
+              <div className="flex-1">
+                <p className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                  Em desenvolvimento
+                </p>
+                <p className="mt-1 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300">
+                  Esta funcionalidade estará disponível em breve. Por enquanto,
+                  esta página está em modo de pré-visualização.
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center rounded-full border border-zinc-200 dark:border-zinc-700 bg-white/70 dark:bg-[#050816]/70 px-3 py-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                    Sem registo/edição nesta versão
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-zinc-200 dark:border-zinc-700 bg-white/70 dark:bg-[#050816]/70 px-3 py-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                    Dados e filtros serão ativados no lançamento
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -766,9 +813,7 @@ function NovaOcorrenciaModal({
             <Label>Ação imediata tomada (opcional)</Label>
             <textarea
               value={form.acao_imediata}
-              onChange={(e) =>
-                handleChange("acao_imediata", e.target.value)
-              }
+              onChange={(e) => handleChange("acao_imediata", e.target.value)}
               rows={3}
               placeholder="Ex.: Área isolada, equipa de segurança notificada, etc."
               className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -799,8 +844,7 @@ function NovaOcorrenciaModal({
                 className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-[#050816] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
               />
               <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                Depois podemos ligar isto diretamente aos profissionais
-                ativos na obra.
+                Depois podemos ligar isto diretamente aos profissionais ativos na obra.
               </p>
             </div>
           </div>

@@ -6,7 +6,6 @@ import {
   UserPlus,
   ClipboardList,
   CheckCircle2,
-  Clock3,
   X,
   Loader2,
   MailOpen,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useNavigate, useLocation } from "react-router-dom";
+import toast from "react-hot-toast";
 
 /* ========= Tipos ========= */
 
@@ -23,13 +23,19 @@ type VinculoStatus = "ativo" | "convocado" | "pendente";
 
 type Profissional = {
   id: string;
+
+  // ⚠️ no teu banco existem os 2 (pelos prints). A foto pública pode “bater” em um ou em outro
+  usuario_id?: string | null;
   user_id?: string | null;
+
   nome: string;
   area?: string | null;
   funcao?: string | null;
   foto_url?: string | null;
   telefone?: string | null;
   email?: string | null;
+
+  // extras (se existirem)
   documentacao_ok?: boolean;
   nif?: string | null;
   categoria?: string | null;
@@ -65,6 +71,12 @@ function storagePublicUrlMaybe(path?: string | null) {
   if (/^https?:\/\//i.test(path)) return path;
   const { data } = supabase.storage.from("public").getPublicUrl(path);
   return data?.publicUrl || null;
+}
+
+function initialsFallbackUrl(nome?: string | null) {
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+    nome || "?"
+  )}`;
 }
 
 export default function Equipas({ obraId }: { obraId: string }) {
@@ -117,18 +129,52 @@ export default function Equipas({ obraId }: { obraId: string }) {
     comportamento: 5,
     seguranca: 5,
     comentario: "",
-    tipo: "mensal",
+    tipo: "final",
     mes: hoje.getMonth() + 1,
     ano: hoje.getFullYear(),
   });
   const [salvandoAval, setSalvandoAval] = useState(false);
+  const [carregandoAval, setCarregandoAval] = useState(false);
   const [medias, setMedias] = useState<Record<string, number>>({});
+
+  /* ========= Helper: obter id do usuário avaliador ========= */
+  async function getAvaliadorId(): Promise<string | null> {
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error("Erro ao obter utilizador autenticado:", authError);
+        return null;
+      }
+
+      const authId = authData?.user?.id || null;
+      if (!authId) return null;
+
+      const { data: usu, error: usuErr } = await supabase
+        .from("usuarios")
+        .select("id")
+        .eq("auth_id", authId)
+        .limit(1)
+        .maybeSingle();
+
+      if (usuErr) {
+        console.error("Erro ao obter usuário avaliador:", usuErr);
+        return null;
+      }
+
+      return usu?.id || null;
+    } catch (e) {
+      console.error("Erro inesperado ao obter usuário avaliador:", e);
+      return null;
+    }
+  }
 
   /* ============= LOAD ============= */
   async function load() {
     if (!obraId) return;
     setLoading(true);
+
     try {
+      // vínculos da obra
       const { data, error } = await supabase
         .from("profissionais_obras")
         .select(
@@ -138,6 +184,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
           funcao,
           profissional:profissional_id (
             id,
+            usuario_id,
             user_id,
             nome,
             area,
@@ -152,8 +199,9 @@ export default function Equipas({ obraId }: { obraId: string }) {
 
       if (error) throw error;
 
-      const all: Vinculo[] = (data || []).map((v: any) => {
+      const base: Vinculo[] = (data || []).map((v: any) => {
         const rawProf = v.profissional;
+
         const fotoFromStorage =
           storagePublicUrlMaybe(rawProf?.foto_url) || rawProf?.foto_url || null;
 
@@ -161,14 +209,12 @@ export default function Equipas({ obraId }: { obraId: string }) {
           ? {
               ...rawProf,
               foto_url: fotoFromStorage,
-              documentacao_ok: Math.random() > 0.3,
-              nif: "PT" + Math.floor(100000000 + Math.random() * 900000000),
-              categoria: v.funcao || "PINTOR",
-              sexo: Math.random() > 0.5 ? "Masculino" : "Feminino",
-              seguranca_social: String(
-                Math.floor(10000000000 + Math.random() * 90000000000)
-              ),
-              profissao: v.funcao || "Profissional de Construção",
+              documentacao_ok: rawProf?.documentacao_ok ?? undefined,
+              nif: rawProf?.nif ?? null,
+              categoria: rawProf?.categoria ?? null,
+              sexo: rawProf?.sexo ?? null,
+              seguranca_social: rawProf?.seguranca_social ?? null,
+              profissao: rawProf?.profissao ?? null,
             }
           : null;
 
@@ -181,12 +227,70 @@ export default function Equipas({ obraId }: { obraId: string }) {
         };
       });
 
+      // ================================
+      // ENRIQUECER COM FOTO DA VIEW PÚBLICA
+      // ✅ No teu print: profissionais.user_id = 7444... (mesmo do path do Storage)
+      // ✅ e também existe usuario_id = d8bb...
+      // Então: buscamos na view usando os DOIS como chave e aplicamos o que vier.
+      // ================================
+      const idsParaFoto = Array.from(
+        new Set(
+          base
+            .flatMap((v) => [
+              v.profissional?.user_id || null,
+              v.profissional?.usuario_id || null,
+            ])
+            .filter(Boolean) as string[]
+        )
+      );
+
+      let fotoPorChave: Record<string, string | null> = {};
+      if (idsParaFoto.length) {
+        const { data: cards, error: cardsErr } = await supabase
+          .from("profissionais_publico_cards_final")
+          .select("usuario_id, foto_url")
+          .in("usuario_id", idsParaFoto);
+
+        if (cardsErr) {
+          console.error("Erro ao buscar fotos na view pública:", cardsErr);
+        } else {
+          (cards || []).forEach((r: any) => {
+            const key = r.usuario_id as string | undefined;
+            if (!key) return;
+            const url =
+              storagePublicUrlMaybe(r.foto_url) || (r.foto_url as string) || null;
+            fotoPorChave[key] = url;
+          });
+        }
+      }
+
+      const all: Vinculo[] = base.map((v) => {
+        const prof = v.profissional;
+        if (!prof) return v;
+
+        const key1 = prof.user_id || null;
+        const key2 = prof.usuario_id || null;
+
+        const fotoView =
+          (key1 ? fotoPorChave[key1] : null) ||
+          (key2 ? fotoPorChave[key2] : null) ||
+          null;
+
+        if (!fotoView) return v;
+
+        return {
+          ...v,
+          profissional: { ...prof, foto_url: fotoView },
+        };
+      });
+
       const equipeAtivaOuConv = all.filter((v) => v.status !== "pendente");
       const pend = all.filter((v) => v.status === "pendente");
 
       setEquipe(equipeAtivaOuConv);
       setCandidaturas(pend);
 
+      // médias de avaliação (apenas tipo 'final')
       const ids = equipeAtivaOuConv
         .map((v) => v.profissional?.id)
         .filter(Boolean) as string[];
@@ -195,7 +299,8 @@ export default function Equipas({ obraId }: { obraId: string }) {
         const { data: avals, error: errAvals } = await supabase
           .from("avaliacoes_profissionais")
           .select("profissional_id, nota")
-          .in("profissional_id", ids);
+          .in("profissional_id", ids)
+          .eq("tipo", "final");
 
         if (errAvals) {
           console.error("Erro ao buscar avaliações:", errAvals);
@@ -257,8 +362,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
   /* ========= NAVEGAR PARA PERFIL ========= */
   function abrirPerfilProfissional(prof?: Profissional | null) {
     if (!prof?.id) return;
-    const targetId = prof.user_id || prof.id;
-    navigate(`/empresa/profissional/${targetId}?pid=${prof.id}`);
+    navigate(`/empresa/profissional/${prof.id}`);
   }
 
   /* ========= MODAL ADD ========= */
@@ -268,7 +372,9 @@ export default function Equipas({ obraId }: { obraId: string }) {
 
       let q = supabase
         .from("profissionais")
-        .select("id, user_id, nome, area, funcao, foto_url, telefone, email")
+        .select(
+          "id, usuario_id, user_id, nome, area, funcao, foto_url, telefone, email"
+        )
         .limit(50);
 
       if (query?.trim()) {
@@ -364,48 +470,113 @@ export default function Equipas({ obraId }: { obraId: string }) {
     return <div className="flex items-center gap-1">{items}</div>;
   }
 
-  async function handleSalvarAvaliacao() {
-    if (!avaliarDe) return;
+  /* ========= Abrir modal de avaliação (carregar existente se houver) ========= */
+  async function abrirModalAvaliacao(prof?: Profissional | null) {
+    if (!prof) return;
+
+    setAvaliarDe(prof);
+
+    const agora = new Date();
+    setFormAval({
+      nota: 5,
+      pontualidade: 5,
+      produtividade: 5,
+      comportamento: 5,
+      seguranca: 5,
+      comentario: "",
+      tipo: "final",
+      mes: agora.getMonth() + 1,
+      ano: agora.getFullYear(),
+    });
+
+    setCarregandoAval(true);
     try {
-      setSalvandoAval(true);
+      const avaliadorId = await getAvaliadorId();
+      if (!avaliadorId) return;
 
-      const { data: auth } = await supabase.auth.getUser();
-      const authId = auth?.user?.id || null;
+      const { data, error } = await supabase
+        .from("avaliacoes_profissionais")
+        .select("nota, comentario, tipo, mes, ano")
+        .eq("obra_id", obraId)
+        .eq("profissional_id", prof.id)
+        .eq("avaliado_por", avaliadorId)
+        .eq("tipo", "final")
+        .maybeSingle();
 
-      let avaliadoPor: string | null = null;
-      if (authId) {
-        const { data: usu } = await supabase
-          .from("usuarios")
-          .select("id")
-          .eq("auth_id", authId)
-          .limit(1)
-          .maybeSingle();
-        avaliadoPor = usu?.id || null;
+      if (error && (error as any).code !== "PGRST116") {
+        console.error("Erro ao carregar avaliação existente:", error);
+        return;
       }
 
-      const notaBase = formAval.nota || 5;
+      if (data) {
+        setFormAval({
+          nota: data.nota ?? 5,
+          pontualidade: data.nota ?? 5,
+          produtividade: data.nota ?? 5,
+          comportamento: data.nota ?? 5,
+          seguranca: data.nota ?? 5,
+          comentario: data.comentario ?? "",
+          tipo: data.tipo ?? "final",
+          mes: data.mes ?? agora.getMonth() + 1,
+          ano: data.ano ?? agora.getFullYear(),
+        });
+      }
+    } catch (e) {
+      console.error("Erro inesperado ao carregar avaliação existente:", e);
+    } finally {
+      setCarregandoAval(false);
+    }
+  }
+
+  async function handleSalvarAvaliacao() {
+    if (!avaliarDe) return;
+
+    const notaBase = formAval.nota || 5;
+
+    if (notaBase <= 3 && !formAval.comentario.trim()) {
+      toast.error(
+        "Para avaliações de 3 estrelas ou menos, escreva um comentário sobre o desempenho."
+      );
+      return;
+    }
+
+    setSalvandoAval(true);
+    try {
+      const avaliadorId = await getAvaliadorId();
+      if (!avaliadorId) {
+        toast.error("Não foi possível identificar o utilizador avaliador.");
+        return;
+      }
+
+      const agora = new Date();
 
       const payload = {
         obra_id: obraId,
         profissional_id: avaliarDe.id,
-        avaliado_por: avaliadoPor,
+        avaliado_por: avaliadorId,
         nota: notaBase,
         pontualidade: notaBase,
         produtividade: notaBase,
         comportamento: notaBase,
         seguranca: notaBase,
         comentario: formAval.comentario?.trim() || null,
-        tipo: formAval.tipo,
-        mes: formAval.mes,
-        ano: formAval.ano,
+        tipo: "final",
+        mes: formAval.mes || agora.getMonth() + 1,
+        ano: formAval.ano || agora.getFullYear(),
       };
 
       const { error } = await supabase
         .from("avaliacoes_profissionais")
-        .insert([payload]);
+        .upsert(payload, {
+          onConflict: "obra_id,profissional_id,avaliado_por,tipo",
+        });
+
       if (error) throw error;
 
+      toast.success("Avaliação salva com sucesso.");
+
       setAvaliarDe(null);
+      const novoHoje = new Date();
       setFormAval({
         nota: 5,
         pontualidade: 5,
@@ -413,13 +584,15 @@ export default function Equipas({ obraId }: { obraId: string }) {
         comportamento: 5,
         seguranca: 5,
         comentario: "",
-        tipo: "mensal",
-        mes: hoje.getMonth() + 1,
-        ano: hoje.getFullYear(),
+        tipo: "final",
+        mes: novoHoje.getMonth() + 1,
+        ano: novoHoje.getFullYear(),
       });
+
       await load();
     } catch (e) {
       console.error("❌ Erro ao salvar avaliação:", e);
+      toast.error("Erro ao salvar avaliação.");
     } finally {
       setSalvandoAval(false);
     }
@@ -431,7 +604,6 @@ export default function Equipas({ obraId }: { obraId: string }) {
 
   return (
     <div className="relative w-full">
-      {/* utilitários de responsividade e modal */}
       <style>{`
 @media (max-width: 640px){
   .box { border-radius: 14px !important; padding: 14px !important; }
@@ -485,9 +657,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
           </div>
 
           {/* Equipa principal */}
-          <div
-            className={`rounded-xl sm:rounded-2xl border shadow-sm p-4 sm:p-6 ${cardBase}`}
-          >
+          <div className={`rounded-xl sm:rounded-2xl border shadow-sm p-4 sm:p-6 ${cardBase}`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
               <h3
                 className={`font-semibold flex items-center gap-2 text-sm sm:text-base ${
@@ -517,34 +687,28 @@ export default function Equipas({ obraId }: { obraId: string }) {
 
             {/* Filtros */}
             <div className="flex flex-wrap items-center gap-2 mb-5">
-              {["Todos", ...new Set(equipe.map((e) => e.funcao || "Sem função"))].map(
-                (f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFiltroFuncao(f)}
-                    className={`px-3 py-1 rounded-full text-xs sm:text-sm border transition ${
-                      filtroFuncao === f
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : `${
-                            isDark
-                              ? "bg-[#121926] border-zinc-700 text-zinc-300 hover:bg-blue-500/10"
-                              : "bg-white border-zinc-300 text-zinc-700 hover:bg-blue-50"
-                          }`
-                    }`}
-                  >
-                    {f}
-                  </button>
-                )
-              )}
+              {["Todos", ...new Set(equipe.map((e) => e.funcao || "Sem função"))].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFiltroFuncao(f)}
+                  className={`px-3 py-1 rounded-full text-xs sm:text-sm border transition ${
+                    filtroFuncao === f
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : `${
+                          isDark
+                            ? "bg-[#121926] border-zinc-700 text-zinc-300 hover:bg-blue-500/10"
+                            : "bg-white border-zinc-300 text-zinc-700 hover:bg-blue-50"
+                        }`
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
             </div>
 
             {/* Lista */}
             {loading ? (
-              <div
-                className={`${
-                  isDark ? "text-zinc-400" : "text-zinc-500"
-                } text-sm`}
-              >
+              <div className={`${isDark ? "text-zinc-400" : "text-zinc-500"} text-sm`}>
                 Carregando...
               </div>
             ) : equipaFiltrada.length ? (
@@ -552,11 +716,10 @@ export default function Equipas({ obraId }: { obraId: string }) {
                 {equipaFiltrada.map((e) => {
                   const pid = e.profissional?.id || "";
                   const media = medias[pid] ?? 0;
+
                   const fotoSrc =
-                    e.profissional?.foto_url ||
-                    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                      e.profissional?.nome || "?"
-                    )}`;
+                    e.profissional?.foto_url || initialsFallbackUrl(e.profissional?.nome);
+
                   return (
                     <motion.div
                       key={e.id}
@@ -575,6 +738,10 @@ export default function Equipas({ obraId }: { obraId: string }) {
                           src={fotoSrc}
                           alt={e.profissional?.nome || "Profissional"}
                           className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-emerald-400/40"
+                          onError={(ev) => {
+                            (ev.currentTarget as HTMLImageElement).src =
+                              initialsFallbackUrl(e.profissional?.nome);
+                          }}
                         />
                         <div className="min-w-0 flex-1">
                           <div
@@ -617,11 +784,13 @@ export default function Equipas({ obraId }: { obraId: string }) {
                         </button>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setAvaliarDe(e.profissional || null)}
-                            className="text-xs sm:text-sm px-2.5 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white"
+                            onClick={() => abrirModalAvaliacao(e.profissional || null)}
+                            className="group text-[11px] sm:text-xs md:text-sm inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-yellow-400/10 text-yellow-600 dark:text-yellow-300 border border-yellow-400/40 hover:bg-yellow-400/20 hover:border-yellow-400 transition-all"
                           >
-                            Avaliar
+                            <Star className="w-3 h-3 sm:w-4 sm:h-4 fill-yellow-400 group-hover:scale-110 transition-transform" />
+                            <span>Avaliar</span>
                           </button>
+
                           <button
                             onClick={() =>
                               setProcessing(e.id) ||
@@ -648,11 +817,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                 })}
               </div>
             ) : (
-              <div
-                className={`${
-                  isDark ? "text-zinc-400" : "text-zinc-500"
-                } text-sm`}
-              >
+              <div className={`${isDark ? "text-zinc-400" : "text-zinc-500"} text-sm`}>
                 Nenhum profissional vinculado a esta obra.
               </div>
             )}
@@ -693,9 +858,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
             />
             <motion.aside
               className={`fixed top-0 right-0 h-full w-full sm:w-[400px] border-l shadow-2xl p-4 sm:p-6 overflow-y-auto z-40 ${
-                isDark
-                  ? "bg-[#121926] border-zinc-700"
-                  : "bg-white border-zinc-300"
+                isDark ? "bg-[#121926] border-zinc-700" : "bg-white border-zinc-300"
               }`}
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
@@ -720,21 +883,14 @@ export default function Equipas({ obraId }: { obraId: string }) {
               </div>
 
               {loading ? (
-                <div
-                  className={`${
-                    isDark ? "text-zinc-400" : "text-zinc-500"
-                  } text-sm`}
-                >
+                <div className={`${isDark ? "text-zinc-400" : "text-zinc-500"} text-sm`}>
                   Carregando...
                 </div>
               ) : candidaturas.length ? (
                 <div className="flex flex-col gap-3">
                   {candidaturas.map((c) => {
                     const fotoSrc =
-                      c.profissional?.foto_url ||
-                      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                        c.profissional?.nome || "?"
-                      )}`;
+                      c.profissional?.foto_url || initialsFallbackUrl(c.profissional?.nome);
                     return (
                       <motion.div
                         key={c.id}
@@ -754,6 +910,10 @@ export default function Equipas({ obraId }: { obraId: string }) {
                             src={fotoSrc}
                             alt={c.profissional?.nome || "Profissional"}
                             className="w-10 h-10 rounded-full object-cover border-2 border-blue-400/40"
+                            onError={(ev) => {
+                              (ev.currentTarget as HTMLImageElement).src =
+                                initialsFallbackUrl(c.profissional?.nome);
+                            }}
                           />
                           <div className="flex-1 min-w-0">
                             <div
@@ -797,11 +957,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                   })}
                 </div>
               ) : (
-                <div
-                  className={`${
-                    isDark ? "text-zinc-400" : "text-zinc-500"
-                  } text-sm`}
-                >
+                <div className={`${isDark ? "text-zinc-400" : "text-zinc-500"} text-sm`}>
                   Nenhuma candidatura pendente.
                 </div>
               )}
@@ -836,14 +992,14 @@ export default function Equipas({ obraId }: { obraId: string }) {
 
               <div className="flex flex-col items-center text-center space-y-3 mt-6">
                 <img
-                  src={
-                    perfilAberto.foto_url ||
-                    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                      perfilAberto.nome || "?"
-                    )}`
-                  }
+                  src={perfilAberto.foto_url || initialsFallbackUrl(perfilAberto.nome)}
                   alt={perfilAberto.nome}
                   className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-2 border-emerald-400/40 shadow-md"
+                  onError={(ev) => {
+                    (ev.currentTarget as HTMLImageElement).src = initialsFallbackUrl(
+                      perfilAberto.nome
+                    );
+                  }}
                 />
                 <h2
                   className={`text-base sm:text-lg font-semibold ${
@@ -872,16 +1028,16 @@ export default function Equipas({ obraId }: { obraId: string }) {
                 }`}
               >
                 <p>
-                  <strong>NIF:</strong> {perfilAberto.nif}
+                  <strong>NIF:</strong> {perfilAberto.nif ?? "—"}
                 </p>
                 <p>
-                  <strong>Categoria:</strong> {perfilAberto.categoria}
+                  <strong>Categoria:</strong> {perfilAberto.categoria ?? "—"}
                 </p>
                 <p>
-                  <strong>Sexo:</strong> {perfilAberto.sexo}
+                  <strong>Sexo:</strong> {perfilAberto.sexo ?? "—"}
                 </p>
                 <p>
-                  <strong>Seg. Social:</strong> {perfilAberto.seguranca_social}
+                  <strong>Seg. Social:</strong> {perfilAberto.seguranca_social ?? "—"}
                 </p>
               </div>
 
@@ -908,9 +1064,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
               <div className="mt-5 flex flex-wrap justify-center gap-2 sm:gap-3">
                 <button
                   onClick={() =>
-                    navigate(
-                      `/empresa/documentacao/profissionais/${perfilAberto.id}`
-                    )
+                    navigate(`/empresa/documentacao/profissionais/${perfilAberto.id}`)
                   }
                   className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm flex items-center gap-1.5 transition"
                 >
@@ -934,150 +1088,181 @@ export default function Equipas({ obraId }: { obraId: string }) {
         )}
       </AnimatePresence>
 
-      {/* MODAL DE AVALIAÇÃO – simples: estrelas + comentário */}
+      {/* MODAL AVALIAÇÃO */}
       <AnimatePresence>
         {avaliarDe && (
           <motion.div
-            className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setAvaliarDe(null)}
           >
             <motion.div
-              initial={{ y: 24, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 24, opacity: 0 }}
-              className={`modal-mobile sm:modal-desktop border ${cardBase} ${
-                isDark ? "text-gray-200" : "text-gray-800"
-              } flex flex-col p-0`}
+              initial={{ opacity: 0, scale: 0.9, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 8 }}
+              transition={{ type: "spring", stiffness: 260, damping: 20 }}
+              className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden ${
+                isDark ? "bg-[#020617] text-gray-100" : "bg-white text-gray-900"
+              }`}
               role="dialog"
               aria-modal="true"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <div
-                className={`modal-header flex items-center justify-between ${
-                  isDark ? "bg-[#131a25]" : "bg-zinc-50"
-                } border-b border-black/5 dark:border-white/5`}
+                className={`flex items-center justify-between px-5 py-4 ${
+                  isDark
+                    ? "bg-gradient-to-r from-slate-900 to-slate-800 border-b border-white/5"
+                    : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-b border-white/20"
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <img
-                    src={
-                      avaliarDe.foto_url ||
-                      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                        avaliarDe.nome || "?"
-                      )}`
-                    }
-                    alt={avaliarDe.nome}
-                    className="w-9 h-9 rounded-full object-cover border border-black/10 dark:border-white/10"
-                  />
-                  <div>
-                    <h4 className="text-sm sm:text-base font-semibold">
+                  <div className="h-11 w-11 rounded-full overflow-hidden border-2 border-white/70 bg-white/10 flex items-center justify-center">
+                    <img
+                      src={avaliarDe.foto_url || initialsFallbackUrl(avaliarDe.nome)}
+                      alt={avaliarDe.nome}
+                      className="h-full w-full object-cover"
+                      onError={(ev) => {
+                        (ev.currentTarget as HTMLImageElement).src =
+                          initialsFallbackUrl(avaliarDe.nome);
+                      }}
+                    />
+                  </div>
+                  <div className="leading-tight">
+                    <div className="text-xs opacity-80">{`Avaliação geral • ${String(
+                      formAval.mes
+                    ).padStart(2, "0")}/${formAval.ano}`}</div>
+                    <div className="text-sm sm:text-base font-semibold">
                       Avaliar {avaliarDe.nome}
-                    </h4>
-                    <p className="text-[11px] sm:text-xs opacity-70">
-                      Avaliação geral • {String(formAval.mes).padStart(2, "0")}/
-                      {formAval.ano}
-                    </p>
+                    </div>
                   </div>
                 </div>
+
                 <button
                   aria-label="Fechar"
                   onClick={() => setAvaliarDe(null)}
-                  className="p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+                  className={`rounded-full p-1.5 ${
+                    isDark
+                      ? "hover:bg-white/10 text-gray-300"
+                      : "hover:bg-white/20 text-white"
+                  }`}
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Corpo simples */}
-              <div className="modal-body bg-transparent">
-                <div className="space-y-4 sm:space-y-5">
-                  {/* Estrelas */}
-                  <div
-                    className={`rounded-xl border px-4 py-3 sm:px-5 sm:py-4 ${
-                      isDark ? "bg-[#111827]/70 border-white/10" : "bg-white border-zinc-200"
-                    }`}
-                  >
-                    <p className="text-sm font-medium mb-2">
-                      Nota geral do profissional
-                    </p>
+              {/* Corpo */}
+              <div className="px-5 pt-4 pb-5 space-y-4">
+                {/* Nota */}
+                <div
+                  className={`rounded-xl border px-4 py-3 sm:px-5 sm:py-4 ${
+                    isDark
+                      ? "bg-slate-900/70 border-slate-700"
+                      : "bg-slate-50 border-slate-200"
+                  }`}
+                >
+                  <p className="text-sm font-medium mb-1.5">Nota geral do profissional</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Clique nas estrelas para definir a avaliação.
+                  </p>
+
+                  {carregandoAval ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      A carregar avaliação…
+                    </div>
+                  ) : (
                     <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-1">
                       {[1, 2, 3, 4, 5].map((n) => (
                         <button
                           key={n}
                           type="button"
-                          onClick={() =>
-                            setFormAval((prev) => ({ ...prev, nota: n }))
-                          }
+                          onClick={() => setFormAval((prev) => ({ ...prev, nota: n }))}
                           className="p-1"
                         >
                           <Star
-                            className={`w-6 h-6 sm:w-7 sm:h-7 ${
+                            className={`w-7 h-7 sm:w-8 sm:h-8 ${
                               n <= formAval.nota
-                                ? "text-yellow-400 fill-yellow-400 drop-shadow-[0_0_4px_rgba(250,204,21,0.4)]"
-                                : "text-zinc-500"
+                                ? "text-yellow-400 fill-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.5)]"
+                                : "text-gray-300 dark:text-slate-600"
                             }`}
                           />
                         </button>
                       ))}
-                      <span className="ml-2 text-sm opacity-75 min-w-[40px] text-right">
+                      <span className="ml-2 text-sm font-medium min-w-[48px] text-right">
                         {formAval.nota} / 5
                       </span>
                     </div>
-                  </div>
+                  )}
+                </div>
 
-                  {/* Comentário */}
-                  <div
-                    className={`rounded-xl border px-4 py-3 sm:px-5 sm:py-4 ${
-                      isDark ? "bg-[#111827]/70 border-white/10" : "bg-white border-zinc-200"
-                    }`}
-                  >
-                    <label className="text-sm font-medium">
-                      Comentário (opcional)
-                    </label>
-                    <textarea
-                      rows={4}
-                      value={formAval.comentario}
-                      onChange={(e) =>
-                        setFormAval((prev) => ({
-                          ...prev,
-                          comentario: e.target.value,
-                        }))
-                      }
-                      placeholder="Escreva um feedback rápido sobre desempenho, atitude, comunicação…"
-                      className="mt-2 w-full border rounded-lg px-3 py-2 bg-transparent resize-y text-sm border-black/10 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
-                    />
-                    <p className="mt-1 text-[11px] opacity-60">
-                      Este comentário fica disponível no histórico de avaliações do
-                      profissional.
-                    </p>
+                {/* Comentário */}
+                <div
+                  className={`rounded-xl border px-4 py-3 sm:px-5 sm:py-4 ${
+                    isDark
+                      ? "bg-slate-900/70 border-slate-700"
+                      : "bg-white border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium">Comentário</span>
+                    <span className="text-[11px] text-amber-600 dark:text-amber-300">
+                      Opcional, obrigatório para nota ≤ 3
+                    </span>
                   </div>
+                  <textarea
+                    rows={4}
+                    value={formAval.comentario}
+                    onChange={(e) =>
+                      setFormAval((prev) => ({
+                        ...prev,
+                        comentario: e.target.value,
+                      }))
+                    }
+                    placeholder="Escreva um feedback rápido sobre desempenho, atitude, comunicação…"
+                    className={`mt-2 w-full rounded-lg px-3 py-2 text-sm resize-y outline-none border ${
+                      isDark
+                        ? "bg-slate-950/60 border-slate-700 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/40"
+                        : "bg-slate-50 border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    }`}
+                    disabled={carregandoAval || salvandoAval}
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    Este comentário fica disponível no histórico interno de avaliações.
+                  </p>
                 </div>
               </div>
 
               {/* Footer */}
               <div
-                className={`modal-footer flex justify-end gap-3 border-t border-black/5 dark:border-white/5 ${
-                  isDark ? "bg-[#131a25]" : "bg-zinc-50"
+                className={`flex items-center justify-end gap-3 px-5 py-3 border-t ${
+                  isDark
+                    ? "border-slate-800 bg-slate-950/80"
+                    : "border-slate-200 bg-slate-50"
                 }`}
               >
                 <button
                   onClick={() => setAvaliarDe(null)}
-                  className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm"
+                  disabled={salvandoAval}
+                  className={`px-4 py-2 rounded-full text-sm font-medium ${
+                    isDark
+                      ? "bg-slate-800 text-gray-200 hover:bg-slate-700"
+                      : "bg-white text-gray-700 border border-slate-200 hover:bg-slate-100"
+                  }`}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSalvarAvaliacao}
-                  disabled={salvandoAval}
-                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg flex items-center gap-2 text-sm disabled:opacity-60"
+                  disabled={salvandoAval || carregandoAval}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold text-slate-900 bg-yellow-400 hover:bg-yellow-300 shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {salvandoAval ? (
-                    <Loader2 className="animate-spin w-4 h-4" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <Star className="w-4 h-4" />
+                    <Star className="w-4 h-4 fill-current" />
                   )}
                   Salvar avaliação
                 </button>
@@ -1087,7 +1272,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
         )}
       </AnimatePresence>
 
-      {/* MODAL ADICIONAR */}
+      {/* MODAL ADD */}
       <AnimatePresence>
         {abrirAdd && (
           <motion.div
@@ -1109,9 +1294,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div
-                className={`modal-header ${cardBase} flex items-center justify-between`}
-              >
+              <div className={`modal-header ${cardBase} flex items-center justify-between`}>
                 <h4 className="text-base font-semibold">Adicionar à Equipe</h4>
                 <button
                   aria-label="Fechar"
@@ -1124,7 +1307,6 @@ export default function Equipas({ obraId }: { obraId: string }) {
 
               {/* Body */}
               <div className="modal-body">
-                {/* Busca */}
                 <div className={`border rounded-xl p-3 ${cardBase}`}>
                   <div className="flex items-center gap-2">
                     <Search className="w-4 h-4 opacity-60" />
@@ -1137,25 +1319,18 @@ export default function Equipas({ obraId }: { obraId: string }) {
                   </div>
                 </div>
 
-                {/* Lista */}
                 <div className="mt-3">
                   {carregandoLista ? (
                     <div className="flex justify-center py-6">
                       <Loader2 className="animate-spin text-gray-400" />
                     </div>
                   ) : profissionais.length === 0 ? (
-                    <div className="text-sm opacity-70">
-                      Nenhum profissional encontrado.
-                    </div>
+                    <div className="text-sm.opacity-70">Nenhum profissional encontrado.</div>
                   ) : (
                     <ul className="divide-y divide-gray-700/20 dark:divide-gray-700 rounded-xl overflow-hidden border border-gray-200/40 dark:border-gray-700/50">
                       {profissionais.map((p) => {
                         const ativo = selecionado?.id === p.id;
-                        const fotoSrc =
-                          p.foto_url ||
-                          `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                            p.nome || "?"
-                          )}`;
+                        const fotoSrc = p.foto_url || initialsFallbackUrl(p.nome);
                         return (
                           <li
                             key={p.id}
@@ -1168,11 +1343,13 @@ export default function Equipas({ obraId }: { obraId: string }) {
                               src={fotoSrc}
                               alt={p.nome}
                               className="w-10 h-10 rounded-full object-cover border"
+                              onError={(ev) => {
+                                (ev.currentTarget as HTMLImageElement).src =
+                                  initialsFallbackUrl(p.nome);
+                              }}
                             />
                             <div className="min-w-0 flex-1">
-                              <div className="text-sm font-medium truncate">
-                                {p.nome}
-                              </div>
+                              <div className="text-sm font-medium truncate">{p.nome}</div>
                               <div className="text-xs opacity-70 truncate">
                                 {p.funcao || p.area || "—"}
                               </div>
@@ -1189,7 +1366,6 @@ export default function Equipas({ obraId }: { obraId: string }) {
                   )}
                 </div>
 
-                {/* Form complementar */}
                 <div className="grid gap-3 sm:grid-cols-3 mt-4">
                   <div className="sm:col-span-1">
                     <label className="text-xs opacity-70">Status</label>
@@ -1211,9 +1387,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                     <label className="text-xs opacity-70">Função</label>
                     <input
                       value={formAdd.funcao}
-                      onChange={(e) =>
-                        setFormAdd({ ...formAdd, funcao: e.target.value })
-                      }
+                      onChange={(e) => setFormAdd({ ...formAdd, funcao: e.target.value })}
                       placeholder="Ex.: Eletricista"
                       className="mt-1 w-full border rounded-lg px-3 py-2 bg-transparent"
                     />
@@ -1222,9 +1396,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                     <label className="text-xs opacity-70">Experiência</label>
                     <input
                       value={formAdd.experiencia}
-                      onChange={(e) =>
-                        setFormAdd({ ...formAdd, experiencia: e.target.value })
-                      }
+                      onChange={(e) => setFormAdd({ ...formAdd, experiencia: e.target.value })}
                       placeholder="Ex.: 2–3 anos"
                       className="mt-1 w-full border rounded-lg px-3 py-2 bg-transparent"
                     />
@@ -1232,10 +1404,7 @@ export default function Equipas({ obraId }: { obraId: string }) {
                 </div>
               </div>
 
-              {/* Footer */}
-              <div
-                className={`modal-footer ${cardBase} flex justify-end gap-3`}
-              >
+              <div className={`modal-footer ${cardBase} flex justify-end gap-3`}>
                 <button
                   onClick={() => setAbrirAdd(false)}
                   className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg"

@@ -13,6 +13,10 @@ import {
   Eye,
   Loader2,
   Calendar,
+  Trash2,
+  CheckSquare,
+  Square,
+  X,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -68,6 +72,12 @@ export default function ObrasAtivas() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [showBadge, setShowBadge] = useState<boolean>(false);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // 🗑️ modo de exclusão em massa
+  const [selecionando, setSelecionando] = useState(false);
+  const [obrasSelecionadas, setObrasSelecionadas] = useState<string[]>([]);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deletando, setDeletando] = useState(false);
 
   // Detecta se veio com ?novaObra=... (ou reaproveita sessionStorage)
   useEffect(() => {
@@ -144,15 +154,15 @@ export default function ObrasAtivas() {
             const fim = obra.data_fim ? new Date(obra.data_fim) : null;
 
             // Status calculado com base nas datas + status da obra (se existir)
-            let statusCalculado: "A iniciar" | "Em andamento" | "Concluída" | "Atrasada" =
-              "A iniciar";
+            let statusCalculado:
+              | "A iniciar"
+              | "Em andamento"
+              | "Concluída"
+              | "Atrasada" = "A iniciar";
 
             if (fim && hoje > fim) {
               // Se já passou da data fim:
-              if (
-                obra.status &&
-                obra.status.toLowerCase() === "concluida"
-              ) {
+              if (obra.status && obra.status.toLowerCase() === "concluida") {
                 statusCalculado = "Concluída";
               } else {
                 statusCalculado = "Atrasada";
@@ -204,7 +214,7 @@ export default function ObrasAtivas() {
     fetchObras();
 
     // Realtime para obras
-    const ch = supabase
+    const chObras = supabase
       .channel("obras_realtime")
       .on(
         "postgres_changes",
@@ -215,9 +225,23 @@ export default function ObrasAtivas() {
       )
       .subscribe();
 
+    // 🔴 NOVO: realtime também em profissionais_obras
+    const chProfissionaisObras = supabase
+      .channel("profissionais_obras_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profissionais_obras" },
+        () => {
+          // sempre que alguém entra/sai da obra, recarrega contagens
+          fetchObras();
+        }
+      )
+      .subscribe();
+
     return () => {
       cancelled = true;
-      supabase.removeChannel(ch);
+      supabase.removeChannel(chObras);
+      supabase.removeChannel(chProfissionaisObras);
     };
   }, [user?.id, highlightId]);
 
@@ -301,9 +325,77 @@ export default function ObrasAtivas() {
     navigate(`/empresa/obras/ativas/${id}`, {
       state: { from: location.pathname + location.search },
     });
+  };
 
-    // Se a sua rota de detalhes for /company/obras/:id, use:
-    // navigate(`/company/obras/${id}`, { state: { from: location.pathname + location.search } });
+  /* =======================
+     Exclusão em massa
+  ======================= */
+
+  const toggleSelecionando = () => {
+    if (selecionando) {
+      // cancelar modo seleção
+      setSelecionando(false);
+      setObrasSelecionadas([]);
+    } else {
+      setSelecionando(true);
+    }
+  };
+
+  const toggleObraSelecionada = (id: string) => {
+    if (!selecionando) return;
+    setObrasSelecionadas((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleExcluirClick = () => {
+    if (!selecionando) {
+      // primeiro clique: entra no modo seleção
+      setSelecionando(true);
+      return;
+    }
+
+    if (obrasSelecionadas.length === 0) {
+      window.alert("Selecione pelo menos uma obra para excluir.");
+      return;
+    }
+
+    setShowConfirmDelete(true);
+  };
+
+  const confirmarExclusao = async () => {
+    if (obrasSelecionadas.length === 0) return;
+
+    try {
+      setDeletando(true);
+      const { error } = await supabase
+        .from("obras")
+        .delete()
+        .in("id", obrasSelecionadas);
+
+      if (error) {
+        console.error("[Obras] erro ao excluir ->", error.message || error);
+        window.alert("Erro ao excluir as obras. Tente novamente.");
+        return;
+      }
+
+      // Atualiza lista local
+      setObras((prev) =>
+        prev.filter((obra) => !obrasSelecionadas.includes(obra.id))
+      );
+      setObrasSelecionadas([]);
+      setSelecionando(false);
+      setShowConfirmDelete(false);
+    } catch (e: any) {
+      console.error("[Obras] erro inesperado ao excluir ->", e?.message || e);
+      window.alert("Erro inesperado ao excluir as obras.");
+    } finally {
+      setDeletando(false);
+    }
+  };
+
+  const cancelarConfirmacao = () => {
+    setShowConfirmDelete(false);
   };
 
   return (
@@ -321,6 +413,53 @@ export default function ObrasAtivas() {
               concluídas e atrasadas.
             </p>
           </div>
+        </div>
+
+        {/* Ações topo: exclusão em massa */}
+        <div className="flex items-center gap-2 self-start sm:self-center">
+          {selecionando && (
+            <span className="text-[11px] md:text-xs text-gray-500 dark:text-gray-400">
+              {obrasSelecionadas.length > 0
+                ? `${obrasSelecionadas.length} obra(s) selecionada(s)`
+                : "Selecione as obras que deseja excluir"}
+            </span>
+          )}
+
+          {selecionando && (
+            <button
+              type="button"
+              onClick={toggleSelecionando}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[11px] md:text-xs
+              border-gray-300 dark:border-zinc-600 text-gray-600 dark:text-gray-300
+              hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
+            >
+              <X className="w-3 h-3" />
+              Cancelar
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleExcluirClick}
+            disabled={deletando}
+            className={`inline-flex items-center gap-1.5 px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[11px] md:text-xs font-medium transition
+              ${
+                selecionando
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50"
+              } ${
+              deletando
+                ? "opacity-70 cursor-not-allowed"
+                : "cursor-pointer"
+            }`}
+          >
+            <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            {selecionando
+              ? deletando
+                ? "Excluindo..."
+                : "Excluir selecionadas"
+              : "Excluir obras"}
+          </button>
         </div>
       </div>
 
@@ -355,7 +494,9 @@ export default function ObrasAtivas() {
           <motion.div
             key={i}
             whileHover={{ scale: 1.02 }}
-            className="bg-white dark:bg-[#1e2a3a] border border-gray-100 dark:border-zinc-700 rounded-xl md:rounded-2xl shadow-sm p-3 md:p-5 flex items-center gap-2 md:gap-3"
+            className={`bg-white dark:bg-[#1e2a3a] border border-gray-100 dark:border-zinc-700 rounded-xl md:rounded-2xl shadow-sm p-3 md:p-5 flex items-center gap-2 md:gap-3 ${
+              i === 2 ? "col-span-2 md:col-span-1" : ""
+            }`}
           >
             {card.icon}
             <div className="min-w-0">
@@ -374,8 +515,9 @@ export default function ObrasAtivas() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white dark:bg-[#1e2a3a] border border-gray-100 dark:border-zinc-700 rounded-xl md:rounded-2xl shadow-md p-3 md:mb-8 mb-6">
-        <div className="relative w-full mb-2 md:mb-4">
+      <div className="bg-white dark:bg-[#1e2a3a] border border-gray-100 dark:border-zinc-700 rounded-xl md:rounded-2xl shadow-md p-3 md:4 md:mb-8 mb-6">
+        {/* Busca */}
+        <div className="relative w-full mb-3 md:mb-4">
           <Search className="absolute left-3 top-2.5 md:top-3.5 text-gray-400 w-4 h-4" />
           <input
             type="text"
@@ -388,7 +530,8 @@ export default function ObrasAtivas() {
           />
         </div>
 
-        <div className="flex items-center gap-2 md:gap-4 flex-wrap">
+        {/* Status + cidade */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span className="text-[11px] md:text-xs text-gray-500 dark:text-gray-400">
@@ -396,24 +539,28 @@ export default function ObrasAtivas() {
             </span>
           </div>
 
-          {["Todos", "A iniciar", "Em andamento", "Concluída", "Atrasada"].map(
-            (s) => (
-              <button
-                key={s}
-                onClick={() => setFiltroStatus(s as any)}
-                className={`px-2.5 md:px-3 py-1 md:py-1.5 rounded-full text-[11px] md:text-xs border transition
-                ${
-                  filtroStatus === s
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                    : "bg-gray-50 dark:bg-[#16202e] text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700"
-                }`}
-              >
-                {s}
-              </button>
-            )
-          )}
+          {/* botões de status */}
+          <div className="flex flex-wrap gap-2">
+            {["Todos", "A iniciar", "Em andamento", "Concluída", "Atrasada"].map(
+              (s) => (
+                <button
+                  key={s}
+                  onClick={() => setFiltroStatus(s as any)}
+                  className={`px-2.5 md:px-3 py-1 md:py-1.5 rounded-full text-[11px] md:text-xs border transition
+                  ${
+                    filtroStatus === s
+                      ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                      : "bg-gray-50 dark:bg-[#16202e] text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-700"
+                  }`}
+                >
+                  {s}
+                </button>
+              )
+            )}
+          </div>
 
-          <div className="ml-auto w-full md:w-64">
+          {/* cidade */}
+          <div className="md:ml-auto w-full md:w-64">
             <select
               className="w-full border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 md:py-2 text-xs md:text-sm
                          bg-white dark:bg-[#1b2332] text-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
@@ -439,6 +586,7 @@ export default function ObrasAtivas() {
           <div className="grid gap-3 md:gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {obrasFiltradas.map((obra) => {
               const isNew = obra.id === highlightId;
+              const isSelected = obrasSelecionadas.includes(obra.id);
 
               const inicioFormatado = formatDate(obra.data_inicio);
               const fimFormatado = formatDate(obra.data_fim);
@@ -454,9 +602,13 @@ export default function ObrasAtivas() {
                     "relative bg-white dark:bg-[#1b2332] border rounded-xl md:rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 p-3 md:p-6",
                     isNew
                       ? "border-blue-400 ring-2 ring-blue-400 shadow-[0_0_18px_rgba(37,99,235,0.35)] dark:shadow-[0_0_18px_#2563EB99] animate-pulse"
+                      : "",
+                    isSelected
+                      ? "border-red-400 ring-2 ring-red-400/70"
                       : "border-gray-100 dark:border-zinc-700",
                   ].join(" ")}
                 >
+                  {/* badge nova obra */}
                   {isNew && showBadge && (
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
@@ -467,6 +619,23 @@ export default function ObrasAtivas() {
                     >
                       ✨ Nova obra
                     </motion.div>
+                  )}
+
+                  {/* checkbox seleção */}
+                  {selecionando && (
+                    <button
+                      type="button"
+                      onClick={() => toggleObraSelecionada(obra.id)}
+                      className="absolute top-3 left-3 inline-flex items-center justify-center rounded-md p-1 
+                        bg-white/90 dark:bg-[#101827]/90 border border-gray-200 dark:border-zinc-700
+                        hover:bg-gray-50 dark:hover:bg-zinc-800 transition"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-red-500" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                      )}
+                    </button>
                   )}
 
                   <div className="flex items-start justify-between mb-2 md:mb-3">
@@ -483,12 +652,14 @@ export default function ObrasAtivas() {
                       </p>
                     </div>
 
-                    <button
-                      onClick={() => onOpenObra(obra.id)}
-                      className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs md:text-sm font-medium hover:underline"
-                    >
-                      <Eye size={14} className="md:size-[15px]" /> Ver
-                    </button>
+                    {!selecionando && (
+                      <button
+                        onClick={() => onOpenObra(obra.id)}
+                        className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs md:text-sm font-medium hover:underline"
+                      >
+                        <Eye size={14} className="md:size-[15px]" /> Ver
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between text-gray-700 dark:text-gray-300 mb-1.5 md:mb-2">
@@ -537,6 +708,60 @@ export default function ObrasAtivas() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de confirmação de exclusão */}
+      {showConfirmDelete && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            className="bg-white dark:bg-[#1b2332] rounded-2xl shadow-2xl p-5 md:p-6 w-[90%] max-w-md border border-gray-100 dark:border-zinc-700"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-sm md:text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                  Tem certeza que deseja excluir?
+                </h2>
+                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Você está prestes a excluir{" "}
+                  <span className="font-semibold text-gray-800 dark:text-gray-100">
+                    {obrasSelecionadas.length} obra(s)
+                  </span>
+                  . Esta ação{" "}
+                  <span className="font-semibold text-red-500">
+                    não pode ser desfeita
+                  </span>
+                  .
+                </p>
+
+                <div className="flex justify-end gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={cancelarConfirmacao}
+                    disabled={deletando}
+                    className="px-3 md:px-4 py-1.5 rounded-full border border-gray-300 dark:border-zinc-600 
+                      text-xs md:text-sm text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmarExclusao}
+                    disabled={deletando}
+                    className="px-3 md:px-4 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-xs md:text-sm font-semibold text-white transition disabled:opacity-70"
+                  >
+                    {deletando ? "Excluindo..." : "Excluir definitivamente"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

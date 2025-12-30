@@ -1,6 +1,8 @@
 // src/components/professional/CentralDeNavegacaoProfissional/Relatorios/HorasTrabalhadas.tsx
 // ============================================================================
-// ⏱️ HORAS TRABALHADAS – dados reais + estado vazio bonitinho
+// ⏱️ HORAS TRABALHADAS – dados reais + estado vazio
+// - Usa o AUTH UID real (auth.users.id) como profissional_id (igual Presença)
+// - View esperada: public.horas_trabalhadas_profissional_view
 // ============================================================================
 
 import { useEffect, useState } from "react";
@@ -25,12 +27,11 @@ import {
 } from "recharts";
 import { motion } from "framer-motion";
 
-// Linha vinda da view do Supabase
 type LinhaViewHoras = {
   obra_nome: string | null;
   obra_status: string | null;
-  data: string; // date
-  horas: string | number | null; // 👈 pode vir string
+  data: string; // date (YYYY-MM-DD)
+  horas: string | number | null;
 };
 
 type RegistroHoras = {
@@ -48,6 +49,16 @@ type ResumoHoras = {
   media_dia: number;
 };
 
+// Formata 1.9283333333333332 -> "1h56m"
+function formatHorasHumanas(valor: number) {
+  const totalMin = Math.round((Number(valor) || 0) * 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+
+  if (h <= 0) return `${m}m`;
+  return `${h}h${m.toString().padStart(2, "0")}m`;
+}
+
 export default function HorasTrabalhadas() {
   const { user } = useAuth();
   const [resumo, setResumo] = useState<ResumoHoras | null>(null);
@@ -59,10 +70,40 @@ export default function HorasTrabalhadas() {
     typeof window !== "undefined" &&
     document.documentElement.classList.contains("dark");
 
+  function setResumoZero() {
+    const resumoZerado: ResumoHoras = {
+      total_mes: 0,
+      meta_mes: 180,
+      percentual: 0,
+      obra_destaque: "—",
+      media_dia: 0,
+    };
+    setResumo(resumoZerado);
+    setDetalhes([]);
+    setGrafico([]);
+  }
+
+  async function resolveAuthUid(): Promise<string | null> {
+    // 1) Fonte mais confiável: JWT atual
+    const { data, error } = await supabase.auth.getUser();
+    if (!error && data?.user?.id) return data.user.id;
+
+    // 2) Fallback: teu AuthContext às vezes expõe auth_id
+    const fallback = (user as any)?.auth_id || user?.id || null;
+    return fallback ? String(fallback) : null;
+  }
+
   useEffect(() => {
     async function carregar() {
-      if (!user) return;
       setLoading(true);
+
+      const authUid = await resolveAuthUid();
+      if (!authUid) {
+        console.error("[HORAS TRABALHADAS] authUid não resolvido:", { user });
+        setResumoZero();
+        setLoading(false);
+        return;
+      }
 
       // limites do mês atual (YYYY-MM-DD)
       const hoje = new Date();
@@ -73,49 +114,33 @@ export default function HorasTrabalhadas() {
         .toISOString()
         .slice(0, 10);
 
+      console.log("[HORAS TRABALHADAS] authUid:", authUid);
+      console.log("[HORAS TRABALHADAS] range:", { inicioMes, fimMes });
+
       const { data, error } = await supabase
         .from("horas_trabalhadas_profissional_view")
         .select("obra_nome, obra_status, data, horas")
-        .eq("profissional_id", user.id)
+        .eq("profissional_id", authUid)
         .gte("data", inicioMes)
         .lte("data", fimMes);
 
       if (error) {
         console.error("[HORAS TRABALHADAS] erro ao buscar horas:", error);
-        const resumoZerado: ResumoHoras = {
-          total_mes: 0,
-          meta_mes: 180,
-          percentual: 0,
-          obra_destaque: "—",
-          media_dia: 0,
-        };
-        setResumo(resumoZerado);
-        setDetalhes([]);
-        setGrafico([]);
+        setResumoZero();
         setLoading(false);
         return;
       }
 
       const linhas = (data as LinhaViewHoras[]) || [];
+      console.log("[HORAS TRABALHADAS] linhas:", linhas.length, linhas);
 
       if (!linhas.length) {
-        const resumoZerado: ResumoHoras = {
-          total_mes: 0,
-          meta_mes: 180,
-          percentual: 0,
-          obra_destaque: "—",
-          media_dia: 0,
-        };
-        setResumo(resumoZerado);
-        setDetalhes([]);
-        setGrafico([]);
+        setResumoZero();
         setLoading(false);
         return;
       }
 
-      // helper pra garantir número
-      const getHoras = (l: LinhaViewHoras) =>
-        Number(l.horas ?? 0) || 0;
+      const getHoras = (l: LinhaViewHoras) => Number(l.horas ?? 0) || 0;
 
       // ---------- 1) Resumo do mês ----------
       const total_mes = linhas.reduce((sum, l) => sum + getHoras(l), 0);
@@ -123,7 +148,7 @@ export default function HorasTrabalhadas() {
       const meta_mes = 180;
       const percentual = meta_mes > 0 ? (total_mes / meta_mes) * 100 : 0;
 
-      // média por dia trabalhado
+      // média por dia trabalhado (dias com registro)
       const horasPorDia = new Map<string, number>();
       linhas.forEach((l) => {
         const dia = l.data;
@@ -171,21 +196,23 @@ export default function HorasTrabalhadas() {
       const obra_destaque =
         listaObras.length > 0 ? listaObras[0].obra_nome : "—";
 
-      const resumoCalculado: ResumoHoras = {
+      setResumo({
         total_mes,
         meta_mes,
         percentual,
         obra_destaque,
         media_dia,
-      };
+      });
 
-      // ---------- 2) Detalhes por obra (tabela) ----------
-      const detalhesCalculados: RegistroHoras[] = listaObras.map((o) => ({
-        obra_nome: o.obra_nome,
-        total_horas: o.total_horas,
-        ultimo_dia: new Date(o.ultimo_dia).toLocaleDateString("pt-PT"),
-        status: o.status,
-      }));
+      // ---------- 2) Detalhes por obra ----------
+      setDetalhes(
+        listaObras.map((o) => ({
+          obra_nome: o.obra_nome,
+          total_horas: o.total_horas,
+          ultimo_dia: new Date(o.ultimo_dia).toLocaleDateString("pt-PT"),
+          status: o.status,
+        }))
+      );
 
       // ---------- 3) Gráfico semanal ----------
       const horasPorSemana = new Map<number, number>();
@@ -193,24 +220,20 @@ export default function HorasTrabalhadas() {
       linhas.forEach((l) => {
         const d = new Date(l.data);
         const diaDoMes = d.getDate();
-        const semana = Math.floor((diaDoMes - 1) / 7) + 1; // 1..5
+        const semana = Math.floor((diaDoMes - 1) / 7) + 1;
         const horas = getHoras(l);
-        horasPorSemana.set(
-          semana,
-          (horasPorSemana.get(semana) || 0) + horas
-        );
+        horasPorSemana.set(semana, (horasPorSemana.get(semana) || 0) + horas);
       });
 
-      const graficoSemanal = Array.from(horasPorSemana.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([semana, horas]) => ({
-          semana: `Semana ${semana}`,
-          horas,
-        }));
+      setGrafico(
+        Array.from(horasPorSemana.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([semana, horas]) => ({
+            semana: `Semana ${semana}`,
+            horas,
+          }))
+      );
 
-      setResumo(resumoCalculado);
-      setDetalhes(detalhesCalculados);
-      setGrafico(graficoSemanal);
       setLoading(false);
     }
 
@@ -225,7 +248,10 @@ export default function HorasTrabalhadas() {
   if (loading)
     return (
       <div className="flex justify-center mt-20">
-        <Loader2 className="animate-spin text-blue-500 dark:text-blue-400" size={28} />
+        <Loader2
+          className="animate-spin text-blue-500 dark:text-blue-400"
+          size={28}
+        />
       </div>
     );
 
@@ -234,14 +260,13 @@ export default function HorasTrabalhadas() {
       <div className="p-6 text-center text-gray-500 dark:text-gray-400">
         <AlertCircle size={32} className="mx-auto mb-3 opacity-60" />
         Nenhum registro de horas encontrado. <br />
-        Comece a marcar presenças para acompanhar seu progresso diário 💪
+        Comece a marcar presenças para acompanhar seu progresso diário.
       </div>
     );
   }
 
   return (
     <div className={`p-4 md:p-6 ${textPrimary}`}>
-      {/* 🔹 Título */}
       <div className="flex items-center gap-3 mb-4 md:mb-6">
         <Clock4 className="text-blue-500 dark:text-blue-400" size={26} />
         <h1 className="text-xl md:text-2xl font-semibold">Horas Trabalhadas</h1>
@@ -251,13 +276,20 @@ export default function HorasTrabalhadas() {
         Veja abaixo o total de horas trabalhadas por obra, semana e mês.
       </p>
 
-      {/* 🔹 Cards de resumo */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-8 md:mb-10">
-        <Card titulo="Total do mês" valor={`${resumo.total_mes.toFixed(1)}h`} icone={<Clock4 />} />
-        <Card titulo="Meta mensal" valor={`${resumo.meta_mes}h`} icone={<CalendarDays />} />
+        <Card
+          titulo="Total do mês"
+          valor={formatHorasHumanas(resumo.total_mes)}
+          icone={<Clock4 />}
+        />
+        <Card
+          titulo="Meta mensal"
+          valor={`${resumo.meta_mes}h`}
+          icone={<CalendarDays />}
+        />
         <Card
           titulo="Atingido"
-          valor={`${resumo.percentual.toFixed(0)}%`}
+          valor={`${Math.round(resumo.percentual)}%`}
           icone={<TrendingUp />}
           cor={
             resumo.percentual >= 80
@@ -267,11 +299,19 @@ export default function HorasTrabalhadas() {
               : "text-red-500"
           }
         />
-        <Card titulo="Obra destaque" valor={resumo.obra_destaque} icone={<Building2 />} />
-        <Card titulo="Média por dia" valor={`${resumo.media_dia.toFixed(1)}h`} icone={<Clock4 />} />
+        <Card
+          titulo="Obra destaque"
+          valor={resumo.obra_destaque}
+          icone={<Building2 />}
+        />
+        <Card
+          titulo="Média por dia"
+          valor={formatHorasHumanas(resumo.media_dia)}
+          icone={<Clock4 />}
+          className="col-span-2 sm:col-span-3 lg:col-span-1"
+        />
       </div>
 
-      {/* 🔹 Gráfico semanal */}
       <div className={`${bgCard} ${borderCard} rounded-2xl p-4 md:p-6 mb-8 md:mb-10`}>
         <h2 className="text-base md:text-lg font-medium mb-4 flex items-center gap-2 text-blue-500 dark:text-blue-400">
           <TrendingUp size={18} /> Evolução semanal
@@ -285,9 +325,19 @@ export default function HorasTrabalhadas() {
                   strokeDasharray="3 3"
                   stroke={isDark ? "#1e293b" : "#e2e8f0"}
                 />
-                <XAxis dataKey="semana" stroke={isDark ? "#94a3b8" : "#475569"} />
-                <YAxis stroke={isDark ? "#94a3b8" : "#475569"} />
+                <XAxis
+                  dataKey="semana"
+                  stroke={isDark ? "#94a3b8" : "#475569"}
+                />
+                <YAxis
+                  stroke={isDark ? "#94a3b8" : "#475569"}
+                  tickFormatter={(v) => formatHorasHumanas(Number(v))}
+                />
                 <Tooltip
+                  formatter={(value: any) => {
+                    const n = Number(value ?? 0);
+                    return [formatHorasHumanas(n), "Horas"];
+                  }}
                   contentStyle={{
                     backgroundColor: isDark ? "#1e293b" : "#ffffff",
                     borderRadius: 8,
@@ -307,13 +357,13 @@ export default function HorasTrabalhadas() {
             <AlertCircle className="mb-2 opacity-70" />
             <p className="text-sm">Nenhum registro de horas neste mês ainda.</p>
             <p className="text-xs opacity-80">
-              Assim que você marcar presenças, sua evolução semanal aparecerá aqui.
+              Assim que você marcar presenças, sua evolução semanal aparecerá
+              aqui.
             </p>
           </div>
         )}
       </div>
 
-      {/* 🔹 Tabela detalhada */}
       <div className={`${bgCard} ${borderCard} rounded-2xl p-4 md:p-6`}>
         <h2 className="text-base md:text-lg font-medium mb-4 text-blue-500 dark:text-blue-400">
           Detalhes por obra
@@ -338,7 +388,9 @@ export default function HorasTrabalhadas() {
                     className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-100/60 dark:hover:bg-slate-700/40 transition"
                   >
                     <td className="py-2 px-2 font-medium">{obra.obra_nome}</td>
-                    <td className="py-2 px-2">{obra.total_horas.toFixed(1)}h</td>
+                    <td className="py-2 px-2">
+                      {formatHorasHumanas(obra.total_horas)}
+                    </td>
                     <td className="py-2 px-2 text-gray-500 dark:text-gray-400">
                       {obra.ultimo_dia}
                     </td>
@@ -362,37 +414,29 @@ export default function HorasTrabalhadas() {
           </div>
         )}
       </div>
-
-      {/* 🔹 Rodapé motivacional */}
-      <div className="mt-10 text-center">
-        <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-1">
-          ⏱️ Continue firme!
-        </p>
-        <p className="text-xs md:text-sm text-gray-600 dark:text-gray-500">
-          Cada presença registrada aumenta seu progresso e desempenho dentro da
-          Acrobatas.
-        </p>
-      </div>
     </div>
   );
 }
 
-// 🔹 Card reutilizável
 function Card({
   titulo,
   valor,
   icone,
   cor,
+  className,
 }: {
   titulo: string;
   valor: string | number;
   icone: any;
   cor?: string;
+  className?: string;
 }) {
   return (
     <motion.div
       whileHover={{ scale: 1.04 }}
-      className={`rounded-xl p-3 md:p-4 text-center shadow-sm hover:shadow-md transition bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700`}
+      className={`rounded-xl p-3 md:p-4 text-center shadow-sm hover:shadow-md transition bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 ${
+        className || ""
+      }`}
     >
       <div
         className={`flex justify-center mb-1 md:mb-2 ${
@@ -401,11 +445,12 @@ function Card({
       >
         {icone}
       </div>
-      <p className="text-gray-600 dark:text-gray-400 text-xs md:text-sm">{titulo}</p>
+      <p className="text-gray-600 dark:text-gray-400 text-xs md:text-sm">
+        {titulo}
+      </p>
       <p className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
         {valor}
       </p>
     </motion.div>
   );
 }
-

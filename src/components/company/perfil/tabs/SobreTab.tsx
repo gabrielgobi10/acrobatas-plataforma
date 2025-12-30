@@ -1,6 +1,6 @@
-// src/components/company/perfil/tabs/SobreTab.tsx
 "use client";
 
+import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Info,
@@ -24,32 +24,55 @@ import { supabase } from "@/lib/supabase";
 import type { PerfilView } from "@/components/company/ProfissionalDetalhes";
 
 /* =============================================================================
-   Tipos (dados extras do perfil) — nomes batendo com o schema real
+   Tipos (dados extras do perfil)
 ============================================================================= */
 type PerfilExtra = {
-  // Identificação
   nacionalidade?: string | null;
   idiomas?: string[] | null;
 
-  // Profissional
   area_principal?: string | null;
-  funcao_obra?: string | null;
   anos_experiencia?: number | null;
   nivel?: string | null;
   habilidades?: string[] | null;
 
-  // Disponibilidade
-  disponibilidade_text?: string | null; // "Imediata" | "1 semana" | ...
+  disponibilidade_text?: string | null;
 
-  // Localização & Mobilidade
   cidade_base?: string | null;
-  raio_deslocacao?: string | null; // ex.: "100 km"
+  raio_deslocacao?: string | null;
   pode_viajar?: boolean | null;
   pode_alojamento?: boolean | null;
 
-  // status visual (em obra/disponível)
   em_obra?: boolean | null;
 };
+
+/* =============================================================================
+   Helpers
+============================================================================= */
+function normalize(str: string) {
+  return (str || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
+function toTitleCase(str: string) {
+  const s = (str || "").trim();
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+function canonicalNivel(nivelRaw?: string | null): string | null {
+  if (!nivelRaw) return null;
+  const n = normalize(nivelRaw);
+  if (n === "aprendiz") return "Aprendiz";
+  if (n === "auxiliar") return "Auxiliar";
+  if (n === "profissional") return "Profissional";
+  if (n === "oficial") return "Oficial";
+  if (n === "encarregado") return "Encarregado";
+  if (n === "mestre") return "Mestre";
+  return toTitleCase(nivelRaw);
+}
 
 /* =============================================================================
    UI helpers
@@ -122,7 +145,9 @@ function NiveisModal({ open, onClose }: { open: boolean; onClose: () => void }) 
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-blue-500" />
-            <h3 className="text-base font-semibold">Níveis de Carreira — Acrobatas</h3>
+            <h3 className="text-base font-semibold">
+              Níveis de Carreira — Acrobatas
+            </h3>
           </div>
           <button
             onClick={onClose}
@@ -142,7 +167,9 @@ function NiveisModal({ open, onClose }: { open: boolean; onClose: () => void }) 
           <Card highlight>
             <div className="flex items-center justify-between">
               <div className="font-semibold">Mestre</div>
-              <Chip className="bg-gradient-to-r from-orange-500 to-red-600 text-white">1500+ pts</Chip>
+              <Chip className="bg-gradient-to-r from-orange-500 to-red-600 text-white">
+                1500+ pts
+              </Chip>
             </div>
             <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
               Referência técnica, alta autonomia, histórico sólido de entregas.
@@ -151,7 +178,9 @@ function NiveisModal({ open, onClose }: { open: boolean; onClose: () => void }) 
           <Card highlight>
             <div className="flex items-center justify-between">
               <div className="font-semibold">Encarregado</div>
-              <Chip className="bg-orange-500/10 text-orange-600 dark:bg-orange-400/10 dark:text-orange-300">1000–1499 pts</Chip>
+              <Chip className="bg-orange-500/10 text-orange-600 dark:bg-orange-400/10 dark:text-orange-300">
+                1000–1499 pts
+              </Chip>
             </div>
             <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
               Lidera frentes de trabalho e coordena equipes e prazos.
@@ -181,7 +210,8 @@ function NiveisModal({ open, onClose }: { open: boolean; onClose: () => void }) 
               <Chip>150–349 pts</Chip>
             </div>
             <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-              Em desenvolvimento, sob orientação de profissionais mais experientes.
+              Em desenvolvimento, sob orientação de profissionais mais
+              experientes.
             </p>
           </Card>
           <Card>
@@ -193,16 +223,6 @@ function NiveisModal({ open, onClose }: { open: boolean; onClose: () => void }) 
               Iniciando a carreira, foco em aprendizagem e segurança.
             </p>
           </Card>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
-          <div className="mb-1 font-semibold">Como evoluir</div>
-          <ul className="list-disc space-y-1 pl-5 text-slate-600 dark:text-slate-300">
-            <li>Concluir obras com boa avaliação.</li>
-            <li>Manter documentação válida e completa.</li>
-            <li>Evitar faltas, registrar presenças e relatórios em dia.</li>
-            <li>Participar de obras mais complexas e entregar com qualidade.</li>
-          </ul>
         </div>
       </div>
     </div>
@@ -216,108 +236,101 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
   const [extra, setExtra] = useState<PerfilExtra | null>(null);
   const [openNiveis, setOpenNiveis] = useState(false);
 
-  // Carrega dados do perfil com fallback robusto:
-  // 1) profissionais_view (leitura pública p/ empresas)
-  // 2) profissionais_perfil (policy com card público)
-  // + estado "em_obra" vindo do card público
+  const usuarioAlvo =
+    (prof as any).usuarioId ??
+    (prof as any).usuario_id ??
+    (prof as any).user_id ??
+    null;
+
+  const profissionalIdAlvo =
+    (prof as any).profissionalId ??
+    (prof as any).profissional_id ??
+    null;
+
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
-        // 1) tenta pela VIEW pública
-        const view = await supabase
-          .from("profissionais_view")
+        if (!usuarioAlvo) {
+          if (!alive) return;
+          setExtra({
+            nacionalidade: null,
+            idiomas: [],
+            area_principal: null,
+            anos_experiencia: prof.experiencia ?? null,
+            nivel: prof.nivel ?? null,
+            habilidades: [],
+            disponibilidade_text: null,
+            cidade_base: prof.cidade ?? "-",
+            raio_deslocacao: null,
+            pode_viajar: null,
+            pode_alojamento: null,
+            em_obra: null,
+          });
+          return;
+        }
+
+        const perfilRes = await supabase
+          .from("profissionais_perfil")
           .select(
             [
               "nacionalidade",
               "idiomas",
               "area_principal",
-              "funcao_obra",
-              "experiencia",      // se sua view não tiver, remova esta linha
+              "anos_experiencia",
               "nivel",
               "habilidades",
+              "disponibilidade",
               "cidade_base",
               "raio_deslocacao",
               "pode_viajar",
               "pode_alojamento",
-              "user_id",
+              "usuario_id",
             ].join(",")
           )
-          .eq("user_id", prof.usuarioId)
+          .eq("usuario_id", usuarioAlvo)
           .maybeSingle();
 
-        if (!view.data && view.error) {
-          console.warn("profissionais_view error:", view.error);
-        }
+        const p: any = perfilRes.data || {};
 
-        // 2) fallback: tabela original
-        let p: any = view.data || null;
-        if (!p) {
-          const tbl = await supabase
-            .from("profissionais_perfil")
-            .select(
-              [
-                "nacionalidade",
-                "idiomas",
-                "area_principal",
-                "funcao_obra",
-                "anos_experiencia",
-                "nivel",
-                "habilidades",
-                "disponibilidade",
-                "cidade_base",
-                "raio_deslocacao",
-                "pode_viajar",
-                "pode_alojamento",
-                "usuario_id",
-              ].join(",")
-            )
-            .eq("usuario_id", prof.usuarioId)
-            .maybeSingle();
-
-          if (!tbl.data && tbl.error) {
-            console.warn("profissionais_perfil error:", tbl.error);
-          }
-          p = tbl.data || {};
-        }
-
-        // 3) status "em obra" (card público)
-        const cardRes = prof.profissionalId
+        const cardRes = profissionalIdAlvo
           ? await supabase
-              .from("profissionais_publico_cards_v1")
+              .from("profissionais_publico_cards_v3")
               .select("em_obra")
-              .eq("profissional_id", prof.profissionalId)
+              .eq("profissional_id", profissionalIdAlvo)
               .maybeSingle()
           : { data: null as any };
 
         const e: PerfilExtra = {
-          // Identificação
           nacionalidade: p?.nacionalidade ?? null,
-          idiomas: Array.isArray(p?.idiomas) ? p.idiomas : p?.idiomas ? [p.idiomas] : [],
+          idiomas: Array.isArray(p?.idiomas)
+            ? p.idiomas
+            : p?.idiomas
+            ? [p.idiomas]
+            : [],
 
-          // Profissional
           area_principal: p?.area_principal ?? null,
-          funcao_obra: p?.funcao_obra ?? prof.funcao ?? null,
           anos_experiencia:
             typeof p?.anos_experiencia === "number"
               ? p.anos_experiencia
-              : typeof p?.experiencia === "number"
-              ? p.experiencia
               : prof.experiencia ?? null,
-          nivel: p?.nivel ?? prof.nivel ?? null,
+
+          // normaliza o nível (aceita "profissional", "Profissional", etc.)
+          nivel: canonicalNivel(p?.nivel) ?? canonicalNivel(prof.nivel) ?? null,
+
           habilidades: Array.isArray(p?.habilidades) ? p.habilidades : [],
+          disponibilidade_text:
+            typeof p?.disponibilidade === "string" ? p.disponibilidade : null,
 
-          // Disponibilidade (texto no perfil)
-          disponibilidade_text: p?.disponibilidade ?? null,
-
-          // Localização & Mobilidade
           cidade_base: p?.cidade_base ?? prof.cidade ?? null,
-          raio_deslocacao: typeof p?.raio_deslocacao === "string" ? p.raio_deslocacao : null,
-          pode_viajar: typeof p?.pode_viajar === "boolean" ? p.pode_viajar : null,
-          pode_alojamento: typeof p?.pode_alojamento === "boolean" ? p.pode_alojamento : null,
+          raio_deslocacao:
+            typeof p?.raio_deslocacao === "string" ? p.raio_deslocacao : null,
+          pode_viajar:
+            typeof p?.pode_viajar === "boolean" ? p.pode_viajar : null,
+          pode_alojamento:
+            typeof p?.pode_alojamento === "boolean" ? p.pode_alojamento : null,
 
-          // status (em obra / disponível)
           em_obra: cardRes.data?.em_obra ?? null,
         };
 
@@ -330,9 +343,8 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
           nacionalidade: null,
           idiomas: [],
           area_principal: null,
-          funcao_obra: prof.funcao,
-          anos_experiencia: prof.experiencia,
-          nivel: prof.nivel,
+          anos_experiencia: prof.experiencia ?? null,
+          nivel: canonicalNivel(prof.nivel) ?? null,
           habilidades: [],
           disponibilidade_text: null,
           cidade_base: prof.cidade ?? "-",
@@ -347,10 +359,9 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
     return () => {
       alive = false;
     };
-  }, [prof.usuarioId, prof.profissionalId, prof.funcao, prof.experiencia, prof.nivel, prof.cidade]);
+  }, [usuarioAlvo, profissionalIdAlvo, prof.experiencia, prof.nivel, prof.cidade]);
 
   /* -------------------- Badges -------------------- */
-  // Disponibilidade operacional (em obra / disponível)
   const disponibilidadeBadge = useMemo(() => {
     const emObra = !!extra?.em_obra;
     if (emObra) {
@@ -360,23 +371,42 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
         </Chip>
       );
     }
+
+    const disp = normalize(extra?.disponibilidade_text || "");
+    if (disp === "indisponivel" || disp === "indisponível") {
+      return (
+        <Chip className="bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">
+          <X className="h-3.5 w-3.5" /> Indisponível
+        </Chip>
+      );
+    }
+
+    // default
     return (
       <Chip className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
         <CheckCircle2 className="h-3.5 w-3.5" /> Disponível
       </Chip>
     );
-  }, [extra?.em_obra]);
+  }, [extra?.em_obra, extra?.disponibilidade_text]);
 
-  // Nível
   const nivelBadge = useMemo(() => {
-    const base = "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold";
-    const nivel = (extra?.nivel || prof.nivel) as string | undefined;
+    const base =
+      "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold";
+    const nivel = canonicalNivel(extra?.nivel || prof.nivel || null);
+
     switch (nivel) {
       case "Mestre":
         return (
           <span className={base + " bg-gradient-to-r from-orange-500 to-red-600 text-white shadow"}>
             <Sparkles className="h-3.5 w-3.5" />
             Mestre
+          </span>
+        );
+      case "Encarregado":
+        return (
+          <span className={base + " bg-orange-600 text-white"}>
+            <BadgeCheck className="h-3.5 w-3.5" />
+            Encarregado
           </span>
         );
       case "Oficial":
@@ -393,6 +423,20 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
             Profissional
           </span>
         );
+      case "Auxiliar":
+        return (
+          <span className={base + " bg-sky-600 text-white"}>
+            <BadgeCheck className="h-3.5 w-3.5" />
+            Auxiliar
+          </span>
+        );
+      case "Aprendiz":
+        return (
+          <span className={base + " bg-slate-600 text-white"}>
+            <BadgeCheck className="h-3.5 w-3.5" />
+            Aprendiz
+          </span>
+        );
       default:
         return <Chip>—</Chip>;
     }
@@ -403,17 +447,25 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
     return arr.length ? arr.join(", ") : "—";
   }, [extra?.idiomas]);
 
-  /* -------------------- UI -------------------- */
+  const areaPrincipalFmt = useMemo(() => {
+    const raw =
+      (typeof extra?.area_principal === "string" && extra.area_principal.trim()
+        ? extra.area_principal
+        : "") || "";
+    if (raw) return toTitleCase(raw);
+    // fallback coerente: se não tiver área principal salva, usa a função do header
+    return prof.funcao ? toTitleCase(prof.funcao) : "—";
+  }, [extra?.area_principal, prof.funcao]);
+
   return (
     <>
-      {/* 1) Sobre o profissional */}
       <Card
         title="Sobre o profissional"
         icon={<Star className="h-4 w-4 text-blue-500" />}
         className="mb-5"
       >
         <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">
-          Profissional {(extra?.funcao_obra || prof.funcao || "—").toLowerCase()} com{" "}
+          Profissional {(prof.funcao || "—").toLowerCase()} com{" "}
           <span className="font-semibold">
             {extra?.anos_experiencia ?? prof.experiencia ?? 0}+ anos
           </span>{" "}
@@ -421,7 +473,6 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
         </p>
       </Card>
 
-      {/* 2) Informações profissionais */}
       <Card
         title="Informações profissionais"
         icon={<Briefcase className="h-4 w-4 text-blue-500" />}
@@ -432,18 +483,7 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
             <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
               Área principal
             </div>
-            <div className="mt-1 text-sm font-semibold">
-              {extra?.area_principal || "—"}
-            </div>
-          </Card>
-
-          <Card className="h-full">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Função na obra
-            </div>
-            <div className="mt-1 text-sm font-semibold">
-              {extra?.funcao_obra || prof.funcao || "—"}
-            </div>
+            <div className="mt-1 text-sm font-semibold">{areaPrincipalFmt}</div>
           </Card>
 
           <Card className="h-full">
@@ -485,7 +525,7 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
             </div>
           </Card>
 
-          <Card className="h-full md:col-span-2 xl:col-span-3">
+          <Card className="h-full md:col-span-2 xl:col-span-4">
             <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
               Habilidades
             </div>
@@ -507,8 +547,10 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
         </div>
       </Card>
 
-      {/* 3) Localização & Mobilidade */}
-      <Card title="Localização & Mobilidade" icon={<Globe2 className="h-4 w-4 text-blue-500" />}>
+      <Card
+        title="Localização & Mobilidade"
+        icon={<Globe2 className="h-4 w-4 text-blue-500" />}
+      >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Card className="h-full">
             <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
@@ -546,13 +588,16 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
             </div>
             <div className="mt-1 flex items-center gap-1 text-sm font-semibold">
               <Home className="h-4 w-4 opacity-70" />
-              {extra?.pode_alojamento == null ? "—" : extra.pode_alojamento ? "Sim" : "Não"}
+              {extra?.pode_alojamento == null
+                ? "—"
+                : extra.pode_alojamento
+                ? "Sim"
+                : "Não"}
             </div>
           </Card>
         </div>
       </Card>
 
-      {/* 4) Identificação */}
       <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
         <Card title="Identificação" icon={<Flag className="h-4 w-4 text-blue-500" />}>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -579,7 +624,6 @@ export default function SobreTab({ prof }: { prof: PerfilView }) {
         </Card>
       </div>
 
-      {/* Modal de níveis */}
       <NiveisModal open={openNiveis} onClose={() => setOpenNiveis(false)} />
     </>
   );

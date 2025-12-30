@@ -907,7 +907,7 @@ export default function PresencasPage() {
   return (
     <div className="mx-auto max-w-7xl p-3 md:p-6">
       {/* Header */}
-      <div className="mb-3 md:mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <div className="mb-4 md:mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-50">
             Faltas & Presenças
@@ -926,8 +926,8 @@ export default function PresencasPage() {
       </div>
 
       {/* Filtros principais — sticky no mobile */}
-      <div className="sticky top-0 z-20 mb-3 md:mb-6 rounded-xl border bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-slate-900/90 dark:border-slate-700 p-3 md:p-4">
-        <div className="grid grid-cols-1 gap-2 md:gap-3 md:grid-cols-12">
+      <div className="sticky top-0 z-20 mb-4 md:mb-8 rounded-xl border bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-slate-900/90 dark:border-slate-700 p-3 md:p-4">
+        <div className="grid grid-cols-1 gap-3 md:gap-4 md:grid-cols-12">
           <div className="md:col-span-5">
             <label className="text-xs text-slate-500 dark:text-slate-400">
               Obra
@@ -1019,7 +1019,7 @@ export default function PresencasPage() {
         </div>
 
         {/* Desktop: cartões de estatística */}
-        <div className="hidden md:grid mb-6 grid-cols-1 gap-3 md:grid-cols-12">
+        <div className="hidden md:grid mt-4 mb-2 grid-cols-1 gap-4 md:grid-cols-12">
           <div className="rounded-xl border p-4 md:col-span-4 bg-white dark:bg-slate-900 dark:border-slate-700">
             <div className="flex items-center justify-between">
               <div className="font-semibold text-slate-900 dark:text-slate-50">
@@ -1057,8 +1057,8 @@ export default function PresencasPage() {
       </div>
 
       {/* Desktop: Ações em massa */}
-      <div className="hidden md:block mb-6 rounded-xl border p-4 bg-white dark:bg-slate-900 dark:border-slate-700">
-        <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="hidden md:block mb-8 rounded-xl border p-4 bg-white dark:bg-slate-900 dark:border-slate-700">
+        <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div>
               <label className="text-xs text-slate-500 dark:text-slate-400">
@@ -1110,8 +1110,8 @@ export default function PresencasPage() {
       </div>
 
       {/* Lista de profissionais */}
-      <div className="mb-8">
-        <div className="mb-2 flex items-center justify-between">
+      <div className="mb-10">
+        <div className="mb-3 flex items-center justify-between">
           <div className="font-semibold text-slate-700 dark:text-slate-50">
             Profissionais da obra ({filteredVinculos.length})
           </div>
@@ -1147,7 +1147,7 @@ export default function PresencasPage() {
       </div>
 
       {/* Histórico — header */}
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mt-4 mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
           Histórico
         </h2>
@@ -1161,7 +1161,7 @@ export default function PresencasPage() {
       </div>
 
       {/* Filtros do histórico */}
-      <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-12">
+      <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-12">
         <div className="md:col-span-3">
           <label className="text-xs text-slate-500 dark:text-slate-400">
             De
@@ -1202,7 +1202,7 @@ export default function PresencasPage() {
       </div>
 
       {/* Mobile: cards do histórico */}
-      <div className="md:hidden space-y-2">
+      <div className="md:hidden space-y-3">
         {historicoPaginado.length === 0 ? (
           <div className="rounded-xl border p-4 text-center text-slate-600 dark:border-slate-700 dark:text-slate-300">
             Nenhum registro no período.
@@ -1550,7 +1550,7 @@ export default function PresencasPage() {
 
       {/* Paginação histórico */}
       {hist.length > histPageSize && (
-        <div className="mt-3 flex items-center justify-between">
+        <div className="mt-4 flex items-center justify-between">
           <div className="text-sm text-slate-600 dark:text-slate-300">
             Mostrando {Math.min(hist.length, histPage * histPageSize)} de{" "}
             {hist.length}
@@ -1594,7 +1594,7 @@ export default function PresencasPage() {
       <AnimatePresence>
         {showSheet && (
           <motion.div
-            className="fixed inset-0 z-[9999] md:hidden" // por cima de tudo (incluindo bottom nav)
+            className="fixed inset-0 z-[9999] md:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

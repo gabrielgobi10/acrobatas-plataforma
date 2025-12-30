@@ -1,5 +1,5 @@
 // src/components/company/CentralDeNavegacaoEmpresa/Obras/ObraDetalhes/DocumentacaoObra.tsx
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   FileCheck2,
@@ -16,7 +16,7 @@ type DocStatus = "valido" | "pendente" | "vencido";
 
 type Documento = {
   id: string;
-  nome?: string | null;
+  nome: string;
   status: DocStatus;
   validade?: string | null;
   arquivo_url?: string | null;
@@ -30,6 +30,31 @@ type Profissional = {
   documentos: Documento[];
   counters: { validos: number; pendentes: number; vencidos: number };
 };
+
+function normalizeStatus(s: any): DocStatus {
+  const raw = String(s ?? "").toLowerCase();
+
+  // vencido
+  if (raw.startsWith("vencid")) return "vencido";
+
+  // válido
+  if (raw.startsWith("válid") || raw.startsWith("valid")) return "valido";
+
+  // pendente / reprovado / por validar / em análise etc
+  return "pendente";
+}
+
+function countStatuses(arr: Documento[]) {
+  return arr.reduce(
+    (acc, d) => {
+      if (d.status === "valido") acc.validos++;
+      else if (d.status === "pendente") acc.pendentes++;
+      else acc.vencidos++;
+      return acc;
+    },
+    { validos: 0, pendentes: 0, vencidos: 0 }
+  );
+}
 
 export default function DocumentacaoObra({ obraId }: { obraId: string }) {
   const [loading, setLoading] = useState(true);
@@ -45,110 +70,103 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
 
   async function carregarDocumentos() {
     if (!obraId) return;
+
     setLoading(true);
     setReloading(true);
 
     try {
-      // 🔹 Profissionais vinculados à obra
-      const { data: vinculos, error: errVinc } = await supabase
-        .from("profissionais_obras")
-        .select(
-          `
-          id,
-          profissional_id,
-          funcao,
-          profissionais!fk_profissional_obra (
-            id,
-            nome,
-            foto_url
-          )
-        `
-        )
-        .eq("obra_id", obraId);
+      // 0) Empresa logada
+      const { data: empId, error: empErr } = await supabase.rpc(
+        "minha_empresa_id"
+      );
+      if (empErr) throw empErr;
 
-      if (errVinc) throw errVinc;
-
-      const profIds =
-        vinculos?.map((v: any) => v.profissional_id).filter(Boolean) || [];
-
-      if (!profIds.length) {
+      const empresaId = empId as string | null;
+      if (!empresaId) {
         setProfissionais([]);
-        setLoading(false);
-        setReloading(false);
         return;
       }
 
-      // 🔹 Documentos desses profissionais (mesma view da página geral)
+      // 1) Profissionais vinculados à obra (filtrado por empresa_id)
+      // Importante: usar join simples "profissionais ( ... )" para não depender do nome do FK
+      const { data: vinculos, error: errVinc } = await supabase
+        .from("profissionais_obras")
+        .select("profissional_id, funcao, profissionais ( id, nome, foto_url )")
+        .eq("obra_id", obraId)
+        .eq("empresa_id", empresaId);
+
+      if (errVinc) throw errVinc;
+
+      const profIds: string[] =
+        (vinculos || []).map((v: any) => v.profissional_id).filter(Boolean) ||
+        [];
+
+      if (!profIds.length) {
+        setProfissionais([]);
+        return;
+      }
+
+      // 2) Documentos desses profissionais pela view da empresa
       const { data: docsDb, error: errDocs } = await supabase
-        .from("admin_docs_prof_v")
+        .from("empresa_docs_prof_v")
         .select(
           "doc_id, profissional_id, documento_nome, status, validade, arquivo_url"
         )
+        .eq("empresa_id", empresaId)
         .in("profissional_id", profIds)
         .order("profissional_id", { ascending: true })
         .order("documento_nome", { ascending: true });
 
       if (errDocs) throw errDocs;
 
-      // 🔹 Normaliza status vindo da view
-      function normalizeStatus(s: any): DocStatus {
-        const raw = String(s ?? "").toLowerCase();
-        if (raw.startsWith("vencid")) return "vencido";
-        if (raw.startsWith("válid") || raw.startsWith("valid")) return "valido";
-        // inclui pendente / reprovado / por validar etc
-        return "pendente";
-      }
-
-      function countStatuses(arr: Documento[]) {
-        return arr.reduce(
-          (acc, d) => {
-            if (d.status === "valido") acc.validos++;
-            else if (d.status === "pendente") acc.pendentes++;
-            else acc.vencidos++;
-            return acc;
-          },
-          { validos: 0, pendentes: 0, vencidos: 0 }
-        );
-      }
-
-      // 🔹 Agrupa docs por profissional
+      // 3) Agrupa docs por profissional
       const docsByProf = new Map<string, Documento[]>();
 
       (docsDb || []).forEach((d: any) => {
-        const originalNome: string = d.documento_nome || "";
+        const nomeDoc: string = d.documento_nome || "";
 
-        // mesma regra da página geral: ignora contactos de emergência
-        if (originalNome.toLowerCase().startsWith("contactos de emergência")) {
-          return;
-        }
+        // Regra: ignora "Contactos de emergência"
+        if (nomeDoc.toLowerCase().startsWith("contactos de emergência")) return;
 
-        const nomeNormalizado = originalNome;
-        const arr = docsByProf.get(d.profissional_id) ?? [];
+        const pid = String(d.profissional_id || "");
+        if (!pid) return;
 
+        const arr = docsByProf.get(pid) ?? [];
         arr.push({
           id: d.doc_id,
-          nome: nomeNormalizado,
+          nome: nomeDoc,
           status: normalizeStatus(d.status),
           validade: d.validade,
           arquivo_url: d.arquivo_url,
         });
-
-        docsByProf.set(d.profissional_id, arr);
+        docsByProf.set(pid, arr);
       });
 
-      // 🔹 Monta cards de profissionais
-      const result: Profissional[] = (vinculos || []).map((v: any) => {
+      // 4) Monta cards (dedupe por profissional_id — evita duplicar se tiver 2 vínculos)
+      const byId = new Map<string, Profissional>();
+
+      (vinculos || []).forEach((v: any) => {
+        const pid = String(v.profissional_id || "");
+        if (!pid) return;
+
+        if (byId.has(pid)) return; // dedupe
+
         const p = v.profissionais;
-        const docsP = docsByProf.get(p.id) ?? [];
-        return {
-          id: p.id,
-          nome: p.nome || "Sem nome",
-          funcao: v.funcao,
-          foto_url: p.foto_url,
+        const docsP = docsByProf.get(pid) ?? [];
+
+        byId.set(pid, {
+          id: pid,
+          nome: (p?.nome as string) || "Sem nome",
+          funcao: v.funcao || null,
+          foto_url: p?.foto_url || null,
           documentos: docsP,
           counters: countStatuses(docsP),
-        };
+        });
       });
+
+      const result = [...byId.values()].sort((a, b) =>
+        a.nome.localeCompare(b.nome, "pt")
+      );
 
       setProfissionais(result);
     } catch (err) {
@@ -170,7 +188,7 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
 
   return (
     <div className="space-y-8">
-      {/* ================= RESUMO (cards de cima) ================= */}
+      {/* ================= RESUMO ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <ResumoCard
           icon={<FileCheck2 className="w-5 h-5 text-emerald-500" />}
@@ -196,6 +214,7 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
             <Users className="w-5 h-5 text-blue-500" />
             Profissionais da Obra
           </h2>
+
           <button
             onClick={carregarDocumentos}
             className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition disabled:opacity-60"
@@ -223,7 +242,7 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-800 dark:to-zinc-900 p-4 shadow-sm hover:shadow-md transition-all"
               >
-                {/* Header do profissional */}
+                {/* Header */}
                 <div className="flex items-center gap-3 mb-3">
                   <img
                     src={
@@ -235,17 +254,17 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
                     alt={p.nome}
                     className="w-12 h-12 rounded-full border-2 border-blue-500/30 object-cover"
                   />
-                  <div>
-                    <p className="font-semibold text-zinc-900 dark:text-white leading-tight">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-zinc-900 dark:text-white leading-tight truncate">
                       {p.nome}
                     </p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">
                       {p.funcao || "Função não informada"}
                     </p>
                   </div>
                 </div>
 
-                {/* Contadores de status */}
+                {/* Contadores */}
                 <div className="flex gap-2 text-[12px] mb-3">
                   <Badge color="green" label={`${p.counters.validos} válidos`} />
                   <Badge
@@ -258,7 +277,7 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
                   />
                 </div>
 
-                {/* Lista rápida de documentos */}
+                {/* Lista rápida */}
                 <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
                   {p.documentos.slice(0, 4).map((d) => (
                     <div
@@ -269,11 +288,13 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
                       <StatusChip status={d.status} />
                     </div>
                   ))}
+
                   {p.documentos.length > 4 && (
                     <p className="opacity-70 text-right">
                       +{p.documentos.length - 4} outros
                     </p>
                   )}
+
                   {p.documentos.length === 0 && (
                     <p className="opacity-70">
                       Nenhum documento registado para este profissional.
@@ -281,11 +302,13 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
                   )}
                 </div>
 
-                {/* Botão ver documentação completa */}
+                {/* Ação */}
                 <div className="mt-4 flex justify-end">
                   <button
                     onClick={() =>
-                      navigate(`/empresa/documentacao/profissionais/${p.id}`)
+                      navigate(`/empresa/documentos/profissionais?focus=${p.id}`, {
+                        state: { fromObraId: obraId },
+                      })
                     }
                     className="px-3 py-1.5 rounded-md text-white bg-blue-600 hover:bg-blue-700 text-sm flex items-center gap-1 transition"
                   >
@@ -304,6 +327,7 @@ export default function DocumentacaoObra({ obraId }: { obraId: string }) {
 /* ==============================
    COMPONENTES AUXILIARES
 ============================== */
+
 function ResumoCard({
   icon,
   titulo,

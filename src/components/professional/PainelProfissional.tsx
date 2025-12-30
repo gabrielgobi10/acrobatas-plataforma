@@ -33,7 +33,7 @@ export default function PainelProfissional({
   const [nomeProfissional, setNomeProfissional] = useState<string | null>(null);
 
   /* =========================
-     Buscar Dados Reais (carreira + nome)
+     Dados de carreira + nome (profissionais_perfil)
   ========================= */
   useEffect(() => {
     async function buscarDadosCarreira() {
@@ -41,8 +41,10 @@ export default function PainelProfissional({
 
       const { data, error } = await supabase
         .from("profissionais_perfil")
-        .select("nivel, progresso, total_obras, media_avaliacoes, dias_ativos, nome")
-        .eq("user_id", user.id)
+        .select(
+          "nivel, progresso, total_obras, media_avaliacoes, dias_ativos, nome"
+        )
+        .eq("usuario_id", user.id)
         .maybeSingle();
 
       if (!error && data) {
@@ -54,7 +56,7 @@ export default function PainelProfissional({
   }, [user?.id]);
 
   /* =========================
-     Obras Ativas (mesma base da tela Minhas Obras)
+     Obras ativas – mesma lógica do ObrasAtivas.tsx
   ========================= */
   useEffect(() => {
     async function fetchObrasAtivas() {
@@ -62,50 +64,221 @@ export default function PainelProfissional({
       setLoadingObras(true);
 
       try {
-        // 1) Profissional pelo user_id
-        const { data: prof, error: ep } = await supabase
-          .from("profissionais")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
+        // 1) Resolver qual é o profissionais.id correspondente ao login atual
+        let profissionalId: string | null = null;
 
-        if (ep) {
-          console.error("Erro ao buscar profissional:", ep);
+        console.log(
+          "[PainelProfissional] auth.id:",
+          user.id,
+          "email:",
+          user.email
+        );
+
+        // 1.a) profissionais.user_id = auth.id (caso padrão)
+        try {
+          const { data, error } = await supabase
+            .from("profissionais")
+            .select("id")
+            .eq("user_id", user.id)
+            .maybeSingle<{ id: string }>();
+
+          if (error) {
+            console.error(
+              "[PainelProfissional] erro profissional via user_id = auth.id:",
+              error
+            );
+          } else if (data?.id) {
+            profissionalId = data.id;
+            console.log(
+              "[PainelProfissional] profissional encontrado (user_id = auth.id):",
+              data
+            );
+          }
+        } catch (e) {
+          console.error(
+            "[PainelProfissional] erro inesperado em user_id = auth.id:",
+            e
+          );
+        }
+
+        // vamos reaproveitar a linha da tabela usuarios se for preciso
+        let usuarioRow:
+          | { id: string; auth_id: string | null; email: string | null }
+          | null = null;
+
+        // 1.b) se não achou ainda, tenta usuarios.auth_id = auth.id
+        if (!profissionalId) {
+          try {
+            const { data, error } = await supabase
+              .from("usuarios")
+              .select("id, auth_id, email")
+              .eq("auth_id", user.id)
+              .maybeSingle<{
+                id: string;
+                auth_id: string | null;
+                email: string | null;
+              }>();
+
+            if (error) {
+              console.error(
+                "[PainelProfissional] erro usuario via auth_id:",
+                error
+              );
+            } else if (data?.id) {
+              usuarioRow = data;
+              console.log(
+                "[PainelProfissional] usuario encontrado por auth_id:",
+                data
+              );
+            }
+          } catch (e) {
+            console.error(
+              "[PainelProfissional] erro inesperado usuario.auth_id:",
+              e
+            );
+          }
+        }
+
+        // 1.c) se ainda não temos usuarioRow, tenta usuarios.email = user.email
+        if (!usuarioRow && user.email) {
+          try {
+            const { data, error } = await supabase
+              .from("usuarios")
+              .select("id, auth_id, email")
+              .eq("email", user.email)
+              .maybeSingle<{
+                id: string;
+                auth_id: string | null;
+                email: string | null;
+              }>();
+
+            if (error) {
+              console.error(
+                "[PainelProfissional] erro usuario via email:",
+                error
+              );
+            } else if (data?.id) {
+              usuarioRow = data;
+              console.log(
+                "[PainelProfissional] usuario encontrado por email:",
+                data
+              );
+            }
+          } catch (e) {
+            console.error(
+              "[PainelProfissional] erro inesperado usuario.email:",
+              e
+            );
+          }
+        }
+
+        // 1.d) com usuarioRow em mãos, replica todos os vínculos possíveis
+        if (usuarioRow && !profissionalId) {
+          // profissionais.user_id = usuarios.id
+          try {
+            const { data, error } = await supabase
+              .from("profissionais")
+              .select("id")
+              .eq("user_id", usuarioRow.id)
+              .maybeSingle<{ id: string }>();
+
+            if (error) {
+              console.error(
+                "[PainelProfissional] erro profissional via user_id = usuarios.id:",
+                error
+              );
+            } else if (data?.id) {
+              profissionalId = data.id;
+              console.log(
+                "[PainelProfissional] profissional via usuarios.id:",
+                data
+              );
+            }
+          } catch (e) {
+            console.error(
+              "[PainelProfissional] erro inesperado user_id = usuarios.id:",
+              e
+            );
+          }
+
+          // profissionais.user_id = usuarios.auth_id (caso legado)
+          if (!profissionalId && usuarioRow.auth_id) {
+            try {
+              const { data, error } = await supabase
+                .from("profissionais")
+                .select("id")
+                .eq("user_id", usuarioRow.auth_id)
+                .maybeSingle<{ id: string }>();
+
+              if (error) {
+                console.error(
+                  "[PainelProfissional] erro profissional via user_id = usuarios.auth_id:",
+                  error
+                );
+              } else if (data?.id) {
+                profissionalId = data.id;
+                console.log(
+                  "[PainelProfissional] profissional via usuarios.auth_id:",
+                  data
+                );
+              }
+            } catch (e) {
+              console.error(
+                "[PainelProfissional] erro inesperado user_id = usuarios.auth_id:",
+                e
+              );
+            }
+          }
+        }
+
+        if (!profissionalId) {
+          console.warn(
+            "[PainelProfissional] nenhum profissional encontrado p/ usuário atual."
+          );
           setObrasAtivas([]);
           return;
         }
 
-        if (!prof) {
-          console.warn("Profissional não encontrado para user_id:", user.id);
-          setObrasAtivas([]);
-          return;
-        }
+        console.log(
+          "[PainelProfissional] usando profissional_id:",
+          profissionalId
+        );
 
-        // 2) Vínculos desse profissional
+        // 2) vínculos do profissional em profissionais_obras
         const { data: vincs, error: ev } = await supabase
           .from("profissionais_obras")
           .select("id, obra_id, funcao, status, progresso, empresa_id")
-          .eq("profissional_id", prof.id);
+          .eq("profissional_id", profissionalId);
 
         if (ev) {
-          console.error("Erro ao buscar vínculos de obras:", ev);
+          console.error(
+            "[PainelProfissional] erro ao buscar vínculos de obras:",
+            ev
+          );
           setObrasAtivas([]);
           return;
         }
 
         if (!vincs || vincs.length === 0) {
+          console.log(
+            "[PainelProfissional] nenhum vínculo em profissionais_obras."
+          );
           setObrasAtivas([]);
           return;
         }
 
-        // Considerar como "ativas" os status Ativo / Convocado
-        const vincsAtivos = vincs.filter(
-          (v: any) => v.status === "Ativo" || v.status === "Convocado"
-        );
+        // considera como "ativos" os status que fazem sentido
+        let vincsAtivos =
+          vincs.filter((v: any) => {
+            const s = (v.status || "").toLowerCase();
+            return ["ativo", "convocado", "em andamento", "em_andamento"].includes(
+              s
+            );
+          }) || [];
 
+        // se não sobrou nada, mostra tudo mesmo assim
         if (vincsAtivos.length === 0) {
-          setObrasAtivas([]);
-          return;
+          vincsAtivos = vincs;
         }
 
         const obraIds = Array.from(
@@ -113,11 +286,14 @@ export default function PainelProfissional({
         );
 
         if (obraIds.length === 0) {
+          console.log(
+            "[PainelProfissional] vínculos sem obra_id válido em profissionais_obras."
+          );
           setObrasAtivas([]);
           return;
         }
 
-        // 3) Dados das obras
+        // 3) dados das obras
         const { data: obras, error: eo } = await supabase
           .from("obras")
           .select(
@@ -136,14 +312,13 @@ export default function PainelProfissional({
           .in("id", obraIds);
 
         if (eo) {
-          console.error("Erro ao buscar obras:", eo);
+          console.error("[PainelProfissional] erro ao buscar obras:", eo);
           setObrasAtivas([]);
           return;
         }
 
         const mapaObras = new Map((obras || []).map((o: any) => [o.id, o]));
 
-        // 4) Montar dados do card (incluindo obraId para o "Ver detalhes")
         const obrasFormatadas =
           vincsAtivos.map((v: any) => {
             const obra = mapaObras.get(v.obra_id);
@@ -162,7 +337,7 @@ export default function PainelProfissional({
               funcao: v.funcao || "-",
               inicio,
               xp: Number(v.progresso) || 0,
-              totalXp: 100, // placeholder só para barra
+              totalXp: 100,
               avaliacao: 0,
               status: v.status || "Ativo",
             };
@@ -170,7 +345,10 @@ export default function PainelProfissional({
 
         setObrasAtivas(obrasFormatadas);
       } catch (e) {
-        console.error("Erro inesperado ao carregar obras ativas do painel:", e);
+        console.error(
+          "[PainelProfissional] erro inesperado ao carregar obras ativas:",
+          e
+        );
         setObrasAtivas([]);
       } finally {
         setLoadingObras(false);
@@ -178,10 +356,10 @@ export default function PainelProfissional({
     }
 
     fetchObrasAtivas();
-  }, [user?.id]);
+  }, [user?.id, user?.email]);
 
   /* =========================
-     Saudação por horário
+     Saudação / nome
   ========================= */
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -192,7 +370,6 @@ export default function PainelProfissional({
 
   const saudacao = getGreeting();
 
-  // Nome a exibir: 1) perfil profissional, 2) nome da tabela usuarios, 3) parte do email, 4) fallback
   const displayName =
     nomeProfissional ||
     profile?.nome ||
@@ -204,12 +381,15 @@ export default function PainelProfissional({
   ========================= */
   const container = {
     hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.2 } },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.08, delayChildren: 0.2 },
+    },
   };
 
   const item = {
     hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+    show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
   };
 
   /* =========================
@@ -217,7 +397,7 @@ export default function PainelProfissional({
   ========================= */
   return (
     <>
-      {/* MODAL DE ONBOARDING (não é ativado por enquanto) */}
+      {/* MODAL DE ONBOARDING */}
       <AnimatePresence>
         {mostrarOnboarding && (
           <>
@@ -243,18 +423,28 @@ export default function PainelProfissional({
               >
                 <motion.div
                   animate={{ rotate: 360 }}
-                  transition={{ repeat: Infinity, duration: 25, ease: "linear" }}
-                  className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-tr from-blue-500/25 via-cyan-400/15 to-transparent blur-3xl rounded-full"
+                  transition={{
+                    repeat: Infinity,
+                    duration: 25,
+                    ease: "linear",
+                  }}
+                  className="absolute -top-40îÁ-40 -right-40 w-96 h-96 bg-gradient-to-tr from-blue-500/25 via-cyan-400/15 to-transparent blur-3xl rounded-full"
                 />
                 <motion.div
                   animate={{ rotate: -360 }}
-                  transition={{ repeat: Infinity, duration: 30, ease: "linear" }}
+                  transition={{
+                    repeat: Infinity,
+                    duration: 30,
+                    ease: "linear",
+                  }}
                   className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-indigo-500/25 via-blue-400/15 to-transparent blur-3xl rounded-full"
                 />
+
                 <div className="relative z-10 text-center">
                   <Sparkles className="mx-auto w-10 h-10 text-blue-400 mb-3 animate-pulse" />
                   <h2 className="text-2xl font-bold mb-3">
-                    👋 Bem-vindo à <span className="text-blue-500">Acrobatas</span>!
+                    👋 Bem-vindo à{" "}
+                    <span className="text-blue-500">Acrobatas</span>!
                   </h2>
                   <p className="text-sm opacity-90 text-gray-700 dark:text-gray-300 mb-6">
                     Complete seu perfil para desbloquear obras e oportunidades.
@@ -302,7 +492,7 @@ export default function PainelProfissional({
           </p>
         </motion.section>
 
-        {/* CARDS PRINCIPAIS */}
+        {/* CARDS PRINCIPAIS (sem contagem) */}
         <motion.section
           variants={item}
           className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 mt-5 sm:mt-6"
@@ -310,31 +500,28 @@ export default function PainelProfissional({
           {[
             {
               label: "Candidaturas",
-              value: stats?.total ?? 0,
               icon: FileText,
               color: "from-blue-500 to-blue-400",
               onClick: () => setActivePage("candidaturas"),
             },
             {
               label: "Vagas",
-              value: stats?.newJobs ?? 0,
               icon: Briefcase,
               color: "from-emerald-500 to-teal-400",
               onClick: () => setActivePage("vagas"),
             },
             {
               label: "Tarefas",
-              value: stats?.tasks ?? 0,
               icon: ClipboardList,
               color: "from-amber-400 to-yellow-400",
               onClick: () => setActivePage("tarefas"),
             },
             {
               label: "Documentos",
-              value: stats?.docs ?? 0,
               icon: FileText,
               color: "from-violet-500 to-fuchsia-500",
-              onClick: () => setActivePage("documentos"),
+              // ✅ AQUI: abre "Meus Documentos" no ProfessionalDashboard
+              onClick: () => setActivePage("documentos_meus"),
             },
           ].map((card, i) => (
             <motion.div
@@ -345,11 +532,12 @@ export default function PainelProfissional({
               onClick={card.onClick}
               className={`rounded-2xl p-4 sm:p-6 text-white shadow-md hover:shadow-lg bg-gradient-to-br ${card.color} cursor-pointer transition-all`}
             >
-              <div className="flex justify-between items-center mb-3">
+              <div className="flex items-center gap-3 sm:gap-4">
                 <card.icon className="w-6 sm:w-8 h-6 sm:h-8 opacity-90" />
-                <span className="text-2xl sm:text-3xl font-bold">{card.value}</span>
+                <p className="text-sm sm:text-base font-semibold">
+                  {card.label}
+                </p>
               </div>
-              <p className="text-xs sm:text-sm font-medium">{card.label}</p>
             </motion.div>
           ))}
         </motion.section>
@@ -370,7 +558,8 @@ export default function PainelProfissional({
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
-                <Award className="w-5 h-5 text-yellow-500" /> Progresso de Carreira
+                <Award className="w-5 h-5 text-yellow-500" /> Progresso de
+                Carreira
               </h3>
               <span className="px-2.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                 {dadosCarreira?.nivel || "Aprendiz"}
@@ -387,8 +576,9 @@ export default function PainelProfissional({
             </div>
 
             <p className="text-xs sm:text-sm mt-3 text-gray-600 dark:text-gray-400">
-              Faltam <span className="font-semibold text-blue-500">2 obras</span> e média ≥ 4.5
-              para subir de nível.
+              Faltam{" "}
+              <span className="font-semibold text-blue-500">2 obras</span> e
+              média ≥ 4.5 para subir de nível.
             </p>
 
             <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-5">
@@ -416,12 +606,18 @@ export default function PainelProfissional({
                   key={i}
                   whileHover={{ scale: 1.05 }}
                   className={`rounded-xl p-3 sm:p-4 text-center border transition-all ${
-                    theme === "dark" ? "border-slate-700" : "border-slate-200"
+                    theme === "dark"
+                      ? "border-slate-700"
+                      : "border-slate-200"
                   }`}
                 >
-                  <item.icon className={`mx-auto mb-1.5 w-5 h-5 ${item.color}`} />
+                  <item.icon
+                    className={`mx-auto mb-1.5 w-5 h-5 ${item.color}`}
+                  />
                   <h4 className="text-base sm:text-xl font-bold">{item.value}</h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {item.label}
+                  </p>
                 </motion.div>
               ))}
             </div>
@@ -465,7 +661,6 @@ export default function PainelProfissional({
               </p>
             ) : obrasAtivas.length > 0 ? (
               <div className="space-y-3 sm:space-y-4">
-                {/* Limite de 3 obras no painel */}
                 {obrasAtivas.slice(0, 3).map((obra, i) => {
                   const progresso =
                     obra.totalXp > 0 ? (obra.xp / obra.totalXp) * 100 : 0;
@@ -506,7 +701,6 @@ export default function PainelProfissional({
                           className="text-blue-500 hover:underline text-[12px]"
                           onClick={() => {
                             if (obra.obraId) {
-                              // guardar a obra que veio do painel
                               localStorage.setItem(
                                 "prof_obras_ativas_obraId",
                                 obra.obraId
@@ -522,7 +716,6 @@ export default function PainelProfissional({
                   );
                 })}
 
-                {/* Botão extra se tiver 3 ou mais obras */}
                 {obrasAtivas.length >= 3 && (
                   <button
                     onClick={() => setActivePage("obras_ativas")}

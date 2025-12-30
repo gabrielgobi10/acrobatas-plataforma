@@ -173,11 +173,23 @@ export const LoginPage = () => {
 
   const nomeLabel =
     !adminMode && userRole === "company"
-      ? t("login.nomeEmpresa") // ex.: "Nome da empresa"
-      : t("login.nomeCompleto"); // ex.: "Nome completo"
+      ? t("login.nomeEmpresa")
+      : t("login.nomeCompleto");
 
   return (
-    <div className="min-h-[100dvh] bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 animate-gradient-slow flex items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+    <div
+      className="
+        min-h-[100dvh]
+        bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700
+        animate-gradient-slow
+        flex items-center justify-center
+        p-4 sm:p-6
+        relative
+        overflow-x-hidden overflow-y-auto
+        [@media(max-height:780px)]:items-start
+        [@media(max-height:780px)]:py-6
+      "
+    >
       {/* Desktop */}
       <div className="hidden sm:flex absolute top-3 right-3 items-center gap-3 z-20">
         <IdiomaSelector />
@@ -188,10 +200,33 @@ export const LoginPage = () => {
       <MobileDock />
 
       {/* Container principal */}
-      <div className="w-full max-w-5xl flex flex-col md:grid md:grid-cols-2 gap-6 md:gap-8 items-stretch">
+      <div
+        className="
+          w-full max-w-5xl
+          flex flex-col md:grid md:grid-cols-2
+          gap-6 md:gap-8
+          items-stretch
+          [@media(max-height:780px)]:max-w-4xl
+          [@media(max-height:780px)]:gap-5
+          [@media(max-height:780px)]:md:gap-6
+        "
+      >
         {/* ESQUERDA */}
-        <div className="order-1 bg-white/95 rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col justify-center relative">
-          <div className="text-center mb-8">
+        <div
+          className="
+            order-1 bg-white/95 rounded-2xl shadow-2xl
+            p-6 sm:p-8
+            flex flex-col justify-center relative
+            [@media(max-height:780px)]:p-5
+            [@media(max-height:780px)]:sm:p-6
+          "
+        >
+          <div
+            className="
+              text-center mb-8
+              [@media(max-height:780px)]:mb-6
+            "
+          >
             <img
               src="/Design sem nome (45).png"
               alt="Acrobatas Workforce"
@@ -200,7 +235,12 @@ export const LoginPage = () => {
           </div>
 
           {/* Abas */}
-          <div className="flex border-b border-gray-200 mb-6">
+          <div
+            className="
+              flex border-b border-gray-200 mb-6
+              [@media(max-height:780px)]:mb-5
+            "
+          >
             <button
               onClick={() => handleTabSwitch(true)}
               className={`flex-1 pb-2 sm:pb-3 text-center font-semibold transition-all ${
@@ -250,7 +290,14 @@ export const LoginPage = () => {
           </AnimatePresence>
 
           {/* Formulário */}
-          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="
+              space-y-4 sm:space-y-5
+              [@media(max-height:780px)]:space-y-3
+              [@media(max-height:780px)]:sm:space-y-4
+            "
+          >
             {!adminMode && (
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -386,11 +433,30 @@ export const LoginPage = () => {
         </div>
 
         {/* DIREITA */}
-        <div className="order-2 bg-white/10 backdrop-blur-sm rounded-2xl p-8 text-white shadow-xl border border-white/20 mt-6 md:mt-0">
-          <h2 className="text-3xl font-bold mb-6 text-center md:text-left">
+        <div
+          className="
+            order-2 bg-white/10 backdrop-blur-sm rounded-2xl
+            p-8
+            text-white shadow-xl border border-white/20
+            mt-6 md:mt-0
+            [@media(max-height:780px)]:p-6
+          "
+        >
+          <h2
+            className="
+              text-3xl font-bold mb-6 text-center md:text-left
+              [@media(max-height:780px)]:text-2xl
+              [@media(max-height:780px)]:mb-5
+            "
+          >
             {t("login.sistema")}
           </h2>
-          <div className="space-y-6">
+          <div
+            className="
+              space-y-6
+              [@media(max-height:780px)]:space-y-5
+            "
+          >
             {[
               {
                 icon: <Users className="w-6 h-6 text-blue-200" />,

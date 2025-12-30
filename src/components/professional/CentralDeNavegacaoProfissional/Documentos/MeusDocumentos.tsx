@@ -29,7 +29,7 @@ import {
   Shield,
   User as UserIcon,
   X,
-  MessageCircle, // 👈 novo
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -42,7 +42,7 @@ type SortKey = "nome" | "categoria" | "validade" | "atualizado_em" | "status";
 type Responsabilidade = "profissional" | "acrobatas" | "ambos";
 
 type Documento = {
-  id: string; // id em documentos_acrobatas (doc_id na view)
+  id: string; // doc_id na view (id em documentos_acrobatas)
   profissional_id: string;
   tipo_id: string;
   nome: string;
@@ -55,7 +55,7 @@ type Documento = {
   responsabilidade: Responsabilidade;
   prof_pode_enviar?: boolean | null;
   bloqueado?: boolean | null;
-  comentario_admin?: string | null; // 👈 novo campo
+  comentario_admin?: string | null;
 };
 
 /* ======================
@@ -110,7 +110,9 @@ function StatusBadge({ status }: { status: Status }) {
       : "bg-red-100 text-red-700 dark:bg-red-700/30 dark:text-red-400";
 
   return (
-    <span className={`px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold rounded-full ${cls}`}>
+    <span
+      className={`px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold rounded-full ${cls}`}
+    >
       {status}
     </span>
   );
@@ -168,7 +170,7 @@ function ResponsabilidadeBadge({ resp }: { resp: Responsabilidade }) {
 }
 
 /* ======================
-   Upload “inline” (input escondido)
+   Upload “inline”
 ====================== */
 function useHiddenFilePicker(onPick: (file: File, docId: string) => void) {
   const ref = useRef<HTMLInputElement>(null);
@@ -238,7 +240,10 @@ function FiltroBar({
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
       <div className="flex-1 flex items-center gap-2">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70" size={16} />
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-70"
+            size={16}
+          />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -298,7 +303,11 @@ function FiltroBar({
               <option value="atualizado_em">Ordenar por atualização</option>
             </select>
             <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-70">
-              {sortDir === "asc" ? <SortAsc size={14} /> : <SortDesc size={14} />}
+              {sortDir === "asc" ? (
+                <SortAsc size={14} />
+              ) : (
+                <SortDesc size={14} />
+              )}
             </div>
           </div>
 
@@ -307,7 +316,11 @@ function FiltroBar({
             className="px-2 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             title="Inverter ordem"
           >
-            {sortDir === "asc" ? <SortAsc size={16} /> : <SortDesc size={16} />}
+            {sortDir === "asc" ? (
+              <SortAsc size={16} />
+            ) : (
+              <SortDesc size={16} />
+            )}
           </button>
 
           <button
@@ -320,7 +333,6 @@ function FiltroBar({
         </div>
       </div>
 
-      {/* Filtro rápido de responsabilidade */}
       <div className="flex justify-center sm:justify-end gap-1 rounded-lg bg-zinc-900/5 dark:bg-zinc-100/5 p-1">
         <RespToggleItem
           active={filtroResp === "todas"}
@@ -416,12 +428,12 @@ function UploadExistingModal({
 
         <div className="space-y-2 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 mb-4">
           <p>
-            • <span className="font-medium">Substituir ficheiro</span>: envia um novo ficheiro e mantém
-            o histórico apenas com o mais recente.
+            • <span className="font-medium">Substituir ficheiro</span>: envia
+            um novo ficheiro e mantém o histórico apenas com o mais recente.
           </p>
           <p>
-            • <span className="font-medium">Apagar ficheiro</span>: remove o ficheiro atual. Depois
-            poderás enviar um novo quando quiseres.
+            • <span className="font-medium">Apagar ficheiro</span>: remove o
+            ficheiro atual. Depois poderás enviar um novo quando quiseres.
           </p>
         </div>
 
@@ -469,13 +481,16 @@ export default function MeusDocumentos() {
   const [filtroResp, setFiltroResp] = useState<FiltroResp>("todas");
   const [uploadModal, setUploadModal] = useState<UploadModalState>(null);
 
-  // file picker oculto (upload pelo ícone nas ações)
   const { open: pickFile, input: hiddenInput } = useHiddenFilePicker(
     async (file, docId) => {
       const doc = documentos.find((d) => d.id === docId);
       if (!doc) return;
 
-      if (doc.responsabilidade === "acrobatas" || doc.prof_pode_enviar === false || doc.bloqueado) {
+      if (
+        doc.responsabilidade === "acrobatas" ||
+        doc.prof_pode_enviar === false ||
+        doc.bloqueado
+      ) {
         return;
       }
 
@@ -495,9 +510,7 @@ export default function MeusDocumentos() {
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from(STORAGE_BUCKET)
-          .upload(path, file, {
-            upsert: true,
-          });
+          .upload(path, file, { upsert: true });
 
         if (uploadError || !uploadData) {
           console.error("Erro no upload:", uploadError);
@@ -511,7 +524,6 @@ export default function MeusDocumentos() {
 
         const publicUrl = publicData.publicUrl;
 
-        // status volta para Pendente e a validade é limpa
         const { error: updateError } = await supabase
           .from("documentos_acrobatas")
           .update({
@@ -553,11 +565,7 @@ export default function MeusDocumentos() {
 
     const { error } = await supabase
       .from("documentos_acrobatas")
-      .update({
-        arquivo_url: null,
-        status: "Pendente",
-        validade: null,
-      })
+      .update({ arquivo_url: null, status: "Pendente", validade: null })
       .eq("id", doc.id);
 
     if (error) {
@@ -569,38 +577,42 @@ export default function MeusDocumentos() {
     setDocumentos((prev) =>
       prev.map((d) =>
         d.id === doc.id
-          ? {
-              ...d,
-              url: null,
-              status: "Pendente",
-              validade: null,
-            }
+          ? { ...d, url: null, status: "Pendente", validade: null }
           : d,
       ),
     );
   }
 
-  // carregar documentos a partir da mesma view do Admin
   useEffect(() => {
-    if (!user?.id) {
-      setDocumentos([]);
-      setLoading(false);
-      return;
-    }
-
     let ativo = true;
 
     async function carregar() {
       setLoading(true);
 
+      // Fonte de verdade: auth uid (GoTrue)
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      const uid = authData?.user?.id ?? null;
+
+      console.log("[MeusDocumentos] AuthContext user.id =", user?.id);
+      console.log("[MeusDocumentos] auth.getUser().id   =", uid);
+
+      if (authErr || !uid) {
+        console.error("Sem sessão/auth uid:", authErr);
+        if (ativo) {
+          setDocumentos([]);
+          setLoading(false);
+        }
+        return;
+      }
+
       const { data: prof, error: profError } = await supabase
         .from("profissionais")
         .select("id")
-        .eq("user_id", user.id)
+        .or(`user_id.eq.${uid},usuario_id.eq.${uid}`)
         .maybeSingle();
 
       if (profError || !prof) {
-        console.error("Erro a obter profissional:", profError);
+        console.error("Erro a obter profissional:", profError, { uid, prof });
         if (ativo) {
           setDocumentos([]);
           setLoading(false);
@@ -610,20 +622,50 @@ export default function MeusDocumentos() {
 
       const profissionalId = prof.id;
 
-      const { data: docsDb, error: docsError } = await supabase
-        .from("admin_docs_prof_v")
-        .select("*")
-        .eq("profissional_id", profissionalId)
-        .order("documento_nome", { ascending: true });
+      async function fetchDocs() {
+        return supabase
+          .from("prof_docs_v")
+          .select("*")
+          .eq("profissional_id", profissionalId)
+          .order("ordem", { ascending: true, nullsFirst: false })
+          .order("documento_nome", { ascending: true });
+      }
+
+      let { data: docsDb, error: docsError } = await fetchDocs();
 
       if (!ativo) return;
 
       if (docsError) {
-        console.error("Erro a carregar documentos:", docsError);
+        console.error("Erro a carregar documentos (RLS/policy):", docsError);
         setDocumentos([]);
         setLoading(false);
         return;
       }
+
+      if (!docsDb || docsDb.length === 0) {
+        try {
+          const { error: initError } = await supabase.rpc(
+            "inicializar_docs_profissional",
+            {
+              p_profissional_id: profissionalId,
+            },
+          );
+
+          if (initError) {
+            console.error(
+              "Erro ao inicializar documentos do profissional:",
+              initError,
+            );
+          } else {
+            const segunda = await fetchDocs();
+            if (!segunda.error) docsDb = segunda.data ?? [];
+          }
+        } catch (e) {
+          console.error("Erro inesperado ao inicializar docs:", e);
+        }
+      }
+
+      if (!ativo) return;
 
       const mapped: Documento[] = [];
 
@@ -631,11 +673,9 @@ export default function MeusDocumentos() {
         const originalNome: string = d.documento_nome || "";
 
         // remover "Contactos de emergência" da lista do profissional
-        if (originalNome.toLowerCase().startsWith("contactos de emergência")) {
+        if (originalNome.toLowerCase().startsWith("contactos de emergência"))
           return;
-        }
 
-        // normalizar nome do TR
         const nomeNormalizado = originalNome.startsWith(
           "Comprovativo de regularização de trabalhadores estrangeiros",
         )
@@ -649,24 +689,19 @@ export default function MeusDocumentos() {
           ? new Date(d.atualizado_em).toLocaleDateString("pt-PT")
           : null;
 
-        // status vindo da base; se tiver validade vencida e não estiver Pendente/Reprovado,
-        // força para Vencido
-        let status: Status = d.status as Status;
-        if (validadeStr && status !== "Pendente" && status !== "Reprovado") {
+        let statusLocal: Status = d.status as Status;
+        if (validadeStr && statusLocal !== "Pendente" && statusLocal !== "Reprovado") {
           const diff = daysUntil(validadeStr);
-          if (diff !== null && diff < 0) {
-            status = "Vencido";
-          }
+          if (diff !== null && diff < 0) statusLocal = "Vencido";
         }
 
-        // responsabilidade base
         let resp: Responsabilidade;
         const r = (d.responsavel || "").toLowerCase();
         if (r === "profissional") resp = "profissional";
         else if (r === "acrobatas" || r === "admin") resp = "acrobatas";
         else resp = "ambos";
 
-        // overrides combinados
+        // força como Acrobatas em certos docs
         if (
           nomeNormalizado.includes("Ficha de Aptidão Médica") ||
           nomeNormalizado.includes("Registo de distribuição de EPI") ||
@@ -684,14 +719,14 @@ export default function MeusDocumentos() {
           nome: nomeNormalizado,
           categoria: d.categoria,
           validade: validadeStr,
-          status,
+          status: statusLocal,
           atualizado_em: atualizadoStr,
           url: d.arquivo_url,
           obrigatorio: d.obrigatorio,
           responsabilidade: resp,
           prof_pode_enviar: d.prof_pode_enviar,
           bloqueado: d.bloqueado,
-          comentario_admin: d.comentario_admin ?? null, // 👈 mapeia observação
+          comentario_admin: d.comentario_admin ?? null,
         });
       });
 
@@ -704,7 +739,8 @@ export default function MeusDocumentos() {
     return () => {
       ativo = false;
     };
-  }, [user?.id]);
+    // intencional: depende do "user" do contexto só para log/reatividade
+  }, [user]);
 
   const resumo = useMemo(() => {
     const validos = documentos.filter((d) => d.status === "Válido").length;
@@ -721,7 +757,9 @@ export default function MeusDocumentos() {
   const categorias = useMemo(
     () =>
       Array.from(
-        new Set(documentos.map((d) => d.categoria).filter(Boolean) as string[]),
+        new Set(
+          documentos.map((d) => d.categoria).filter(Boolean) as string[],
+        ),
       ).sort((a, b) => a.localeCompare(b)),
     [documentos],
   );
@@ -738,9 +776,9 @@ export default function MeusDocumentos() {
           (d.validade || "").includes(q),
       );
     }
-    if (categoria !== "Todas")
-      arr = arr.filter((d) => d.categoria === categoria);
+    if (categoria !== "Todas") arr = arr.filter((d) => d.categoria === categoria);
     if (status !== "Todos") arr = arr.filter((d) => d.status === status);
+
     if (filtroResp !== "todas") {
       arr = arr.filter((d) =>
         filtroResp === "profissional"
@@ -752,22 +790,22 @@ export default function MeusDocumentos() {
     arr.sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       if (sortKey === "validade" || sortKey === "atualizado_em") {
-        const da = parsePTDate(a[sortKey] || "");
-        const db = parsePTDate(b[sortKey] || "");
+        const da = parsePTDate((a as any)[sortKey] || "");
+        const db = parsePTDate((b as any)[sortKey] || "");
         const va = da
           ? da.getTime()
           : sortDir === "asc"
-          ? Number.POSITIVE_INFINITY
-          : Number.NEGATIVE_INFINITY;
+            ? Number.POSITIVE_INFINITY
+            : Number.NEGATIVE_INFINITY;
         const vb = db
           ? db.getTime()
           : sortDir === "asc"
-          ? Number.POSITIVE_INFINITY
-          : Number.NEGATIVE_INFINITY;
+            ? Number.POSITIVE_INFINITY
+            : Number.NEGATIVE_INFINITY;
         return va > vb ? dir : va < vb ? -dir : 0;
       }
-      const va = String(a[sortKey] ?? "").toLowerCase();
-      const vb = String(b[sortKey] ?? "").toLowerCase();
+      const va = String((a as any)[sortKey] ?? "").toLowerCase();
+      const vb = String((b as any)[sortKey] ?? "").toLowerCase();
       return va > vb ? dir : va < vb ? -dir : 0;
     });
 
@@ -783,7 +821,6 @@ export default function MeusDocumentos() {
     setFiltroResp("todas");
   };
 
-  // abrir em nova aba
   function openInNewTab(url?: string | null) {
     if (!url) return;
     window.open(url, "_blank", "noopener,noreferrer");
@@ -799,11 +836,8 @@ export default function MeusDocumentos() {
 
   function handleUploadClick(doc: Documento) {
     if (!canUploadDoc(doc)) return;
-    if (doc.url) {
-      setUploadModal({ doc });
-    } else {
-      pickFile(doc.id);
-    }
+    if (doc.url) setUploadModal({ doc });
+    else pickFile(doc.id);
   }
 
   if (loading) {
@@ -816,7 +850,6 @@ export default function MeusDocumentos() {
 
   return (
     <div className="p-4 sm:p-8 text-zinc-900 dark:text-zinc-100">
-      {/* Título */}
       <div className="flex items-center gap-3 mb-2">
         <FileText className="text-blue-500 dark:text-blue-400 w-6 h-6 sm:w-7 sm:h-7" />
         <h1 className="text-lg sm:text-2xl font-semibold">Meus Documentos</h1>
@@ -826,7 +859,6 @@ export default function MeusDocumentos() {
         responsabilidade e outros são geridos pela equipa Acrobatas.
       </p>
 
-      {/* Cards de resumo */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
         <ResumoCard
           titulo="Válidos"
@@ -848,7 +880,6 @@ export default function MeusDocumentos() {
         />
       </div>
 
-      {/* Barra de completude */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -864,7 +895,6 @@ export default function MeusDocumentos() {
         </div>
       </div>
 
-      {/* Filtros */}
       <FiltroBar
         categorias={categorias}
         query={query}
@@ -882,7 +912,6 @@ export default function MeusDocumentos() {
         setFiltroResp={setFiltroResp}
       />
 
-      {/* Lista */}
       <div className="bg-white dark:bg-[#1b2332] border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 sm:p-6 shadow-sm">
         <h2 className="text-sm sm:text-lg font-medium mb-4 flex items-center gap-2 text-blue-500 dark:text-blue-400">
           <FileText size={18} /> Documentos
@@ -902,7 +931,6 @@ export default function MeusDocumentos() {
           </div>
         ) : (
           <>
-            {/* MOBILE – Cards */}
             <div className="space-y-3 sm:hidden">
               {filtrados.map((doc) => {
                 const canUpload = canUploadDoc(doc);
@@ -941,7 +969,6 @@ export default function MeusDocumentos() {
                           )}
                         </div>
 
-                        {/* Observação (mobile) */}
                         {doc.comentario_admin && (
                           <div className="mt-2">
                             <div className="rounded-lg border border-blue-500/20 bg-blue-50/80 dark:bg-blue-900/20 px-2.5 py-1.5">
@@ -1006,7 +1033,6 @@ export default function MeusDocumentos() {
               })}
             </div>
 
-            {/* DESKTOP – Tabela */}
             <div className="hidden sm:block">
               <table className="min-w-full text-sm">
                 <thead>
@@ -1052,7 +1078,6 @@ export default function MeusDocumentos() {
                               )}
                             </div>
 
-                            {/* Observação (desktop) */}
                             {doc.comentario_admin && (
                               <div className="mt-2">
                                 <div className="inline-flex max-w-xl">
@@ -1088,16 +1113,12 @@ export default function MeusDocumentos() {
                             <VencimentoBadge validade={doc.validade} />
                           </div>
                         </td>
-                        <td className="py-3 px-2">
-                          {doc.atualizado_em || "—"}
-                        </td>
+                        <td className="py-3 px-2">{doc.atualizado_em || "—"}</td>
                         <td className="py-3 px-2">
                           <div className="flex justify-center gap-2">
                             <button
                               title={
-                                doc.url
-                                  ? "Ver (abre em nova aba)"
-                                  : "Sem ficheiro"
+                                doc.url ? "Ver (abre em nova aba)" : "Sem ficheiro"
                               }
                               onClick={() => openInNewTab(doc.url)}
                               disabled={!doc.url}
@@ -1108,7 +1129,6 @@ export default function MeusDocumentos() {
                               <Eye size={18} className="text-blue-500" />
                             </button>
 
-                            {/* Upload (sem botão de download) */}
                             <button
                               title={
                                 canUpload
@@ -1139,17 +1159,14 @@ export default function MeusDocumentos() {
         )}
       </div>
 
-      {/* Rodapé */}
       <div className="mt-8 sm:mt-10 text-center text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-xl mx-auto">
         Os documentos enviados são analisados pela equipa da Acrobatas para
         garantir a conformidade legal e de segurança. 🔒
       </div>
 
-      {/* input escondido para upload */}
       {hiddenInput}
 
-      {/* Modal de ficheiro existente */}
-      {uploadModal && uploadModal.doc && (
+      {uploadModal?.doc && (
         <UploadExistingModal
           doc={uploadModal.doc}
           onClose={() => setUploadModal(null)}

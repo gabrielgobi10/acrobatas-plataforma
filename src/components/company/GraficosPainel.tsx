@@ -1,4 +1,3 @@
-// src/components/company/GraficosPainel.tsx
 import React, { memo, useMemo, useState, useRef, useEffect } from "react";
 import {
   ResponsiveContainer,
@@ -41,6 +40,8 @@ type Atividade = {
   meta?: any | null;
   created_at: string;
 };
+
+type ObraMes = { mes: string; obras: number };
 
 const MESES = [
   "Jan",
@@ -153,6 +154,10 @@ function GraficosPainelBase({
   const gradIdCustos = "grad-custos";
   const gradIdObras = "grad-obras";
 
+  // estado interno para "obras por mês" (caso o pai não mande nada)
+  const [obrasMesState, setObrasMesState] = useState<ObraMes[]>([]);
+  const [loadingObrasMes, setLoadingObrasMes] = useState(false);
+
   // refs para controlar "animou uma vez"
   const obrasAnimouRef = useRef(false);
   const custosAnimouRef = useRef(false);
@@ -162,7 +167,7 @@ function GraficosPainelBase({
   const [loadingAtividades, setLoadingAtividades] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
 
-  // garantir sessão antes de buscar
+  // garantir sessão antes de buscar atividades
   useEffect(() => {
     let mounted = true;
 
@@ -215,23 +220,105 @@ function GraficosPainelBase({
     })();
   }, [sessionReady]);
 
-  // ====== filtros / dados gráficos ======
-  const filtroMes = useMemo(() => {
-    return (item: { mes: string }) => {
-      const nome = toMesNome(item.mes);
-      const idx = MESES.indexOf(nome);
-      return selMeses.includes(idx);
-    };
-  }, [selMeses]);
+  // ====== BUSCA REAL DAS OBRAS POR MÊS ======
+  useEffect(() => {
+    let cancelled = false;
 
-  const obrasData = useMemo(
-    () =>
-      (obrasMes || []).map((o) => ({
-        mes: toMesNome(o.mes),
-        obras: o.obras,
-      })),
-    [obrasMes]
-  );
+    const carregarObrasMes = async () => {
+      try {
+        // Se o pai já mandou dados prontos, usa-os e não busca nada
+        if (obrasMes && obrasMes.length > 0) {
+          setObrasMesState(obrasMes);
+          return;
+        }
+
+        setLoadingObrasMes(true);
+
+        // descobrir empresa (mesma lógica do resto)
+        let empresaId: string | null = null;
+        const rpc = await supabase.rpc("minha_empresa_id");
+        if (!rpc.error) empresaId = (rpc.data as string) ?? null;
+
+        if (!empresaId) {
+          const u = await supabase.auth.getUser();
+          empresaId =
+            (u.data.user?.user_metadata?.empresa_id as string) || null;
+        }
+
+        if (!empresaId || cancelled) {
+          if (!cancelled) setObrasMesState([]);
+          return;
+        }
+
+        // traz TODAS as obras da empresa (sem filtrar por data no SQL)
+        const { data, error } = await supabase
+          .from("obras")
+          .select("id,data_inicio,criado_em")
+          .eq("empresa_id", empresaId);
+
+        if (error || !data) {
+          console.error(
+            "[GraficosPainel] erro a carregar obras por mês ->",
+            error?.message || error
+          );
+          if (!cancelled) setObrasMesState([]);
+          return;
+        }
+
+        const mapa = new Map<string, number>();
+
+        (data as {
+          id: string;
+          data_inicio: string | null;
+          criado_em?: string | null;
+        }[]).forEach((obra) => {
+          // usamos data_inicio se existir, senão criado_em
+          const refDateStr = obra.data_inicio || obra.criado_em;
+          if (!refDateStr) return;
+
+          const d = new Date(refDateStr);
+          if (Number.isNaN(d.getTime())) return;
+
+          const key = `${d.getFullYear()}-${String(
+            d.getMonth() + 1
+          ).padStart(2, "0")}`;
+
+          mapa.set(key, (mapa.get(key) || 0) + 1);
+        });
+
+        const result: ObraMes[] = Array.from(mapa.entries())
+          .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+          .map(([mes, obras]) => ({ mes, obras }));
+
+        if (!cancelled) setObrasMesState(result);
+      } catch (e: any) {
+        console.error(
+          "[GraficosPainel] erro inesperado ao carregar obras por mês ->",
+          e?.message || e
+        );
+        if (!cancelled) setObrasMesState([]);
+      } finally {
+        if (!cancelled) setLoadingObrasMes(false);
+      }
+    };
+
+    carregarObrasMes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [obrasMes]);
+
+  // ====== dados gráficos ======
+  const obrasData = useMemo(() => {
+    const source =
+      obrasMes && obrasMes.length > 0 ? obrasMes : obrasMesState;
+    return (source || []).map((o) => ({
+      mes: toMesNome(o.mes),
+      obras: o.obras,
+    }));
+  }, [obrasMes, obrasMesState]);
+
   const custosData = useMemo(
     () =>
       (custosMes || []).map((c) => ({
@@ -239,15 +326,6 @@ function GraficosPainelBase({
         custo: c.custo,
       })),
     [custosMes]
-  );
-
-  const obrasFiltradas = useMemo(
-    () => obrasData.filter(filtroMes),
-    [obrasData, filtroMes]
-  );
-  const custosFiltrados = useMemo(
-    () => custosData.filter(filtroMes),
-    [custosData, filtroMes]
   );
 
   // ---------- ghost data (primeira vez, sem nenhum registo) ----------
@@ -260,7 +338,7 @@ function GraficosPainelBase({
     () =>
       ghostMeses.map((mes, idx) => ({
         mes,
-        obras: idx + 1, // 1,2,3 (só para dar forma ao gráfico)
+        obras: idx + 1,
       })),
     [ghostMeses]
   );
@@ -269,35 +347,34 @@ function GraficosPainelBase({
     () =>
       ghostMeses.map((mes, idx) => ({
         mes,
-        custo: (idx + 1) * 1000, // 1000, 2000, 3000
+        custo: (idx + 1) * 1000,
       })),
     [ghostMeses]
   );
 
-  const isEmptyObras = obrasFiltradas.length === 0;
-  const isEmptyCustos = custosFiltrados.length === 0;
+  const isEmptyObras = !loadingObrasMes && obrasData.length === 0;
+  const isEmptyCustos = custosData.length === 0;
 
-  const chartObrasData = isEmptyObras ? ghostObrasData : obrasFiltradas;
-  const chartCustosData = isEmptyCustos ? ghostCustosData : custosFiltrados;
+  const chartObrasData = isEmptyObras ? ghostObrasData : obrasData;
+  const chartCustosData = isEmptyCustos ? ghostCustosData : custosData;
 
-  // só mostra “nenhum dado” se tiver pelo menos 1 ponto real e todos forem 0
   const nenhumDadoObras =
-    obrasFiltradas.length > 0 && obrasFiltradas.every((x) => x.obras === 0);
+    obrasData.length > 0 && obrasData.every((x) => x.obras === 0);
   const nenhumDadoCustos =
-    custosFiltrados.length > 0 && custosFiltrados.every((x) => x.custo === 0);
+    custosData.length > 0 && custosData.every((x) => x.custo === 0);
 
   // Marca que já animou quando chegam dados > 0
   useEffect(() => {
-    if (!obrasAnimouRef.current && obrasFiltradas.some((x) => x.obras > 0)) {
+    if (!obrasAnimouRef.current && obrasData.some((x) => x.obras > 0)) {
       obrasAnimouRef.current = true;
     }
-  }, [obrasFiltradas]);
+  }, [obrasData]);
 
   useEffect(() => {
-    if (!custosAnimouRef.current && custosFiltrados.some((x) => x.custo > 0)) {
+    if (!custosAnimouRef.current && custosData.some((x) => x.custo > 0)) {
       custosAnimouRef.current = true;
     }
-  }, [custosFiltrados]);
+  }, [custosData]);
 
   const go = (key: "pedido" | "obra" | "documento" | "equipe") => {
     const map: Record<typeof key, ParentQuickSection> = {
@@ -318,7 +395,9 @@ function GraficosPainelBase({
     return (
       <div
         className={`relative rounded-2xl p-5 shadow bg-white border border-gray-200 text-gray-800
-          dark:bg-[#020617] dark:border-slate-800/80 dark:text-gray-100 ${className || ""}`}
+          dark:bg-[#020617] dark:border-slate-800/80 dark:text-gray-100 ${
+            className || ""
+          }`}
       >
         <div className="mb-3 text-[15px] font-semibold flex items-center gap-2">
           {title}
@@ -336,7 +415,7 @@ function GraficosPainelBase({
     text: string;
   }) => (
     <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 font-medium pointer-events-none">
-      <div className="rounded-full p-2 bg-gray-50 border border-gray-200 mb-2 dark:bg-white/5 dark:border-white/10">
+      <div className="rounded-full p-2 bg-gray-50 border border-gray-200 mb-2 dark:bg_WHITE/5 dark:border-white/10">
         {icon}
       </div>
       <span className="text-gray-500 dark:text-gray-400 text-xs text-center max-w-[180px]">

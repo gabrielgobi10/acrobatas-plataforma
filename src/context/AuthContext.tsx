@@ -1,3 +1,4 @@
+// src/context/AuthContext.tsx
 import {
   createContext,
   useContext,
@@ -27,6 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  // Normalizar nomes entre front e banco
   const normalizarTipo = (t: string) => {
     const map: Record<string, string> = {
       professional: "profissional",
@@ -39,6 +41,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return map[t?.toLowerCase()] || t?.toLowerCase() || "";
   };
 
+  /* ============================================================
+     LOGIN
+  ============================================================ */
   const login = async (email: string, senha: string, tipo: string) => {
     try {
       if (!email || !senha) throw new Error("Preencha todos os campos.");
@@ -50,21 +55,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
       if (loginError || !loginData.user)
-        throw new Error(loginError?.message || "E-mail ou senha incorretos.");
+        throw new Error("E-mail ou senha incorretos.");
 
       const authUser = loginData.user;
 
+      // Buscar na tabela `usuarios` usando AUTH_ID
       const { data: usuario, error: usuarioErr } = await supabase
         .from("usuarios")
-        .select("id, nome, tipo_usuario, email, auth_id")
+        .select("*")
         .eq("auth_id", authUser.id)
         .maybeSingle();
 
       if (usuarioErr) throw usuarioErr;
-      if (!usuario)
+
+      if (!usuario) {
         throw new Error(
-          "Conta autenticada, mas sem registro associado. Contate o suporte."
+          "Conta autenticada, mas sem registro interno. Contate o suporte."
         );
+      }
 
       const tipoBanco = normalizarTipo(usuario.tipo_usuario);
       const tipoFront = normalizarTipo(tipo);
@@ -85,7 +93,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsAuthenticated(true);
       localStorage.setItem("acrobatas_user", JSON.stringify(fullUser));
 
-      console.log("✅ Login bem-sucedido:", fullUser);
       return fullUser;
     } catch (err: any) {
       console.error("⚠️ Erro no login:", err.message);
@@ -93,6 +100,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  /* ============================================================
+     REGISTER ( SEM INSERT MANUAL — triggers fazem tudo )
+  ============================================================ */
   const register = async (
     nome: string,
     email: string,
@@ -106,7 +116,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const tipoNormalizado = normalizarTipo(tipo);
 
-      // 1) Criar utilizador no Supabase Auth
+      // Criar conta no Auth
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password: senha.trim(),
@@ -118,77 +128,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         },
       });
 
-      if (authErr || !authData.user) {
-        console.error("Erro Supabase Auth:", authErr);
-        throw new Error(
-          authErr?.message || "Erro ao criar conta no Supabase Auth."
-        );
-      }
+      if (authErr || !authData.user)
+        throw new Error(authErr?.message || "Erro ao criar conta.");
 
       const authUser = authData.user;
+      console.log("Auth criado:", authUser.id);
 
-      console.log("✅ Conta criada no Supabase Auth:", authUser);
-      console.log("📡 Metadados enviados:", authUser.user_metadata);
+      // IMPORTANTE:
+      // NÃO INSERIR EM `usuarios`
+      // Trigger:
+      // - cria registro em `usuarios`
+      // - cria profissional OU empresa
+      // - cria perfil profissional (se aplicável)
 
-      // 2) Criar registro correspondente na tabela `usuarios`
-      const { data: usuarioData, error: usuarioErr } = await supabase
-        .from("usuarios")
-        .insert({
-          nome: nome.trim(),
-          email: email.trim().toLowerCase(),
-          tipo_usuario: tipoNormalizado,
-          auth_id: authUser.id,
-          // campo `senha` fica null de propósito
-        })
-        .select("id, nome, tipo_usuario, email, auth_id")
-        .single();
-
-      if (usuarioErr) {
-        console.error("⚠️ Erro ao criar registro em `usuarios`:", usuarioErr);
-        throw new Error("Conta criada, mas falha ao salvar o usuário interno.");
-      }
-
-      console.log("✅ Registro criado em `usuarios`:", usuarioData);
-
-      // 3) Se for PROFISSIONAL, cria também em `profissionais`
-      if (tipoNormalizado === "profissional") {
-        const { error: profErr } = await supabase.from("profissionais").insert({
-          auth_id: authUser.id,
-          nome: nome.trim(),
-          email: email.trim().toLowerCase(),
-          status: "ativo", // mesmo que a função antiga usava
-        });
-
-        if (profErr) {
-          console.error("⚠️ Erro ao criar registro em `profissionais`:", profErr);
-          // aqui eu não dou throw pra não quebrar o cadastro todo;
-          // depois podemos tratar isso melhor se quiser
-        }
-      }
-
-      // 4) Opcional: termina sessão após cadastro (mantém comportamento antigo)
+      // Logout automático após registro
       await supabase.auth.signOut();
 
-      return usuarioData;
+      return { success: true };
     } catch (err: any) {
-      console.error("⚠️ Erro no registro:", err.message);
+      console.error("Erro no register:", err.message);
       throw new Error(err.message);
     }
   };
 
+  /* ============================================================
+     LOGOUT
+  ============================================================ */
   const logout = async () => {
     try {
       await supabase.auth.signOut();
       setUser(null);
       setIsAuthenticated(false);
       localStorage.removeItem("acrobatas_user");
-      console.log("🚪 Logout realizado com sucesso.");
     } catch (err) {
-      console.error("⚠️ Erro ao fazer logout:", err);
-      throw err;
+      console.error("Erro no logout:", err);
     }
   };
 
+  /* ============================================================
+     LOAD SESSION
+  ============================================================ */
   useEffect(() => {
     const loadSession = async () => {
       try {
@@ -196,6 +175,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (data?.user) {
           const authUser = data.user;
+
           const { data: usuario } = await supabase
             .from("usuarios")
             .select("*")
@@ -208,6 +188,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               email: authUser.email,
               auth_id: authUser.id,
             };
+
             setUser(fullUser);
             setIsAuthenticated(true);
             localStorage.setItem("acrobatas_user", JSON.stringify(fullUser));
@@ -217,7 +198,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setIsAuthenticated(false);
         }
       } catch (err) {
-        console.warn("⚠️ Sessão resetada:", err);
+        console.warn("Sessão não carregada:", err);
       }
     };
 
